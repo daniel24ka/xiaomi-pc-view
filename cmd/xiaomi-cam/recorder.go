@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -187,4 +189,159 @@ func saveSnapshot(camera string) (string, error) {
 	}
 	path := filepath.Join(dir, fileName(camera, "jpg"))
 	return path, os.WriteFile(path, b, 0o644)
+}
+
+// --- recording modes: the selected camera, each camera to its own file, or all cameras
+// in one grid video
+
+const (
+	prefRecordMode = "record.mode"
+	recordSelected = ""     // the selected camera
+	recordEach     = "each" // every camera, separate files
+	recordGrid     = "grid" // all cameras in one file (grid, re-encoded)
+
+	gridKey = "\x00grid" // recordings map key of the grid recording
+)
+
+func recordMode() string {
+	if appPrefs != nil {
+		return appPrefs.String(prefRecordMode)
+	}
+	return recordSelected
+}
+
+// startRecordings starts recording in the given mode; selected is the selected camera.
+func startRecordings(mode, selected string, limit time.Duration) ([]*recording, error) {
+	switch mode {
+	case recordEach:
+		var out []*recording
+		var errs []error
+		for _, name := range cameraNames() {
+			r, err := startRecording(name, limit)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", name, err))
+				continue
+			}
+			out = append(out, r)
+		}
+		return out, errors.Join(errs...)
+	case recordGrid:
+		r, err := startGridRecording(cameraNames(), selected, limit)
+		if err != nil {
+			return nil, err
+		}
+		return []*recording{r}, nil
+	default:
+		r, err := startRecording(selected, limit)
+		if err != nil {
+			return nil, err
+		}
+		return []*recording{r}, nil
+	}
+}
+
+// startGridRecording records all cameras in one H.265 video, laid out like the grid view
+// (cells 960x540); the sound is from the selected camera.
+func startGridRecording(cameras []string, selected string, limit time.Duration) (*recording, error) {
+	if len(cameras) == 0 {
+		return nil, errors.New("no cameras")
+	}
+	recMu.Lock()
+	defer recMu.Unlock()
+	if r := recs[gridKey]; r != nil {
+		return r, errors.New("already recording: " + r.path)
+	}
+	dir := recordingsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, fileName("grid", "mp4"))
+
+	const cw, ch = 960, 540
+	cols := int(math.Ceil(math.Sqrt(float64(len(cameras)))))
+	args := []string{"-hide_banner", "-loglevel", "error"}
+	audio := 0
+	for i, name := range cameras {
+		args = append(args, "-rtsp_transport", "tcp", "-i", rtspURL(name))
+		if name == selected {
+			audio = i
+		}
+	}
+	var filter strings.Builder
+	var layout []string
+	for i := range cameras {
+		fmt.Fprintf(&filter, "[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:-1:-1,setsar=1[v%d];", i, cw, ch, cw, ch, i)
+		layout = append(layout, fmt.Sprintf("%d_%d", (i%cols)*cw, (i/cols)*ch))
+	}
+	if len(cameras) == 1 {
+		filter.WriteString("[v0]null[v]")
+	} else {
+		for i := range cameras {
+			fmt.Fprintf(&filter, "[v%d]", i)
+		}
+		fmt.Fprintf(&filter, "xstack=inputs=%d:layout=%s:fill=black[v]", len(cameras), strings.Join(layout, "|"))
+	}
+	args = append(args,
+		"-filter_complex", filter.String(),
+		"-map", "[v]", "-map", fmt.Sprintf("%d:a:0?", audio),
+		"-c:v", "libx265", "-preset", "superfast", "-crf", "28", "-pix_fmt", "yuv420p", "-tag:v", "hvc1",
+		"-c:a", "aac", "-b:a", "64k",
+		"-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+		"-y", path)
+
+	cmd := exec.Command("ffmpeg", args...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err = cmd.Start(); err != nil {
+		return nil, fmt.Errorf("ffmpeg: %w", err)
+	}
+	r := &recording{camera: gridKey, path: path, started: time.Now(), cmd: cmd, stdin: stdin, done: make(chan struct{})}
+	recs[gridKey] = r
+	go func() {
+		_ = cmd.Wait()
+		recMu.Lock()
+		if recs[gridKey] == r {
+			delete(recs, gridKey)
+		}
+		recMu.Unlock()
+		close(r.done)
+		if r.limit != nil {
+			r.limit.Stop()
+		}
+		if onRecordingChanged != nil {
+			onRecordingChanged(gridKey)
+		}
+	}()
+	if limit > 0 {
+		r.limit = time.AfterFunc(limit, func() { _, _ = stopRecording(gridKey) })
+	}
+	if onRecordingChanged != nil {
+		onRecordingChanged(gridKey)
+	}
+	return r, nil
+}
+
+// activeRecordings - all running recordings, oldest first
+func activeRecordings() []*recording {
+	recMu.Lock()
+	defer recMu.Unlock()
+	var out []*recording
+	for _, r := range recs {
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].started.Before(out[j].started) })
+	return out
+}
+
+// stopAll stops all running recordings and returns them.
+func stopAll() []*recording {
+	var out []*recording
+	for _, r := range activeRecordings() {
+		if rr, err := stopRecording(r.camera); err == nil {
+			out = append(out, rr)
+		}
+	}
+	return out
 }

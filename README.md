@@ -24,6 +24,9 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - **Local recording to MP4**: H.265 video copied as it comes from the camera (no
   re-encoding, almost no CPU), AAC audio. Fragmented MP4, so a file stays playable even if
   the app is closed while recording. Recording works with the window hidden.
+- **Recording mode** (Settings → General): the selected camera, **each camera to its own
+  file**, or **all cameras in one grid video** (H.265, cells 960×540, sound from the selected
+  camera; this mode re-encodes and uses the CPU). The record button starts/stops all of them.
 - Full resolution (2560×1440) snapshots.
 - **Settings**: folders for recordings (default: your Videos folder) and snapshots (default:
   your Pictures folder).
@@ -179,8 +182,8 @@ default is the first camera.
 | `goto_point` | `point` (1–3 or name) | turns the camera to the point and waits until it stops |
 | `save_point` | `point` (1–3), `name` | saves the current position (direction and zoom) as the point |
 | `save_snapshot` | – | saves a 2560×1440 JPEG to the snapshots folder, returns the path |
-| `start_recording` | `duration_seconds` (optional, auto stop) | starts an MP4 recording, returns the path |
-| `stop_recording` | – | finishes the MP4 file, returns the path and duration |
+| `start_recording` | `duration_seconds` (optional, auto stop), `mode` (`selected`/`each`/`grid`) | starts MP4 recording(s), returns the paths |
+| `stop_recording` | – | finishes all recordings, returns the paths and durations |
 | `recording_status` | – | recording or not, file path, elapsed seconds |
 
 Example prompts: *"Show me what the camera sees"*, *"Turn the camera left and zoom in on the
@@ -202,9 +205,9 @@ camera. Errors return a non-200 status with a text message.
 | POST | `/api/xiaomi-cam/spotlight` | `on` (`true`/`false`), `brightness` (0–100) | `{"ok": true}` |
 | POST | `/api/xiaomi-cam/siren` | `on` (`true`/`false`) | `{"siren"}` |
 | POST | `/api/xiaomi-cam/snapshot/save` | – | `{"file"}` – JPEG saved to the snapshots folder |
-| POST | `/api/xiaomi-cam/record/start` | `duration` (seconds, optional) | `{"recording", "file"}` |
-| POST | `/api/xiaomi-cam/record/stop` | – | `{"recording", "file", "duration_s"}` |
-| GET | `/api/xiaomi-cam/record` | – | `{"recording", "file", "elapsed_s"}` |
+| POST | `/api/xiaomi-cam/record/start` | `duration` (seconds, optional), `mode` = `selected`/`each`/`grid` (default from settings) | `{"recording", "files"}` |
+| POST | `/api/xiaomi-cam/record/stop` | – | stops all recordings: `{"recording", "files": [{"file", "duration_s"}]}` |
+| GET | `/api/xiaomi-cam/record` | – | `{"recording", "files": [{"file", "elapsed_s"}]}` |
 | GET | `/api/xiaomi-cam/points` | – | `[{"point", "defined", "name"}]` |
 | POST | `/api/xiaomi-cam/points/goto` | `point` (1–3 or name) | `{"point", "name"}` after the camera stops |
 | POST | `/api/xiaomi-cam/points/save` | `point` (1–3), `name` | `{"point", "name"}` |

@@ -28,8 +28,8 @@ import (
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
-//	POST /api/xiaomi-cam/record/start?duration=60    MP4 (H.265) to the recordings folder
-//	POST /api/xiaomi-cam/record/stop
+//	POST /api/xiaomi-cam/record/start?duration=60&mode=each  MP4 (H.265); mode: selected/each/grid
+//	POST /api/xiaomi-cam/record/stop                 stops all recordings
 //	GET  /api/xiaomi-cam/record                      recording status
 //	GET  /api/xiaomi-cam/points                      camera points 1-3
 //	POST /api/xiaomi-cam/points/goto?point=1         turn to a point (number or name)
@@ -173,33 +173,53 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 
 	handle("record/start", "POST", func(r *http.Request, name string) (any, error) {
 		secs, _ := strconv.Atoi(r.URL.Query().Get("duration"))
-		rec, err := startRecording(name, time.Duration(secs)*time.Second)
-		if err != nil {
+		mode := recordMode()
+		switch m := r.URL.Query().Get("mode"); m {
+		case "selected", "camera":
+			mode = recordSelected
+		case recordEach, recordGrid:
+			mode = m
+		}
+		recs, err := startRecordings(mode, name, time.Duration(secs)*time.Second)
+		if len(recs) == 0 && err != nil {
 			return nil, err
 		}
-		res := map[string]any{"recording": true, "file": rec.path}
+		var files []string
+		for _, rec := range recs {
+			files = append(files, rec.path)
+		}
+		res := map[string]any{"recording": true, "files": files}
 		if secs > 0 {
 			res["duration_s"] = secs
+		}
+		if err != nil {
+			res["errors"] = err.Error()
 		}
 		return res, nil
 	})
 
 	handle("record/stop", "POST", func(r *http.Request, name string) (any, error) {
-		rec, err := stopRecording(name)
-		if err != nil {
-			return nil, err
+		stopped := stopAll()
+		if len(stopped) == 0 {
+			return nil, errors.New("not recording")
 		}
-		return map[string]any{"recording": false, "file": rec.path,
-			"duration_s": int(time.Since(rec.started).Seconds())}, nil
+		var files []map[string]any
+		for _, rec := range stopped {
+			files = append(files, map[string]any{"file": rec.path, "duration_s": int(time.Since(rec.started).Seconds())})
+		}
+		return map[string]any{"recording": false, "files": files}, nil
 	})
 
 	handle("record", "GET", func(r *http.Request, name string) (any, error) {
-		rec := currentRecording(name)
-		if rec == nil {
+		active := activeRecordings()
+		if len(active) == 0 {
 			return map[string]any{"recording": false}, nil
 		}
-		return map[string]any{"recording": true, "file": rec.path,
-			"elapsed_s": int(time.Since(rec.started).Seconds())}, nil
+		var files []map[string]any
+		for _, rec := range active {
+			files = append(files, map[string]any{"file": rec.path, "elapsed_s": int(time.Since(rec.started).Seconds())})
+		}
+		return map[string]any{"recording": true, "files": files}, nil
 	})
 
 	handle("points", "GET", func(r *http.Request, name string) (any, error) {

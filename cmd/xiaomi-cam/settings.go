@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -37,7 +39,33 @@ func (u *ui) showSettings() {
 		})
 		return container.NewBorder(nil, nil, nil, container.NewHBox(choose, reset), label)
 	}
+	modes := []struct{ name, id string }{
+		{"Wybrana kamera", recordSelected},
+		{"Każda kamera osobno (osobne pliki)", recordEach},
+		{"Siatka wszystkich kamer (jeden plik)", recordGrid},
+	}
+	var modeNames []string
+	for _, m := range modes {
+		modeNames = append(modeNames, T(m.name))
+	}
+	mode := widget.NewSelect(modeNames, nil)
+	for i, m := range modes {
+		if m.id == recordMode() {
+			mode.SetSelectedIndex(i)
+		}
+	}
+	if mode.SelectedIndex() < 0 {
+		mode.SetSelectedIndex(0)
+	}
+	mode.OnChanged = func(string) {
+		u.app.Preferences().SetString(prefRecordMode, modes[max(mode.SelectedIndex(), 0)].id)
+	}
+	modeHelp := widget.NewLabel(T("Wybrana kamera i osobne pliki kopiują obraz z kamer bez przekodowania (prawie bez obciążenia). Siatka składa kamery w jeden film H.265 – to przekodowanie obciąża procesor."))
+	modeHelp.Wrapping = fyne.TextWrapWord
+	modeHelp.Importance = widget.LowImportance
+
 	form := widget.NewForm(
+		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, modeHelp)),
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),
 	)
@@ -52,26 +80,26 @@ func (u *ui) showSettings() {
 	d.Show()
 }
 
-// toggleRecording starts/stops local recording of the selected camera.
+// toggleRecording starts recording in the mode from the settings, or stops all recordings.
 func (u *ui) toggleRecording() {
 	name := u.camera.Selected
 	if name == "" {
 		return
 	}
-	if currentRecording(name) != nil {
+	if len(activeRecordings()) > 0 {
 		go func() {
-			r, err := stopRecording(name)
+			stopped := stopAll()
 			fyne.Do(func() {
-				if err != nil {
-					dialog.ShowError(err, u.win)
-				} else {
-					u.status.SetText(T("Zapisano ") + r.path)
+				var files []string
+				for _, r := range stopped {
+					files = append(files, filepath.Base(r.path))
 				}
+				u.status.SetText(T("Zapisano ") + strings.Join(files, ", "))
 			})
 		}()
 		return
 	}
-	if _, err := startRecording(name, 0); err != nil {
+	if _, err := startRecordings(recordMode(), name, 0); err != nil {
 		dialog.ShowError(err, u.win)
 	}
 }
@@ -82,8 +110,8 @@ func (u *ui) updateRecordButton() {
 	if u.recButton == nil {
 		return
 	}
-	r := currentRecording(u.camera.Selected)
-	if r == nil {
+	active := activeRecordings()
+	if len(active) == 0 {
 		if u.recButton.Importance != widget.MediumImportance {
 			u.recButton.SetIcon(recordIcon)
 			u.recButton.Importance = widget.MediumImportance
@@ -96,6 +124,10 @@ func (u *ui) updateRecordButton() {
 		u.recButton.Importance = widget.DangerImportance
 		u.recButton.Refresh()
 	}
-	d := time.Since(r.started).Truncate(time.Second)
-	u.status.SetText(fmt.Sprintf(T("● Nagrywanie %s"), d))
+	d := time.Since(active[0].started).Truncate(time.Second)
+	if len(active) > 1 {
+		u.status.SetText(fmt.Sprintf(T("● Nagrywanie %s (%d pliki)"), d, len(active)))
+	} else {
+		u.status.SetText(fmt.Sprintf(T("● Nagrywanie %s"), d))
+	}
 }

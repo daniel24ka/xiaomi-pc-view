@@ -119,14 +119,15 @@ func runMCP() error {
 
 	type recordArgs struct {
 		cameraArg
-		Duration int `json:"duration_seconds,omitempty" jsonschema:"stop automatically after this many seconds; 0 or empty - record until stop_recording"`
+		Duration int    `json:"duration_seconds,omitempty" jsonschema:"stop automatically after this many seconds; 0 or empty - record until stop_recording"`
+		Mode     string `json:"mode,omitempty" jsonschema:"selected (the camera argument), each (every camera to its own file) or grid (all cameras in one file); default from the app settings"`
 	}
 	mcp.AddTool(server, &mcp.Tool{Name: "start_recording", Description: "Start recording the camera to an MP4 file (H.265 video as from the camera, AAC audio) in the recordings folder. Returns the file path."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in recordArgs) (*mcp.CallToolResult, any, error) {
-			return apiText("POST", "record/start", url.Values{"camera": {in.Camera}, "duration": {strconv.Itoa(in.Duration)}})
+			return apiText("POST", "record/start", url.Values{"camera": {in.Camera}, "duration": {strconv.Itoa(in.Duration)}, "mode": {in.Mode}})
 		})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "stop_recording", Description: "Stop recording and finish the MP4 file. Returns the file path and duration."},
+	mcp.AddTool(server, &mcp.Tool{Name: "stop_recording", Description: "Stop all recordings and finish the MP4 files. Returns the file paths and durations."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
 			return apiText("POST", "record/stop", url.Values{"camera": {in.Camera}})
 		})
