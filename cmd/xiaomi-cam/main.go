@@ -11,7 +11,9 @@ import (
 	"image/color"
 	"image/jpeg"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -525,9 +527,14 @@ func (u *ui) snapshot() {
 	if frame == nil {
 		return
 	}
-	dir := filepath.Join(os.Getenv("HOME"), "Obrazy")
-	if _, err := os.Stat(dir); err != nil {
-		dir = os.Getenv("HOME")
+	dir := os.Getenv("HOME")
+	// user's Pictures folder in any language (~/Obrazy, ~/Pictures...)
+	if out, err := exec.Command("xdg-user-dir", "PICTURES").Output(); err == nil {
+		if d := strings.TrimSpace(string(out)); d != "" {
+			if _, err = os.Stat(d); err == nil {
+				dir = d
+			}
+		}
 	}
 	path := filepath.Join(dir, fmt.Sprintf("%s_%s.jpg", u.camera.Selected, time.Now().Format("2006-01-02_15-04-05")))
 	f, err := os.Create(path)
