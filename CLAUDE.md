@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.17.0`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.17.1`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.17.0 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.17.1 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -26,8 +26,9 @@ notes must list the changes since the previous tag (English) and the 3 downloads
 
 Build with `-tags devtest`; `cmd/xiaomi-cam/devtest_*.go` hooks run when env `XC_*` is set
 (e.g. `XC_TEST`, `XC_PTZTEST`, `XC_GRIDTEST`, `XC_AITEST`, `XC_SEAMLESSTEST`, `XC_BUSYTEST`,
-`XC_NIGHTTEST`, `XC_WALLTEST`). XTest mouse input doesn't reach the window (GNOME Wayland,
-XWayland), so click behaviour is tested with the Fyne test driver (`tooltip_test.go`). The app is
+`XC_NIGHTTEST`, `XC_WALLTEST` + `XC_WALLPOS`/`XC_WALLSECS`). XTest mouse input doesn't reach the window (GNOME Wayland,
+XWayland), so click behaviour is tested with the Fyne test driver (`tooltip_test.go`). Real screenshots
+(whole desktop, no prompt): xdg-desktop-portal Screenshot with interactive=false via python gi. The app is
 single-instance (ports 127.0.0.1:11984 API, :18554 RTSP), so stop the user's running copy
 first with an **anchored** pattern (unanchored pkill kills your own shell):
 `pkill -f "^/home/genosajd/(.local/bin|xiaomi-pc-view)/xiaomi-cam$"`. Back up and restore
@@ -42,7 +43,9 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 - `video.go` ffmpeg → RGBA frames, player with seamless `switchTo` (no camera reconnect)
 - `control.go` mover (PTZ), custom widgets with pointer cursor + tooltips (`tooltip.go`),
   GLFW access via reflection (frame, minimize, cursor leave), `wm_x11.go` (_NET_WM_MOVERESIZE),
-  desktop window type + empty XShape input for `wallpaper.go`), `busy.go` spinners on buttons /
+  desktop window type + empty XShape input for `wallpaper.go`; no _NET_WM_STATE_BELOW, it
+  is mutter's BOTTOM layer above the desktop icons (DING), and `keepBelow` re-lowers the
+  window under DING, which lowers itself on every window map), `busy.go` spinners on buttons /
   status / video, `nightmode.go`. Tooltips are a canvas overlay that forwards clicks to the
   owner (a widget.PopUp swallowed the first click); never use PopUp for passive overlays
 - `grid.go` multi-camera grid, `caps.go` hide unsupported features, `pointsui.go`/`presets.go`

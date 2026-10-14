@@ -55,8 +55,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   next to the status line while the camera is changing a setting (spotlight, siren, zoom), and
   over the picture while connecting to the camera or searching for a recording.
 - **Wallpaper mode** (tray menu): the window stays where it is, with its size and look, but
-  lies under all windows like the desktop background, on all workspaces, and clicks go
-  through it. Remembered after a restart; "Show" in the tray menu brings the normal window
+  lies under all windows like the desktop background (above the wallpaper, below the desktop
+  icons), on all workspaces, and clicks go through it. Remembered after a restart; "Show" in the tray menu brings the normal window
   back (X11 / XWayland).
 - Polish / English UI.
 - Mi Home login with captcha and 2FA code support.

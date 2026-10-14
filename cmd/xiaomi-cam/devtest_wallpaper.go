@@ -13,6 +13,7 @@ import (
 
 // XC_WALLTEST=<file.jpg>: wallpaper mode on for a few seconds, then off; prints the X11 window id
 // and geometry so an outside script can check the window type and input region.
+// XC_WALLPOS=x,y moves the window there first, XC_WALLSECS=n stays n s in the mode (default 12).
 func init() {
 	if os.Getenv("XC_WALLTEST") == "" {
 		return
@@ -27,6 +28,13 @@ func init() {
 			})
 		}
 		time.Sleep(10 * time.Second)
+		var px, py int
+		if _, err := fmt.Sscanf(os.Getenv("XC_WALLPOS"), "%d,%d", &px, &py); err == nil {
+			fyne.DoAndWait(func() { glfwWindow(u.win).SetPos(px, py) })
+			time.Sleep(time.Second)
+		}
+		secs := 12
+		fmt.Sscanf(os.Getenv("XC_WALLSECS"), "%d", &secs)
 		geom("before")
 		fyne.Do(func() { u.setWallpaper(true) })
 		time.Sleep(4 * time.Second)
@@ -38,7 +46,7 @@ func init() {
 				_ = f.Close()
 			}
 		})
-		time.Sleep(8 * time.Second)
+		time.Sleep(time.Duration(secs-4) * time.Second)
 		fyne.Do(func() { u.setWallpaper(false) })
 		time.Sleep(3 * time.Second)
 		geom("NORMAL")

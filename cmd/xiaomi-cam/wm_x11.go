@@ -74,7 +74,7 @@ static int wm_on_current_desktop(void *dpy, unsigned long win) {
 	return wd == cd;
 }
 
-// Desktop (wallpaper) window: below all windows, on all workspaces, not in the task bar,
+// Desktop (wallpaper) window: below all windows (the desktop layer), on all workspaces, not in the task bar,
 // and an empty input region, so the mouse goes through it to the desktop. The window
 // type and state are read by the WM when the window is mapped: call while it is unmapped.
 static void wm_set_desktop(void *dpy, unsigned long win, int on) {
@@ -84,19 +84,38 @@ static void wm_set_desktop(void *dpy, unsigned long win, int on) {
 		PropModeReplace, (unsigned char *)&type, 1);
 	Atom state = XInternAtom(d, "_NET_WM_STATE", False);
 	if (on) {
-		Atom s[4] = {
-			XInternAtom(d, "_NET_WM_STATE_BELOW", False),
+		// no _NET_WM_STATE_BELOW: mutter puts such windows in its "bottom" layer, which
+		// is above the desktop layer with the desktop icons
+		Atom s[3] = {
 			XInternAtom(d, "_NET_WM_STATE_STICKY", False),
 			XInternAtom(d, "_NET_WM_STATE_SKIP_TASKBAR", False),
 			XInternAtom(d, "_NET_WM_STATE_SKIP_PAGER", False),
 		};
-		XChangeProperty(d, win, state, XA_ATOM, 32, PropModeReplace, (unsigned char *)s, 4);
+		XChangeProperty(d, win, state, XA_ATOM, 32, PropModeReplace, (unsigned char *)s, 3);
 		XShapeCombineRectangles(d, win, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
 	} else {
 		XDeleteProperty(d, win, state);
 		XShapeCombineMask(d, win, ShapeInput, 0, 0, None, ShapeSet); // the whole window again
 	}
 	XSync(d, False);
+}
+
+// Put the window at the bottom of its layer (_NET_RESTACK_WINDOW from a pager, which the WM
+// honours without the focus-stealing checks of XLowerWindow). A desktop window goes below
+// the other desktop windows: below the desktop icons (GNOME DING), above the background.
+static void wm_lower(void *dpy, unsigned long win) {
+	Display *d = (Display *)dpy;
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = win;
+	ev.xclient.message_type = XInternAtom(d, "_NET_RESTACK_WINDOW", False);
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = 2; // pager
+	ev.xclient.data.l[1] = None;
+	ev.xclient.data.l[2] = Below;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
+	XFlush(d);
 }
 */
 import "C"
@@ -167,4 +186,11 @@ func wmSetDesktop(w fyne.Window, on bool) bool {
 	}
 	C.wm_set_desktop(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()), v)
 	return true
+}
+
+// wmLower puts the window at the bottom of its stacking layer (X11 only).
+func wmLower(w fyne.Window) {
+	if win := glfwWindow(w); win != nil && glfw.GetPlatform() == glfw.PlatformX11 {
+		C.wm_lower(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()))
+	}
 }

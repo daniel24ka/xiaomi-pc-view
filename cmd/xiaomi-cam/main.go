@@ -62,7 +62,8 @@ type ui struct {
 	night      *ptrSelect   // night vision mode
 	// wallpaper mode (wallpaper.go)
 	wallpaper     bool
-	remapping     bool // the window is being re-mapped with another window type
+	wallStop      chan struct{} // keepBelow running
+	remapping     bool          // the window is being re-mapped with another window type
 	wallpaperItem *fyne.MenuItem
 	trayMenu      *fyne.Menu
 	capNight      fyne.CanvasObject

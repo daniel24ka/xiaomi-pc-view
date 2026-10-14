@@ -11,6 +11,10 @@ import (
 // Wallpaper mode (tray menu): the window stays where it is, with its size and look, but
 // under all windows like the desktop background, on all workspaces, and the mouse goes
 // through it. Remembered: the app starts in it again.
+//
+// It stays below the desktop icons: GNOME's desktop icons (DING) are a transparent desktop
+// window too, which lowers itself whenever any window is mapped, so the window lowers
+// itself after it (keepBelow), and is then between the icons and the background.
 
 const prefWallpaper = "wallpaper"
 
@@ -44,6 +48,7 @@ func (u *ui) setWallpaper(on bool) {
 		}
 	}
 	u.wallpaper = on
+	u.keepBelow(on)
 	u.updateWallpaperItem()
 	u.app.Preferences().SetBool(prefWallpaper, on)
 	u.exitView.Hide()
@@ -70,6 +75,9 @@ func (u *ui) remap(desktop bool, before, after func()) {
 			time.AfterFunc(300*time.Millisecond, func() {
 				fyne.Do(func() {
 					after()
+					if desktop {
+						wmLower(u.win)
+					}
 					u.video.img.Refresh()
 				})
 			})
@@ -87,6 +95,35 @@ func (u *ui) remap(desktop bool, before, after func()) {
 	})
 }
 
+// keepBelow keeps the window at the bottom of the desktop windows while on. UI thread.
+func (u *ui) keepBelow(on bool) {
+	if u.wallStop != nil {
+		close(u.wallStop)
+		u.wallStop = nil
+	}
+	if !on {
+		return
+	}
+	stop := make(chan struct{})
+	u.wallStop = stop
+	go func() {
+		t := time.NewTicker(250 * time.Millisecond) // a no-op for the WM when already there
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+			}
+			fyne.Do(func() {
+				if u.wallStop == stop && !u.remapping {
+					wmLower(u.win)
+				}
+			})
+		}
+	}()
+}
+
 func (u *ui) updateWallpaperItem() {
 	if u.wallpaperItem != nil {
 		u.wallpaperItem.Checked = u.wallpaper
@@ -98,6 +135,7 @@ func (u *ui) updateWallpaperItem() {
 // window becomes a normal one again for the next show.
 func (u *ui) leaveWallpaperHidden() {
 	u.wallpaper = false
+	u.keepBelow(false)
 	u.updateWallpaperItem()
 	u.app.Preferences().SetBool(prefWallpaper, false)
 	u.win.Hide()
