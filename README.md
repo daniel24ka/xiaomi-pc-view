@@ -1,39 +1,43 @@
-# Xiaomi Cam – podgląd kamer Xiaomi Mi Home na PC (Linux)
+# Xiaomi Cam – Xiaomi Mi Home camera viewer for Linux
 
-[English below](#english)
+A desktop app for Ubuntu/Linux to watch and control **Xiaomi Mi Home** cameras, which
+officially work only in the Mi Home phone app. Tested with the **Xiaomi Outdoor Camera
+CW700S** (`isa.camera.700sa`).
 
-Aplikacja desktopowa na Ubuntu/Linux do oglądania kamer z ekosystemu **Xiaomi Mi Home**,
-które oficjalnie działają tylko w aplikacji Mi Home na telefonie. Testowana z
-**Xiaomi Outdoor Camera CW700S** (`isa.camera.700sa`).
+One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It also has an
+**MCP server** for AI assistants and a **local HTTP API** for scripts.
 
-Jeden plik wykonywalny, z wbudowanym [go2rtc](https://github.com/AlexxIT/go2rtc).
+## Features
 
-## Funkcje
+- Live video up to **2.5K** (2560×1440), quality 2.5K / 720p / SD.
+- **Remote connection from any network**, like Mi Home, without port forwarding or VPN.
+  There is also a local (LAN) mode.
+- **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.
+- **Native camera zoom up to 9×**: the camera zooms itself, so details stay sharp and the
+  date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
+  slider in video-only mode.
+- **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
+- **Spotlight** with brightness, and **siren**.
+- Camera audio, and snapshots saved to `~/Pictures`.
+- **Video-only mode**: no panels and no window frame. The window keeps the picture's aspect
+  ratio and can be resized by any edge or moved with the ✥ button. Pan/tilt buttons and a
+  zoom slider with a scale appear when you move the mouse.
+- Full screen mode.
+- **System tray**: closing or minimizing the window hides the app and stops streaming.
+- Window size and position are remembered, separately with and without the frame.
+- Only one instance runs; starting the app again shows the window that is already open.
+- Polish / English UI.
+- Mi Home login with captcha and 2FA code support.
 
-- obraz na żywo do **2.5K** (2560×1440), przełączanie jakości 2.5K / 720p / SD,
-- **połączenie zdalne**: działa z dowolnej sieci, tak jak Mi Home, bez przekierowania
-  portów i bez VPN; jest też tryb lokalny (LAN),
-- **obrót kamery (PTZ)**: przyciski, strzałki na klawiaturze, przeciąganie obrazu myszą,
-- **zoom kamery (natywny, do 9×)**: kółko myszy, `+` / `−`. Powiększa kamera, więc szczegóły
-  są ostre, a data i godzina z kamery zostają tej samej wielkości,
-- **historia z karty SD**: data, suwak doby, ±1/±10 min, prędkość 1–16×; przycisk „Na żywo” wraca do podglądu,
-- **reflektor** (włącz/wyłącz, jasność) i **syrena**,
-- dźwięk z kamery,
-- zdjęcie z podglądu (`~/Obrazy`),
-- tryb **„Tylko obraz”** (ukrywa panele) i pełny ekran,
-- ikona w **zasobniku systemowym**: zamknięcie okna chowa aplikację i zatrzymuje transmisję,
-- język **polski / angielski**,
-- logowanie kontem Mi Home (z obsługą captcha i kodu weryfikacyjnego).
+## Requirements
 
-## Wymagania
+- Linux x86-64 (tested on Ubuntu 26.04, GNOME, X11/XWayland).
+- `ffmpeg` for H.265 decoding: `sudo apt install ffmpeg`.
+- On GNOME the tray icon needs the AppIndicator extension (enabled by default in Ubuntu).
 
-- Linux x86-64 (testowane na Ubuntu 26.04, GNOME/Wayland),
-- `ffmpeg` (dekodowanie H.265): `sudo apt install ffmpeg`,
-- ikona w zasobniku na GNOME wymaga rozszerzenia AppIndicator (w Ubuntu jest domyślnie).
+## Install
 
-## Instalacja
-
-Z [Releases](../../releases) pobierz `xiaomi-cam-…-linux-amd64.tar.gz`, potem:
+Download `xiaomi-cam-<version>-linux-amd64.tar.gz` from [Releases](../../releases):
 
 ```sh
 tar xzf xiaomi-cam-*-linux-amd64.tar.gz
@@ -41,146 +45,141 @@ install -Dm755 xiaomi-cam/xiaomi-cam ~/.local/bin/xiaomi-cam
 install -Dm644 xiaomi-cam/xiaomi-cam.desktop ~/.local/share/applications/xiaomi-cam.desktop
 ```
 
-Albo zbuduj ze źródeł (Go ≥ 1.25, kompilator C, nagłówki X11/GL):
+Or build from source (Go ≥ 1.25, a C compiler, X11/GL headers):
 
 ```sh
 sudo apt install golang gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
-make install        # buduje i instaluje do ~/.local
+make install        # builds and installs to ~/.local
 ```
 
-## Pierwsze uruchomienie
+## First run
 
-1. Uruchom **Xiaomi Cam** z menu aplikacji.
-2. Zaloguj się kontem Mi Home. Hasło trafia tylko do wbudowanego go2rtc i do serwerów
-   Xiaomi; zapisywany jest jedynie token, w `~/.config/xiaomi-cam-viewer/go2rtc.yaml`
-   (prawa 600).
-3. Wybierz region (Polska to **Europa**) i zaznacz kamery.
+1. Start **Xiaomi Cam** from the applications menu.
+2. Log in with your Mi Home account. The password goes only to the embedded go2rtc and to
+   Xiaomi servers. Only a token is stored, in `~/.config/xiaomi-cam-viewer/go2rtc.yaml`
+   (mode 600).
+3. Choose the region of your account (e.g. **Europe**) and the cameras.
 
-## Skróty
+## Keyboard and mouse
 
-| Klawisz / mysz | Akcja |
+| Key / mouse | Action |
 |---|---|
-| strzałki | obrót kamery |
-| przeciąganie obrazu | obrót kamery |
-| `+` / `−`, kółko myszy | zoom kamery |
+| arrows, pan/tilt buttons (hold) | pan/tilt the camera |
+| drag the picture | pan/tilt (not in video-only mode) |
+| `+` / `−`, mouse wheel | camera zoom |
 | `0` | zoom 1× |
-| `H` | tylko obraz; `Esc` lub prawy przycisk myszy – powrót |
-| `F`, `F11`, podwójne kliknięcie | pełny ekran |
-| `S` | zdjęcie |
+| `H` | video-only mode; `Esc` or right click to go back |
+| `F`, `F11`, double click | full screen |
+| `S` | snapshot |
 
-## Sterowanie przez AI (MCP) i API
+## AI control (MCP)
 
-**MCP** – serwer dla asystentów AI (Claude Code, Claude Desktop i inne). Uruchamia się jako
-`xiaomi-cam mcp` (stdio); jeśli aplikacja nie działa, sam ją włącza schowaną w zasobniku.
+`xiaomi-cam mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server over
+stdio for AI assistants: Claude Code, Claude Desktop and others. If the app isn't running, it
+starts it hidden in the tray.
+
+**Claude Code:**
 
 ```sh
 claude mcp add --scope user xiaomi-cam -- ~/.local/bin/xiaomi-cam mcp
 ```
 
-Claude Desktop (`claude_desktop_config.json`):
+**Claude Desktop** (`~/.config/Claude/claude_desktop_config.json`):
+
 ```json
-{"mcpServers": {"xiaomi-cam": {"command": "/home/USER/.local/bin/xiaomi-cam", "args": ["mcp"]}}}
+{
+  "mcpServers": {
+    "xiaomi-cam": { "command": "/home/USER/.local/bin/xiaomi-cam", "args": ["mcp"] }
+  }
+}
 ```
 
-Narzędzia: `list_cameras`, `get_snapshot` (zdjęcie JPEG wraca do modelu jako obraz),
-`get_camera_state`, `move_camera`, `set_zoom`, `set_spotlight`, `set_siren`.
+**Tools.** All tools take an optional `camera` argument (a name from `list_cameras`); the
+default is the first camera.
 
-**HTTP API** – działająca aplikacja nasłuchuje tylko na `127.0.0.1:11984` (bez autoryzacji,
-dostępne wyłącznie z tego komputera). Parametr `camera=` jest opcjonalny (domyślnie pierwsza kamera).
-
-| Metoda | Ścieżka | Opis |
+| Tool | Arguments | Result |
 |---|---|---|
-| GET | `/api/xiaomi-cam/cameras` | lista kamer |
-| GET | `/api/xiaomi-cam/snapshot?width=1280` | zdjęcie JPEG z podglądu na żywo |
-| GET | `/api/xiaomi-cam/state` | zoom, reflektor, jasność, syrena |
-| POST | `/api/xiaomi-cam/move?direction=left&steps=10` | obrót: `left`/`right`/`up`/`down`, krok ≈ 1–2° |
-| POST | `/api/xiaomi-cam/zoom?value=2.5` | zoom kamery 1.0–9.0 |
-| POST | `/api/xiaomi-cam/spotlight?on=true&brightness=80` | reflektor |
-| POST | `/api/xiaomi-cam/siren?on=true` | syrena |
+| `list_cameras` | – | camera names and models |
+| `get_snapshot` | `width` (default 1280, max 2560) | live JPEG image (returned to the model as an image) |
+| `get_camera_state` | – | zoom, spotlight on/off and brightness, siren |
+| `move_camera` | `direction` (`left`/`right`/`up`/`down`), `steps` (default 10, max 100; 1 step ≈ 1–2°) | pan/tilt |
+| `set_zoom` | `zoom` (1.0–9.0) | camera zoom |
+| `set_spotlight` | `on` (bool), `brightness` (0–100) | spotlight |
+| `set_siren` | `on` (bool) | alarm siren |
+
+Example prompts: *"Show me what the camera sees"*, *"Turn the camera left and zoom in on the
+gate"*, *"Is there a car parked in front of the house?"*.
+
+## HTTP API
+
+The running app serves a REST API on **`127.0.0.1:11984`**. It is local only and has no
+authentication. All endpoints take an optional `camera=<name>`; the default is the first
+camera. Errors return a non-200 status with a text message.
+
+| Method | Path | Parameters | Response |
+|---|---|---|---|
+| GET | `/api/xiaomi-cam/cameras` | – | `[{"name": "...", "model": "..."}]` |
+| GET | `/api/xiaomi-cam/snapshot` | `width` (optional) | `image/jpeg` of live video |
+| GET | `/api/xiaomi-cam/state` | – | `{"zoom", "spotlight", "spotlight_brightness", "siren"}` |
+| POST | `/api/xiaomi-cam/move` | `direction` = `left`/`right`/`up`/`down`, `steps` (1–100) | `{"moved", "steps"}` |
+| POST | `/api/xiaomi-cam/zoom` | `value` (1.0–9.0) | `{"zoom"}` |
+| POST | `/api/xiaomi-cam/spotlight` | `on` (`true`/`false`), `brightness` (0–100) | `{"ok": true}` |
+| POST | `/api/xiaomi-cam/siren` | `on` (`true`/`false`) | `{"siren"}` |
 
 ```sh
-curl -o kamera.jpg "http://127.0.0.1:11984/api/xiaomi-cam/snapshot"
+# snapshot
+curl -o camera.jpg "http://127.0.0.1:11984/api/xiaomi-cam/snapshot?width=1920"
+# pan left by 20 steps, zoom 3x
 curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/move?direction=left&steps=20"
+curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/zoom?value=3"
+# spotlight on at 80 %
+curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/spotlight?on=true&brightness=80"
 ```
 
-Obrót i zoom wymagają sesji z kamerą – gdy okno jest schowane, API samo ją otwiera i zamyka
-minutę po ostatniej komendzie.
+Pan/tilt and zoom use the camera session. When the window is hidden in the tray, the API
+opens a session itself and closes it a minute after the last command. If the app is showing
+history, the snapshot comes from the recording being played.
 
-## Jak to działa
+The embedded go2rtc also serves the camera stream as RTSP:
+`rtsp://127.0.0.1:18554/<camera name>`.
 
-Kamery Xiaomi nie udostępniają RTSP. Obraz jest pobierany protokołem Xiaomi **MISS**
-przez P2P **CS2**, dokładnie jak w Mi Home:
+## How it works
 
-1. Chmura Xiaomi zwraca klucze szyfrowania i identyfikator P2P kamery.
-2. Aplikacja wysyła prośbę o połączenie do serwerów CS2 Xiaomi. Serwery przekazują
-   kamerze i aplikacji swoje adresy, a obie strony przebijają NAT (UDP hole punching).
-3. Obraz idzie bezpośrednio z kamery do komputera i jest szyfrowany. Wewnątrz aplikacji
-   go2rtc wystawia go jako RTSP na `127.0.0.1`, a ffmpeg go dekoduje.
+Xiaomi cameras don't offer RTSP. The video comes over Xiaomi's **MISS** protocol on **CS2**
+P2P, the same way as in Mi Home:
 
-Ten tryb („Zdalne”) dodałem do go2rtc w tym repozytorium, bo niektóre kamery, np. CW700S,
-nie odpowiadają na wyszukiwanie w sieci lokalnej, którego używa oficjalne go2rtc.
+1. The Xiaomi cloud returns the encryption keys and the camera's P2P id.
+2. The app asks the Xiaomi CS2 servers to connect it with the camera. The servers send each
+   side the address of the other, and both punch through NAT (UDP hole punching).
+3. The video goes straight from the camera to the computer, encrypted. go2rtc serves it as
+   RTSP on `127.0.0.1`, and ffmpeg decodes it.
 
-Reflektor i syrena są sterowane przez chmurę Xiaomi (MIoT), obrót przez sesję MISS.
-Zoom to komenda MISS `530` (`{"value": zoom×10}`), odczytana z wtyczki Mi Home tej kamery.
-Historia: komenda `PLAYBACK_REQ` (`0x10D`); kamera wymaga dokładnego początku pliku (pliki
-po ~61 s), więc aplikacja szuka go sekunda po sekundzie i odtwarza od początku pliku, w którym
-leży wybrana chwila.
+This "server" mode was added to go2rtc in this repository, because some cameras (e.g. the
+CW700S) don't answer the LAN search that upstream go2rtc uses.
 
-## Ograniczenia
+Other controls:
 
-- Adresy serwerów CS2 są wpisane dla regionu **Europa**. Dla innych regionów można je
-  podać w źródle kamery w konfiguracji: `&servers=ip1,ip2`.
-- Obsługiwane są kamery z protokołem `cs2` (większość nowszych kamer Xiaomi).
-  Właściwości reflektora i syreny są zgodne ze specyfikacją `isa.camera.700sa`.
+| Function | How it is done |
+|---|---|
+| Pan/tilt | MISS command `0x112` |
+| Zoom | MISS command `530` `{"value": zoom×10}`, found in the camera's Mi Home plugin |
+| Spotlight, siren | Xiaomi cloud (MIoT properties) |
+| History | MISS `PLAYBACK_REQ` `0x10D` |
 
-## Licencja i podziękowania
+For history, the camera needs the exact start of a recorded file (files are about 61 s). The
+app searches for it second by second and plays from the start of the file that contains the
+chosen time.
 
-MIT. Projekt bazuje na [go2rtc](https://github.com/AlexxIT/go2rtc) autorstwa
-Alexey'a Khita (MIT); oryginalne README jest w [README.go2rtc.md](README.go2rtc.md).
-Sterowanie silnikiem kamery wzorowane na PR AlexxIT/go2rtc#2531.
+## Limitations
 
----
+- CS2 server addresses are set for the **Europe** region. For other regions, add
+  `&servers=ip1,ip2` to the camera source in the config.
+- Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
+  siren and zoom follow the `isa.camera.700sa` specification.
+- History has no list of recordings (timeline marks) yet.
 
-## English
+## License and credits
 
-Desktop app for Linux to watch **Xiaomi Mi Home** cameras, which officially work only
-in the Mi Home phone app. Tested with **Xiaomi Outdoor Camera CW700S** (`isa.camera.700sa`).
-Single binary with embedded [go2rtc](https://github.com/AlexxIT/go2rtc).
-
-**Features:** live video up to 2.5K (2560×1440) with 2.5K/720p/SD quality, **remote
-connection from any network** (like Mi Home, no port forwarding or VPN) or local (LAN),
-pan/tilt (buttons, arrow keys, dragging the picture), native camera zoom up to 9×,
-SD card history playback (date, timeline, ±1/±10 min, speed 1–16×), spotlight with
-brightness, siren, camera audio, snapshots, video-only and full-screen modes, system
-tray icon (closing the window hides the app and stops streaming), Polish/English UI,
-Mi Home login with captcha and 2FA code.
-
-**Requirements:** Linux x86-64, `ffmpeg` (`sudo apt install ffmpeg`). On GNOME the
-tray icon needs the AppIndicator extension (default in Ubuntu).
-
-**Install:** download `xiaomi-cam-…-linux-amd64.tar.gz` from [Releases](../../releases)
-and copy `xiaomi-cam` to `~/.local/bin` and `xiaomi-cam.desktop` to
-`~/.local/share/applications`, or build with `make install`.
-
-**First run:** log in with your Mi Home account. Only a token is stored, in
-`~/.config/xiaomi-cam-viewer/go2rtc.yaml` with mode 600. Choose the region
-(Europe for EU accounts) and the cameras.
-
-**Shortcuts:** arrows – pan/tilt; drag – pan/tilt;
-`+`/`−`/wheel – camera zoom; `0` – zoom 1×; `H` – video only (`Esc` or right click to go back);
-`F`/`F11`/double click – full screen; `S` – snapshot.
-
-**AI (MCP) and API:** `xiaomi-cam mcp` is an MCP server (stdio) for AI assistants
-(`claude mcp add --scope user xiaomi-cam -- ~/.local/bin/xiaomi-cam mcp`); it starts the app
-hidden in the tray if needed. Tools: `list_cameras`, `get_snapshot` (JPEG image to the model),
-`get_camera_state`, `move_camera`, `set_zoom`, `set_spotlight`, `set_siren`. The running app
-also serves a local HTTP API on `127.0.0.1:11984` – see the table above (`/api/xiaomi-cam/...`).
-
-**How it works:** the app uses the Xiaomi MISS protocol over CS2 P2P like Mi Home.
-It asks the Xiaomi CS2 servers to introduce the camera, then uses UDP hole punching
-and an end-to-end encrypted direct stream. This "server" mode was added to go2rtc in
-this repository, because some cameras (e.g. CW700S) don't answer the LAN search used
-by upstream go2rtc. CS2 server addresses are set for the EU region; other regions can
-pass `&servers=ip1,ip2` in the camera source.
-
-**License:** MIT, based on go2rtc by Alexey Khit (MIT).
+MIT. Based on [go2rtc](https://github.com/AlexxIT/go2rtc) by Alexey Khit (MIT); the original
+README is in [README.go2rtc.md](README.go2rtc.md). The pan/tilt motor command is based on
+AlexxIT/go2rtc#2531, and the command channel fix on AlexxIT/go2rtc#2489.
