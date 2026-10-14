@@ -18,9 +18,9 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-**GitHub releases are not created yet** (v1.0.0–v1.15.0 tags only). Needs `gh auth login`
-(device flow; the user approved). Every release must have notes listing the changes since
-the previous tag (English, Added/Changed/Fixed) and attach the 3 files from `dist/`.
+GitHub releases: v1.0.0–v1.15.0 published (gh logged in as genosajd). For a new version:
+`gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
+notes must list the changes since the previous tag (English) and the 3 downloads.
 
 ## Self-tests with the real camera
 
@@ -63,7 +63,7 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## Open ideas / not done
 
-- GitHub releases (see above); real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
+- Real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
   Claude provider (no keys); a second real camera for the grid.
 - History has no recordings list (RDT channel not implemented).
 - CS2 server list hardcoded for EU (`&servers=` param for other regions).
