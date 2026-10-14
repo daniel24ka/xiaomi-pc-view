@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Xiaomi Cam
+Comment=Xiaomi Mi Home camera viewer
+Comment[pl]=Podgląd kamer Xiaomi Mi Home
+Exec=xiaomi-cam
+Icon=camera-web
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=xiaomi-cam
