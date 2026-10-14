@@ -203,6 +203,41 @@ const (
 	gridKey = "\x00grid" // recordings map key of the grid recording
 )
 
+const prefRecordSkip = "record.skip" // cameras NOT recorded in each/grid mode (new cameras are recorded)
+
+// recordCameras - cameras recorded in the each/grid modes (all minus the unchecked ones)
+func recordCameras() []string {
+	skip := map[string]bool{}
+	if appPrefs != nil {
+		for _, n := range appPrefs.StringList(prefRecordSkip) {
+			skip[n] = true
+		}
+	}
+	var out []string
+	for _, n := range cameraNames() {
+		if !skip[n] {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func setRecordCamera(name string, on bool) {
+	if appPrefs == nil {
+		return
+	}
+	var skip []string
+	for _, n := range appPrefs.StringList(prefRecordSkip) {
+		if n != name {
+			skip = append(skip, n)
+		}
+	}
+	if !on {
+		skip = append(skip, name)
+	}
+	appPrefs.SetStringList(prefRecordSkip, skip)
+}
+
 func recordMode() string {
 	if appPrefs != nil {
 		return appPrefs.String(prefRecordMode)
@@ -210,13 +245,20 @@ func recordMode() string {
 	return recordSelected
 }
 
-// startRecordings starts recording in the given mode; selected is the selected camera.
-func startRecordings(mode, selected string, limit time.Duration) ([]*recording, error) {
+// startRecordings starts recording in the given mode; selected is the selected camera,
+// cameras - cameras for the each/grid modes (nil - from the settings).
+func startRecordings(mode, selected string, cameras []string, limit time.Duration) ([]*recording, error) {
+	if cameras == nil {
+		cameras = recordCameras()
+	}
+	if (mode == recordEach || mode == recordGrid) && len(cameras) == 0 {
+		return nil, errors.New("no cameras selected for recording (Settings → General)")
+	}
 	switch mode {
 	case recordEach:
 		var out []*recording
 		var errs []error
-		for _, name := range cameraNames() {
+		for _, name := range cameras {
 			r, err := startRecording(name, limit)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", name, err))
@@ -226,7 +268,7 @@ func startRecordings(mode, selected string, limit time.Duration) ([]*recording, 
 		}
 		return out, errors.Join(errs...)
 	case recordGrid:
-		r, err := startGridRecording(cameraNames(), selected, limit)
+		r, err := startGridRecording(cameras, selected, limit)
 		if err != nil {
 			return nil, err
 		}

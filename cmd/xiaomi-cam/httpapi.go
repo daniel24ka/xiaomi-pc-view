@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,7 +29,7 @@ import (
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
-//	POST /api/xiaomi-cam/record/start?duration=60&mode=each  MP4 (H.265); mode: selected/each/grid
+//	POST /api/xiaomi-cam/record/start?duration=60&mode=each&cameras=a,b  MP4 (H.265); mode: selected/each/grid
 //	POST /api/xiaomi-cam/record/stop                 stops all recordings
 //	GET  /api/xiaomi-cam/record                      recording status
 //	GET  /api/xiaomi-cam/points                      camera points 1-3
@@ -180,7 +181,17 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		case recordEach, recordGrid:
 			mode = m
 		}
-		recs, err := startRecordings(mode, name, time.Duration(secs)*time.Second)
+		var cams []string // nil - cameras from the settings
+		if c := r.URL.Query().Get("cameras"); c != "" {
+			for _, n := range strings.Split(c, ",") {
+				if n = strings.TrimSpace(n); cameraSource(n) != "" {
+					cams = append(cams, n)
+				} else if n != "" {
+					return nil, fmt.Errorf("no camera %q", n)
+				}
+			}
+		}
+		recs, err := startRecordings(mode, name, cams, time.Duration(secs)*time.Second)
 		if len(recs) == 0 && err != nil {
 			return nil, err
 		}

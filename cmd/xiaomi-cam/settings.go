@@ -57,15 +57,39 @@ func (u *ui) showSettings() {
 	if mode.SelectedIndex() < 0 {
 		mode.SetSelectedIndex(0)
 	}
+	// cameras recorded in the each/grid modes
+	recorded := map[string]bool{}
+	for _, n := range recordCameras() {
+		recorded[n] = true
+	}
+	camChecks := container.NewVBox()
+	for _, name := range cameraNames() {
+		name := name
+		c := newCheck(name, func(on bool) { setRecordCamera(name, on) })
+		c.SetChecked(recorded[name])
+		camChecks.Add(c)
+	}
+	camLabel := widget.NewLabel(T("Nagrywane kamery:"))
+	showCams := func() {
+		if id := modes[max(mode.SelectedIndex(), 0)].id; id == recordEach || id == recordGrid {
+			camLabel.Show()
+			camChecks.Show()
+		} else {
+			camLabel.Hide()
+			camChecks.Hide()
+		}
+	}
 	mode.OnChanged = func(string) {
 		u.app.Preferences().SetString(prefRecordMode, modes[max(mode.SelectedIndex(), 0)].id)
+		showCams()
 	}
+	showCams()
 	modeHelp := widget.NewLabel(T("Wybrana kamera i osobne pliki kopiują obraz z kamer bez przekodowania (prawie bez obciążenia). Siatka składa kamery w jeden film H.265 – to przekodowanie obciąża procesor."))
 	modeHelp.Wrapping = fyne.TextWrapWord
 	modeHelp.Importance = widget.LowImportance
 
 	form := widget.NewForm(
-		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, modeHelp)),
+		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),
 	)
@@ -99,7 +123,7 @@ func (u *ui) toggleRecording() {
 		}()
 		return
 	}
-	if _, err := startRecordings(recordMode(), name, 0); err != nil {
+	if _, err := startRecordings(recordMode(), name, nil, 0); err != nil {
 		dialog.ShowError(err, u.win)
 	}
 }
