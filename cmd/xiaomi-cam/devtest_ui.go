@@ -31,9 +31,14 @@ func init() {
 		}
 		time.Sleep(10 * time.Second)
 		shot("ui_main.jpg")
-		fyne.Do(u.showCameras)
+		fyne.Do(u.toggleRecording)
+		time.Sleep(3 * time.Second)
+		shot("ui_recording.jpg")
+		fyne.Do(u.toggleRecording)
+		time.Sleep(2 * time.Second)
+		fyne.Do(u.showSettings)
 		time.Sleep(time.Second)
-		shot("ui_cameras.jpg")
+		shot("ui_settings.jpg")
 		time.Sleep(500 * time.Millisecond)
 		fyne.Do(u.app.Quit)
 	}

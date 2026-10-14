@@ -11,10 +11,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime/debug"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -72,9 +69,10 @@ type ui struct {
 	normalSize fyne.Size // window size before video-only mode
 
 	hist         history // SD card playback
-	gotFrame     bool    // first frame of the current playback arrived
-	decodeW      int     // width the video is decoded to (tier, see decodeSize)
-	decodeStable int     // seconds the window has needed another decode size
+	recButton    *ptrButton
+	gotFrame     bool // first frame of the current playback arrived
+	decodeW      int  // width the video is decoded to (tier, see decodeSize)
+	decodeStable int  // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -116,6 +114,7 @@ func main() {
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
 	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
+	appPrefs = a.Preferences()
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
 	u.camZoom = 1
@@ -129,6 +128,7 @@ func main() {
 		for range time.Tick(time.Second) {
 			fyne.Do(func() {
 				u.historyStatus()
+				u.updateRecordButton()
 				u.saveGeometry()
 				u.checkDecodeSize()
 			})
@@ -138,10 +138,14 @@ func main() {
 		onMinimize(u.win, u.hide) // minimize = hide to tray
 		u.restoreGeometry(geomFramed)
 	})
-	a.Lifecycle().SetOnStopped(u.player.stop) // no frames to the UI after it stopped
+	a.Lifecycle().SetOnStopped(func() {
+		u.player.stop() // no frames to the UI after it stopped
+		stopAllRecordings()
+	})
 
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
+	onRecordingChanged = func(string) { fyne.Do(u.updateRecordButton) }
 	initHTTPAPI(func(name string, z float64) {
 		fyne.Do(func() {
 			if name == u.camera.Selected {
@@ -238,6 +242,7 @@ func (u *ui) build() {
 	})
 
 	u.buildHistory()
+	u.recButton = newButton("", recordIcon, u.toggleRecording)
 	top := container.NewHBox(
 		widget.NewLabel(T("Kamera:")), u.camera,
 		widget.NewLabel(T("Jakość:")), u.quality,
@@ -245,12 +250,14 @@ func (u *ui) build() {
 		layout.NewSpacer(),
 		// view: history, snapshot, video only, full screen
 		u.hist.button,
+		u.recButton,
 		newButton("", theme.MediaPhotoIcon(), u.snapshot),
 		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
 		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
 		widget.NewSeparator(),
 		// app: cameras, language, help
 		newButton("", cameraIcon, u.showCameras),
+		newButton("", theme.SettingsIcon(), u.showSettings),
 		u.languageSelect(),
 		newButton("", theme.HelpIcon(), u.showShortcuts),
 	)
@@ -532,31 +539,24 @@ func (u *ui) motor(op int) {
 	u.mover.step(op)
 }
 
+// snapshot saves a full resolution JPEG from the camera stream (the window shows a
+// downscaled picture) to the snapshots folder from the settings.
 func (u *ui) snapshot() {
-	frame := u.video.frame
-	if frame == nil {
+	name := u.camera.Selected
+	if name == "" {
 		return
 	}
-	dir := os.Getenv("HOME")
-	// user's Pictures folder in any language (~/Obrazy, ~/Pictures...)
-	if out, err := exec.Command("xdg-user-dir", "PICTURES").Output(); err == nil {
-		if d := strings.TrimSpace(string(out)); d != "" {
-			if _, err = os.Stat(d); err == nil {
-				dir = d
+	u.status.SetText(T("Zapisuję zdjęcie…"))
+	go func() {
+		path, err := saveSnapshot(name)
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(err, u.win)
+				return
 			}
-		}
-	}
-	path := filepath.Join(dir, fmt.Sprintf("%s_%s.jpg", u.camera.Selected, time.Now().Format("2006-01-02_15-04-05")))
-	f, err := os.Create(path)
-	if err == nil {
-		err = jpeg.Encode(f, frame, &jpeg.Options{Quality: 92})
-		_ = f.Close()
-	}
-	if err != nil {
-		dialog.ShowError(err, u.win)
-		return
-	}
-	u.status.SetText("Zapisano " + path)
+			u.status.SetText(T("Zapisano ") + path)
+		})
+	}()
 }
 
 func (u *ui) toggleFullScreen() {

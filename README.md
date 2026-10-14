@@ -18,7 +18,13 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   slider in video-only mode.
 - **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
 - **Spotlight** with brightness, and **siren**.
-- Camera audio, and snapshots saved to `~/Pictures`.
+- **Local recording to MP4**: H.265 video copied as it comes from the camera (no
+  re-encoding, almost no CPU), AAC audio. Fragmented MP4, so a file stays playable even if
+  the app is closed while recording. Recording works with the window hidden.
+- Full resolution (2560×1440) snapshots.
+- **Settings**: folders for recordings (default: your Videos folder) and snapshots (default:
+  your Pictures folder).
+- Camera audio.
 - **Video-only mode**: no panels and no window frame. The window keeps the picture's aspect
   ratio and can be resized by any edge or moved with the ✥ button. Pan/tilt buttons and a
   zoom slider with a scale appear when you move the mouse.
@@ -71,6 +77,7 @@ make install        # builds and installs to ~/.local
 | `H` | video-only mode; `Esc` or right click to go back |
 | `F`, `F11`, double click | full screen |
 | `S` | snapshot |
+| red dot button | start / stop recording |
 
 ## AI control (MCP)
 
@@ -106,6 +113,10 @@ default is the first camera.
 | `set_zoom` | `zoom` (1.0–9.0) | camera zoom |
 | `set_spotlight` | `on` (bool), `brightness` (0–100) | spotlight |
 | `set_siren` | `on` (bool) | alarm siren |
+| `save_snapshot` | – | saves a 2560×1440 JPEG to the snapshots folder, returns the path |
+| `start_recording` | `duration_seconds` (optional, auto stop) | starts an MP4 recording, returns the path |
+| `stop_recording` | – | finishes the MP4 file, returns the path and duration |
+| `recording_status` | – | recording or not, file path, elapsed seconds |
 
 Example prompts: *"Show me what the camera sees"*, *"Turn the camera left and zoom in on the
 gate"*, *"Is there a car parked in front of the house?"*.
@@ -125,6 +136,10 @@ camera. Errors return a non-200 status with a text message.
 | POST | `/api/xiaomi-cam/zoom` | `value` (1.0–9.0) | `{"zoom"}` |
 | POST | `/api/xiaomi-cam/spotlight` | `on` (`true`/`false`), `brightness` (0–100) | `{"ok": true}` |
 | POST | `/api/xiaomi-cam/siren` | `on` (`true`/`false`) | `{"siren"}` |
+| POST | `/api/xiaomi-cam/snapshot/save` | – | `{"file"}` – JPEG saved to the snapshots folder |
+| POST | `/api/xiaomi-cam/record/start` | `duration` (seconds, optional) | `{"recording", "file"}` |
+| POST | `/api/xiaomi-cam/record/stop` | – | `{"recording", "file", "duration_s"}` |
+| GET | `/api/xiaomi-cam/record` | – | `{"recording", "file", "elapsed_s"}` |
 
 ```sh
 # snapshot
@@ -132,6 +147,8 @@ curl -o camera.jpg "http://127.0.0.1:11984/api/xiaomi-cam/snapshot?width=1920"
 # pan left by 20 steps, zoom 3x
 curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/move?direction=left&steps=20"
 curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/zoom?value=3"
+# record 60 seconds to the recordings folder
+curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/record/start?duration=60"
 # spotlight on at 80 %
 curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/spotlight?on=true&brightness=80"
 ```

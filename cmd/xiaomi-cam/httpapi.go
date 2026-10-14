@@ -27,6 +27,10 @@ import (
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
+//	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
+//	POST /api/xiaomi-cam/record/start?duration=60    MP4 (H.265) to the recordings folder
+//	POST /api/xiaomi-cam/record/stop
+//	GET  /api/xiaomi-cam/record                      recording status
 func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	handle := func(path, method string, f func(r *http.Request, name string) (any, error)) {
 		api.HandleFunc("api/xiaomi-cam/"+path, func(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +155,45 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 		}
 		return map[string]any{"ok": true}, nil
+	})
+
+	handle("snapshot/save", "POST", func(r *http.Request, name string) (any, error) {
+		path, err := saveSnapshot(name)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"file": path}, nil
+	})
+
+	handle("record/start", "POST", func(r *http.Request, name string) (any, error) {
+		secs, _ := strconv.Atoi(r.URL.Query().Get("duration"))
+		rec, err := startRecording(name, time.Duration(secs)*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		res := map[string]any{"recording": true, "file": rec.path}
+		if secs > 0 {
+			res["duration_s"] = secs
+		}
+		return res, nil
+	})
+
+	handle("record/stop", "POST", func(r *http.Request, name string) (any, error) {
+		rec, err := stopRecording(name)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"recording": false, "file": rec.path,
+			"duration_s": int(time.Since(rec.started).Seconds())}, nil
+	})
+
+	handle("record", "GET", func(r *http.Request, name string) (any, error) {
+		rec := currentRecording(name)
+		if rec == nil {
+			return map[string]any{"recording": false}, nil
+		}
+		return map[string]any{"recording": true, "file": rec.path,
+			"elapsed_s": int(time.Since(rec.started).Seconds())}, nil
 	})
 
 	handle("siren", "POST", func(r *http.Request, name string) (any, error) {

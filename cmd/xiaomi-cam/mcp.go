@@ -29,7 +29,7 @@ func runMCP() error {
 
 	server := mcp.NewServer(&mcp.Implementation{Name: "xiaomi-cam", Version: version}, &mcp.ServerOptions{
 		Instructions: "Controls Xiaomi Mi Home cameras (e.g. Outdoor Camera CW700S): live snapshots, " +
-			"pan/tilt, camera zoom, spotlight and siren. Use get_snapshot to see what the camera sees; " +
+			"pan/tilt, camera zoom, spotlight, siren, saving snapshots and MP4 recordings to disk. Use get_snapshot to see what the camera sees; " +
 			"after moving or zooming wait a moment (the camera needs ~1-2 s) and take a new snapshot.",
 	})
 
@@ -110,6 +110,30 @@ func runMCP() error {
 	mcp.AddTool(server, &mcp.Tool{Name: "set_siren", Description: "Start or stop the camera alarm siren. It is loud - use only when the user asks for it."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in sirenArgs) (*mcp.CallToolResult, any, error) {
 			return apiText("POST", "siren", url.Values{"camera": {in.Camera}, "on": {strconv.FormatBool(in.On)}})
+		})
+
+	mcp.AddTool(server, &mcp.Tool{Name: "save_snapshot", Description: "Save a full resolution (2560x1440) JPEG snapshot to the snapshots folder on disk. Returns the file path."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "snapshot/save", url.Values{"camera": {in.Camera}})
+		})
+
+	type recordArgs struct {
+		cameraArg
+		Duration int `json:"duration_seconds,omitempty" jsonschema:"stop automatically after this many seconds; 0 or empty - record until stop_recording"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "start_recording", Description: "Start recording the camera to an MP4 file (H.265 video as from the camera, AAC audio) in the recordings folder. Returns the file path."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in recordArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "record/start", url.Values{"camera": {in.Camera}, "duration": {strconv.Itoa(in.Duration)}})
+		})
+
+	mcp.AddTool(server, &mcp.Tool{Name: "stop_recording", Description: "Stop recording and finish the MP4 file. Returns the file path and duration."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "record/stop", url.Values{"camera": {in.Camera}})
+		})
+
+	mcp.AddTool(server, &mcp.Tool{Name: "recording_status", Description: "Is the camera being recorded; file path and elapsed seconds."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
+			return apiText("GET", "record", url.Values{"camera": {in.Camera}})
 		})
 
 	return server.Run(context.Background(), &mcp.StdioTransport{})
