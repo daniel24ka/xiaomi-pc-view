@@ -123,6 +123,8 @@ func (u *ui) build() {
 	}
 	u.video.onMouseMove = u.showExitButton
 	u.video.onCameraDrag = u.cameraDrag
+	u.video.canResize = func() bool { return u.viewOnly && !u.win.FullScreen() }
+	u.video.onResize = u.resizeKeepAspect
 	u.status = widget.NewLabel("")
 	u.player.onFrame = func(img *image.RGBA) {
 		fyne.Do(func() {
@@ -595,4 +597,20 @@ func (u *ui) screenshotAndQuit(path string) {
 		}
 		u.app.Quit()
 	})
+}
+
+// resizeKeepAspect resizes the frameless window by a dragged edge, keeping the picture
+// aspect ratio, so there are no black bars.
+func (u *ui) resizeKeepAspect(dx, dy float32) {
+	aspect := float32(9) / 16
+	if f := u.video.frame; f != nil {
+		aspect = float32(f.Bounds().Dy()) / float32(f.Bounds().Dx())
+	}
+	size := u.win.Canvas().Size()
+	w := size.Width + dx
+	if dx == 0 || (dy != 0 && dy/aspect > dx) {
+		w = size.Width + dy/aspect
+	}
+	w = max(w, 320)
+	u.win.Resize(fyne.NewSize(w, w*aspect))
 }

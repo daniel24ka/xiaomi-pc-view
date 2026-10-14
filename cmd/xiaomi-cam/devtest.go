@@ -65,6 +65,15 @@ func init() {
 		})
 		time.Sleep(time.Second)
 		fyne.Do(func() {
+			u.resizeKeepAspect(200, 0)
+			u.resizeKeepAspect(0, 90)
+		})
+		time.Sleep(time.Second)
+		fyne.Do(func() {
+			fmt.Println("after resize:", u.win.Canvas().Size(), "edge at corner:", u.video.edgeAt(fyne.NewPos(u.video.Size().Width-2, u.video.Size().Height-2)))
+		})
+		time.Sleep(time.Second)
+		fyne.Do(func() {
 			u.setViewOnly(false)
 			fmt.Println("decorated after exit:", decorated())
 		})

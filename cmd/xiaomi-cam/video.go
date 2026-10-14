@@ -129,6 +129,52 @@ type videoView struct {
 	onSecondary  func()
 	onMouseMove  func()
 	onCameraDrag func(dx, dy float32) // drag beyond digital zoom area moves the camera
+
+	// window resize by edges (window without frame)
+	canResize func() bool
+	onResize  func(dx, dy float32)
+	edge      int  // edge under the mouse: edgeNone, edgeRight, edgeBottom, edgeCorner
+	dragging  bool // drag in progress
+	dragEdge  int  // edge grabbed when the drag started
+}
+
+const (
+	edgeNone = iota
+	edgeRight
+	edgeBottom
+	edgeCorner
+	edgeSize = 12 // px from the edge that grab the window border
+)
+
+func (v *videoView) edgeAt(pos fyne.Position) int {
+	if v.canResize == nil || !v.canResize() {
+		return edgeNone
+	}
+	size := v.Size()
+	right := pos.X >= size.Width-edgeSize
+	bottom := pos.Y >= size.Height-edgeSize
+	switch {
+	case right && bottom:
+		return edgeCorner
+	case right:
+		return edgeRight
+	case bottom:
+		return edgeBottom
+	}
+	return edgeNone
+}
+
+// Cursor shows resize arrows over the edges of a window without frame.
+func (v *videoView) Cursor() desktop.Cursor {
+	switch v.edge {
+	case edgeRight:
+		return desktop.HResizeCursor
+	case edgeBottom:
+		return desktop.VResizeCursor
+	case edgeCorner:
+		return desktop.NWSEResizeCursor
+	}
+	return desktop.DefaultCursor
 }
 
 func newVideoView() *videoView {
@@ -211,6 +257,20 @@ func (v *videoView) Scrolled(e *fyne.ScrollEvent) {
 // Dragged pans the zoomed image ("grab the picture"); what can't be panned moves the camera.
 func (v *videoView) Dragged(e *fyne.DragEvent) {
 	dx, dy := e.Dragged.DX, e.Dragged.DY
+	if !v.dragging {
+		v.dragging = true
+		v.dragEdge = v.edgeAt(e.Position.Subtract(fyne.NewPos(dx, dy)))
+	}
+	if v.dragEdge != edgeNone {
+		switch v.dragEdge {
+		case edgeRight:
+			dy = 0
+		case edgeBottom:
+			dx = 0
+		}
+		v.onResize(dx, dy)
+		return
+	}
 	if v.zoom > 1 {
 		size := v.Size()
 		cx := v.cx - float64(dx)/float64(size.Width)/v.zoom
@@ -228,7 +288,9 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 	}
 }
 
-func (v *videoView) DragEnd() {}
+func (v *videoView) DragEnd() {
+	v.dragging = false
+}
 
 func (v *videoView) TappedSecondary(*fyne.PointEvent) {
 	if v.onSecondary != nil {
@@ -236,9 +298,12 @@ func (v *videoView) TappedSecondary(*fyne.PointEvent) {
 	}
 }
 
-func (v *videoView) MouseIn(*desktop.MouseEvent)    { v.mouseMoved() }
-func (v *videoView) MouseMoved(*desktop.MouseEvent) { v.mouseMoved() }
-func (v *videoView) MouseOut()                      {}
+func (v *videoView) MouseIn(e *desktop.MouseEvent) { v.MouseMoved(e) }
+func (v *videoView) MouseMoved(e *desktop.MouseEvent) {
+	v.edge = v.edgeAt(e.Position)
+	v.mouseMoved()
+}
+func (v *videoView) MouseOut() {}
 
 func (v *videoView) mouseMoved() {
 	if v.onMouseMove != nil {
