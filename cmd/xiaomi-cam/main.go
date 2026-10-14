@@ -54,13 +54,13 @@ type ui struct {
 	player player
 	status *widget.Label
 
-	camera     *widget.Select
-	quality    *widget.Select
-	connection *widget.Select
-	light      *widget.Check
-	brightness *widget.Slider
-	siren      *widget.Check
-	sound      *widget.Check
+	camera     *ptrSelect
+	quality    *ptrSelect
+	connection *ptrSelect
+	light      *ptrCheck
+	brightness *ptrSlider
+	siren      *ptrCheck
+	sound      *ptrCheck
 	bars       []fyne.CanvasObject
 	exitView   *fyne.Container // small "exit view-only mode" button over the video
 	viewOnly   bool
@@ -141,7 +141,7 @@ func (u *ui) build() {
 		})
 	}
 
-	u.camera = widget.NewSelect(cameraNames(), func(string) {
+	u.camera = newSelect(cameraNames(), func(string) {
 		if !u.syncing {
 			u.restart()
 			go u.loadCameraState()
@@ -154,12 +154,12 @@ func (u *ui) build() {
 	for _, c := range connections {
 		cNames = append(cNames, T(c.name))
 	}
-	u.quality = widget.NewSelect(qNames, func(string) {
+	u.quality = newSelect(qNames, func(string) {
 		if !u.syncing {
 			u.changeSource(map[string]string{"subtype": qualities[u.quality.SelectedIndex()].subtype})
 		}
 	})
-	u.connection = widget.NewSelect(cNames, func(string) {
+	u.connection = newSelect(cNames, func(string) {
 		if !u.syncing {
 			u.changeSource(map[string]string{"p2p": connections[u.connection.SelectedIndex()].p2p})
 		}
@@ -170,25 +170,25 @@ func (u *ui) build() {
 		widget.NewLabel(T("Jakość:")), u.quality,
 		widget.NewLabel(T("Połączenie:")), u.connection,
 		layout.NewSpacer(),
-		widget.NewButtonWithIcon("", theme.MediaPhotoIcon(), u.snapshot),
-		widget.NewButtonWithIcon(T("Tylko obraz"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
-		widget.NewButtonWithIcon("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
-		widget.NewButtonWithIcon(T("Dodaj"), theme.ContentAddIcon(), func() { showAddCamera(u.win, u.selectCamera) }),
-		widget.NewButtonWithIcon("", theme.DeleteIcon(), u.removeCamera),
+		newButton("", theme.MediaPhotoIcon(), u.snapshot),
+		newButton(T("Tylko obraz"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
+		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
+		newButton(T("Dodaj"), theme.ContentAddIcon(), func() { showAddCamera(u.win, u.selectCamera) }),
+		newButton("", theme.DeleteIcon(), u.removeCamera),
 		u.languageSelect(),
-		widget.NewButtonWithIcon("", theme.HelpIcon(), u.showShortcuts),
+		newButton("", theme.HelpIcon(), u.showShortcuts),
 	)
 
 	ptz := func(icon fyne.Resource, op int) *holdButton {
 		return newHoldButton(icon, func() { u.mover.press(op) }, u.mover.release)
 	}
-	u.light = widget.NewCheck(T("Reflektor"), func(on bool) {
+	u.light = newCheck(T("Reflektor"), func(on bool) {
 		u.win.Canvas().Unfocus()
 		if !u.syncing {
 			u.setProp(propLight, on)
 		}
 	})
-	u.brightness = widget.NewSlider(0, 100)
+	u.brightness = newSlider(0, 100)
 	u.brightness.Step = 10
 	u.brightness.OnChangeEnded = func(v float64) {
 		u.win.Canvas().Unfocus()
@@ -196,7 +196,7 @@ func (u *ui) build() {
 			u.setProp(propBrightness, int(v))
 		}
 	}
-	u.siren = widget.NewCheck(T("Syrena"), func(on bool) {
+	u.siren = newCheck(T("Syrena"), func(on bool) {
 		u.win.Canvas().Unfocus()
 		if u.syncing {
 			return
@@ -215,7 +215,7 @@ func (u *ui) build() {
 			}
 		}, u.win)
 	})
-	u.sound = widget.NewCheck(T("Dźwięk"), func(bool) {
+	u.sound = newCheck(T("Dźwięk"), func(bool) {
 		u.win.Canvas().Unfocus()
 		u.restart()
 	})
@@ -226,9 +226,9 @@ func (u *ui) build() {
 		ptz(theme.MoveDownIcon(), motorDown),
 		ptz(theme.NavigateNextIcon(), motorRight),
 		widget.NewSeparator(),
-		widget.NewButtonWithIcon("", theme.ZoomOutIcon(), func() { u.video.setZoom(u.video.zoom / 1.25) }),
-		widget.NewButtonWithIcon("", theme.ZoomInIcon(), func() { u.video.setZoom(u.video.zoom * 1.25) }),
-		widget.NewButtonWithIcon("", theme.ZoomFitIcon(), func() { u.video.setZoom(1) }),
+		newButton("", theme.ZoomOutIcon(), func() { u.video.setZoom(u.video.zoom / 1.25) }),
+		newButton("", theme.ZoomInIcon(), func() { u.video.setZoom(u.video.zoom * 1.25) }),
+		newButton("", theme.ZoomFitIcon(), func() { u.video.setZoom(1) }),
 		widget.NewSeparator(),
 		u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness),
 		u.siren, u.sound,
@@ -236,7 +236,7 @@ func (u *ui) build() {
 		u.status,
 	)
 	u.bars = []fyne.CanvasObject{top, bottom}
-	exitBtn := widget.NewButtonWithIcon(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
+	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
 	// button lies on the picture, on a translucent background
 	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}), exitBtn)
 	u.exitView = container.NewVBox(container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
@@ -546,12 +546,12 @@ func (u *ui) removeCamera() {
 	}, u.win)
 }
 
-func (u *ui) languageSelect() *widget.Select {
+func (u *ui) languageSelect() *ptrSelect {
 	var names []string
 	for _, l := range languages {
 		names = append(names, l.name)
 	}
-	sel := widget.NewSelect(names, nil)
+	sel := newSelect(names, nil)
 	for i, l := range languages {
 		if l.code == lang {
 			sel.SetSelectedIndex(i)

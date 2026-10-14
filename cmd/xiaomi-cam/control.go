@@ -79,6 +79,7 @@ func (b *holdButton) MouseDown(e *desktop.MouseEvent) {
 }
 
 func (b *holdButton) MouseUp(*desktop.MouseEvent) { b.onRelease() }
+func (*holdButton) Cursor() desktop.Cursor        { return desktop.PointerCursor }
 func (b *holdButton) MouseOut() {
 	b.Button.MouseOut()
 	b.onRelease()
@@ -102,4 +103,51 @@ func setDecorated(w fyne.Window, on bool) {
 		attr = glfw.True
 	}
 	win.SetAttrib(glfw.Decorated, attr)
+}
+
+// Clickable widgets with the pointer (hand) cursor on hover; Fyne uses the default arrow.
+
+type ptrButton struct{ widget.Button }
+
+func (*ptrButton) Cursor() desktop.Cursor { return desktop.PointerCursor }
+
+func newButton(label string, icon fyne.Resource, tapped func()) *ptrButton {
+	b := &ptrButton{}
+	b.Text, b.Icon, b.OnTapped = label, icon, tapped
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+type ptrSelect struct{ widget.Select }
+
+func (*ptrSelect) Cursor() desktop.Cursor { return desktop.PointerCursor }
+
+func newSelect(options []string, changed func(string)) *ptrSelect {
+	s := &ptrSelect{}
+	s.Options, s.OnChanged = options, changed
+	s.ExtendBaseWidget(s)
+	return s
+}
+
+type ptrCheck struct{ widget.Check }
+
+func (*ptrCheck) Cursor() desktop.Cursor { return desktop.PointerCursor }
+
+func newCheck(label string, changed func(bool)) *ptrCheck {
+	c := &ptrCheck{}
+	c.Text, c.OnChanged = label, changed
+	c.ExtendBaseWidget(c)
+	return c
+}
+
+type ptrSlider struct{ widget.Slider }
+
+func (*ptrSlider) Cursor() desktop.Cursor { return desktop.PointerCursor }
+
+func newSlider(min, max float64) *ptrSlider {
+	s := &ptrSlider{}
+	s.Min, s.Max, s.Step = min, max, 1
+	s.Orientation = widget.Horizontal
+	s.ExtendBaseWidget(s)
+	return s
 }

@@ -107,7 +107,7 @@ type source struct {
 }
 
 func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
-	account := widget.NewSelect(accounts, nil)
+	account := newSelect(accounts, nil)
 	if len(accounts) > 0 {
 		account.SetSelectedIndex(0)
 	}
@@ -115,7 +115,7 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 	for _, r := range regions {
 		regionNames = append(regionNames, T(r.name))
 	}
-	region := widget.NewSelect(regionNames, nil)
+	region := newSelect(regionNames, nil)
 	region.SetSelectedIndex(0)
 
 	var found []source
@@ -140,7 +140,7 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 			_ = json.Unmarshal(b, &res)
 			found = res.Sources
 			for _, s := range found {
-				c := widget.NewCheck(s.Name+"  ("+s.Info+")", nil)
+				c := newCheck(s.Name+"  ("+s.Info+")", nil)
 				c.SetChecked(true)
 				checks.Add(c)
 			}
@@ -164,7 +164,7 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 		}
 		var first string
 		for i, s := range found {
-			if !checks.Objects[i].(*widget.Check).Checked {
+			if !checks.Objects[i].(*ptrCheck).Checked {
 				continue
 			}
 			name := s.Name
