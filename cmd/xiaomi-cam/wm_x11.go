@@ -4,6 +4,7 @@ package main
 #cgo LDFLAGS: -lX11
 #include <X11/Xlib.h>
 #include <string.h>
+#include <X11/Xatom.h>
 
 // Ask the window manager to move/resize the window (_NET_WM_MOVERESIZE, as GTK does for
 // windows without frame). The WM follows the mouse itself, so it is smooth.
@@ -48,6 +49,29 @@ static void wm_moveresize(void *dpy, unsigned long win, int dir) {
 	XSendEvent(d, win, True, ButtonReleaseMask, &rel);
 	XFlush(d);
 }
+
+static long get_cardinal(Display *d, Window w, const char *name) {
+	Atom prop = XInternAtom(d, name, True), type;
+	int format;
+	unsigned long n, after;
+	unsigned char *data = NULL;
+	long v = -1;
+	if (prop == None) return -1;
+	if (XGetWindowProperty(d, w, prop, 0, 1, False, XA_CARDINAL, &type, &format, &n, &after, &data) == Success && data) {
+		if (n == 1 && format == 32) v = (long)(*(unsigned long *)data & 0xFFFFFFFF);
+		XFree(data);
+	}
+	return v;
+}
+
+// 1 - the window is on the current workspace (or on all of them, or unknown)
+static int wm_on_current_desktop(void *dpy, unsigned long win) {
+	Display *d = (Display *)dpy;
+	long wd = get_cardinal(d, win, "_NET_WM_DESKTOP");
+	long cd = get_cardinal(d, DefaultRootWindow(d), "_NET_CURRENT_DESKTOP");
+	if (wd < 0 || cd < 0 || wd == 0xFFFFFFFF) return 1;
+	return wd == cd;
+}
 */
 import "C"
 
@@ -91,4 +115,15 @@ func setAspectRatio(w fyne.Window, num, den int) {
 			win.SetAspectRatio(num, den)
 		}
 	}
+}
+
+// wmOnCurrentDesktop reports whether the window is on the visible workspace. When the user
+// switches workspaces, the WM marks windows of other workspaces hidden and GLFW reports it
+// as minimizing.
+func wmOnCurrentDesktop(w fyne.Window) bool {
+	win := glfwWindow(w)
+	if win == nil || glfw.GetPlatform() != glfw.PlatformX11 {
+		return true
+	}
+	return C.wm_on_current_desktop(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window())) != 0
 }

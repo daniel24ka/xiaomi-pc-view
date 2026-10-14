@@ -116,7 +116,8 @@ func setDecorated(w fyne.Window, on bool) {
 func onMinimize(w fyne.Window, f func()) {
 	if win := glfwWindow(w); win != nil {
 		win.SetIconifyCallback(func(_ *glfw.Window, iconified bool) {
-			if iconified {
+			// switching to another workspace also reports "iconified" - not a minimize
+			if iconified && wmOnCurrentDesktop(w) {
 				f()
 			}
 		})
