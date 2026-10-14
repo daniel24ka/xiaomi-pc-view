@@ -1,0 +1,180 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"strconv"
+	"syscall"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+// MCP server for AI assistants: `xiaomi-cam mcp` (stdio). It controls the camera through
+// the local HTTP API of the running app and starts the app hidden in the tray if needed.
+//
+// Claude Code:  claude mcp add xiaomi-cam -- ~/.local/bin/xiaomi-cam mcp
+
+func runMCP() error {
+	if err := ensureAppRunning(); err != nil {
+		return err
+	}
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "xiaomi-cam", Version: version}, &mcp.ServerOptions{
+		Instructions: "Controls Xiaomi Mi Home cameras (e.g. Outdoor Camera CW700S): live snapshots, " +
+			"pan/tilt, camera zoom, spotlight and siren. Use get_snapshot to see what the camera sees; " +
+			"after moving or zooming wait a moment (the camera needs ~1-2 s) and take a new snapshot.",
+	})
+
+	type cameraArg struct {
+		Camera string `json:"camera,omitempty" jsonschema:"camera name from list_cameras; default is the first camera"`
+	}
+
+	mcp.AddTool(server, &mcp.Tool{Name: "list_cameras", Description: "List cameras configured in Xiaomi Cam."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+			return apiText("GET", "cameras", nil)
+		})
+
+	type snapshotArgs struct {
+		cameraArg
+		Width int `json:"width,omitempty" jsonschema:"image width in pixels (keeps aspect ratio), default 1280, max 2560"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "get_snapshot", Description: "Take a live JPEG snapshot from the camera (full sensor is 2560x1440). The camera prints date and time in the top left corner."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in snapshotArgs) (*mcp.CallToolResult, any, error) {
+			w := in.Width
+			if w <= 0 {
+				w = 1280
+			}
+			b, err := camAPI("GET", "snapshot", url.Values{"camera": {in.Camera}, "width": {strconv.Itoa(min(w, 2560))}})
+			if err != nil {
+				return nil, nil, err
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.ImageContent{Data: b, MIMEType: "image/jpeg"}}}, nil, nil
+		})
+
+	mcp.AddTool(server, &mcp.Tool{Name: "get_camera_state", Description: "Get camera state: zoom, spotlight on/off and brightness, siren."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
+			return apiText("GET", "state", url.Values{"camera": {in.Camera}})
+		})
+
+	type moveArgs struct {
+		cameraArg
+		Direction string `json:"direction" jsonschema:"left, right, up or down"`
+		Steps     int    `json:"steps,omitempty" jsonschema:"number of motor steps, one step is about 1-2 degrees; default 10, max 100"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "move_camera", Description: "Pan/tilt the camera."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in moveArgs) (*mcp.CallToolResult, any, error) {
+			if in.Steps <= 0 {
+				in.Steps = 10
+			}
+			return apiText("POST", "move", url.Values{"camera": {in.Camera}, "direction": {in.Direction}, "steps": {strconv.Itoa(in.Steps)}})
+		})
+
+	type zoomArgs struct {
+		cameraArg
+		Zoom float64 `json:"zoom" jsonschema:"camera zoom from 1.0 (wide) to 9.0"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "set_zoom", Description: "Set the camera zoom (done by the camera, sharp details)."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in zoomArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "zoom", url.Values{"camera": {in.Camera}, "value": {strconv.FormatFloat(in.Zoom, 'f', 1, 64)}})
+		})
+
+	type spotlightArgs struct {
+		cameraArg
+		On         *bool `json:"on,omitempty" jsonschema:"turn the spotlight on or off"`
+		Brightness *int  `json:"brightness,omitempty" jsonschema:"spotlight brightness 0-100"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "set_spotlight", Description: "Turn the camera spotlight (white light) on/off and set its brightness."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in spotlightArgs) (*mcp.CallToolResult, any, error) {
+			q := url.Values{"camera": {in.Camera}}
+			if in.On != nil {
+				q.Set("on", strconv.FormatBool(*in.On))
+			}
+			if in.Brightness != nil {
+				q.Set("brightness", strconv.Itoa(*in.Brightness))
+			}
+			return apiText("POST", "spotlight", q)
+		})
+
+	type sirenArgs struct {
+		cameraArg
+		On bool `json:"on" jsonschema:"true - start the siren, false - stop it"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "set_siren", Description: "Start or stop the camera alarm siren. It is loud - use only when the user asks for it."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in sirenArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "siren", url.Values{"camera": {in.Camera}, "on": {strconv.FormatBool(in.On)}})
+		})
+
+	return server.Run(context.Background(), &mcp.StdioTransport{})
+}
+
+func camAPI(method, path string, q url.Values) ([]byte, error) {
+	if q != nil && q.Get("camera") == "" {
+		q.Del("camera")
+	}
+	u := "http://" + apiAddr + "/api/xiaomi-cam/" + path
+	if len(q) > 0 {
+		u += "?" + q.Encode()
+	}
+	req, err := http.NewRequest(method, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := http.Client{Timeout: 90 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s", b)
+	}
+	return b, nil
+}
+
+func apiText(method, path string, q url.Values) (*mcp.CallToolResult, any, error) {
+	b, err := camAPI(method, path, q)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil, nil
+}
+
+// ensureAppRunning starts Xiaomi Cam hidden in the tray if it isn't running.
+func ensureAppRunning() error {
+	ping := func() bool {
+		b, err := camAPI("GET", "cameras", nil)
+		return err == nil && json.Valid(b)
+	}
+	if ping() {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, "--tray")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // keep running after the MCP client exits
+	if err = cmd.Start(); err != nil {
+		return err
+	}
+	_ = cmd.Process.Release()
+	for i := 0; i < 40; i++ {
+		time.Sleep(500 * time.Millisecond)
+		if ping() {
+			return nil
+		}
+	}
+	return errors.New("xiaomi-cam app didn't start")
+}

@@ -84,6 +84,19 @@ type ui struct {
 }
 
 func main() {
+	startHidden := false
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "mcp": // MCP server for AI assistants (stdio)
+			if err := runMCP(); err != nil {
+				fmt.Fprintln(os.Stderr, "xiaomi-cam mcp:", err)
+				os.Exit(1)
+			}
+			return
+		case "--tray": // start hidden in the tray (used by the MCP server)
+			startHidden = true
+		}
+	}
 	if showRunningInstance() {
 		return
 	}
@@ -114,8 +127,18 @@ func main() {
 
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
-	u.show()
-	if len(cameraNames()) == 0 {
+	initHTTPAPI(func(name string, z float64) {
+		fyne.Do(func() {
+			if name == u.camera.Selected {
+				u.camZoom = z
+				u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+			}
+		})
+	})
+	if !startHidden {
+		u.show()
+	}
+	if len(cameraNames()) == 0 && !startHidden {
 		showAddCamera(u.win, u.selectCamera)
 	}
 	if devHook != nil {
@@ -682,6 +705,7 @@ func (u *ui) zoomBy(delta float64) {
 		u.zoomTimer.Stop()
 	}
 	name, zoom := u.camera.Selected, u.camZoom
+	setZoomState(name, zoom)
 	u.zoomTimer = time.AfterFunc(300*time.Millisecond, func() {
 		if err := cameraZoom(name, zoom); err != nil {
 			fyne.Do(func() { u.status.SetText("Zoom: " + err.Error()) })

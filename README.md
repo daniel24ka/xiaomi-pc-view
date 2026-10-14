@@ -68,6 +68,44 @@ make install        # buduje i instaluje do ~/.local
 | `F`, `F11`, podwójne kliknięcie | pełny ekran |
 | `S` | zdjęcie |
 
+## Sterowanie przez AI (MCP) i API
+
+**MCP** – serwer dla asystentów AI (Claude Code, Claude Desktop i inne). Uruchamia się jako
+`xiaomi-cam mcp` (stdio); jeśli aplikacja nie działa, sam ją włącza schowaną w zasobniku.
+
+```sh
+claude mcp add --scope user xiaomi-cam -- ~/.local/bin/xiaomi-cam mcp
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+```json
+{"mcpServers": {"xiaomi-cam": {"command": "/home/USER/.local/bin/xiaomi-cam", "args": ["mcp"]}}}
+```
+
+Narzędzia: `list_cameras`, `get_snapshot` (zdjęcie JPEG wraca do modelu jako obraz),
+`get_camera_state`, `move_camera`, `set_zoom`, `set_spotlight`, `set_siren`.
+
+**HTTP API** – działająca aplikacja nasłuchuje tylko na `127.0.0.1:11984` (bez autoryzacji,
+dostępne wyłącznie z tego komputera). Parametr `camera=` jest opcjonalny (domyślnie pierwsza kamera).
+
+| Metoda | Ścieżka | Opis |
+|---|---|---|
+| GET | `/api/xiaomi-cam/cameras` | lista kamer |
+| GET | `/api/xiaomi-cam/snapshot?width=1280` | zdjęcie JPEG z podglądu na żywo |
+| GET | `/api/xiaomi-cam/state` | zoom, reflektor, jasność, syrena |
+| POST | `/api/xiaomi-cam/move?direction=left&steps=10` | obrót: `left`/`right`/`up`/`down`, krok ≈ 1–2° |
+| POST | `/api/xiaomi-cam/zoom?value=2.5` | zoom kamery 1.0–9.0 |
+| POST | `/api/xiaomi-cam/spotlight?on=true&brightness=80` | reflektor |
+| POST | `/api/xiaomi-cam/siren?on=true` | syrena |
+
+```sh
+curl -o kamera.jpg "http://127.0.0.1:11984/api/xiaomi-cam/snapshot"
+curl -X POST "http://127.0.0.1:11984/api/xiaomi-cam/move?direction=left&steps=20"
+```
+
+Obrót i zoom wymagają sesji z kamerą – gdy okno jest schowane, API samo ją otwiera i zamyka
+minutę po ostatniej komendzie.
+
 ## Jak to działa
 
 Kamery Xiaomi nie udostępniają RTSP. Obraz jest pobierany protokołem Xiaomi **MISS**
@@ -131,6 +169,12 @@ and copy `xiaomi-cam` to `~/.local/bin` and `xiaomi-cam.desktop` to
 **Shortcuts:** arrows – pan/tilt; drag – pan/tilt;
 `+`/`−`/wheel – camera zoom; `0` – zoom 1×; `H` – video only (`Esc` or right click to go back);
 `F`/`F11`/double click – full screen; `S` – snapshot.
+
+**AI (MCP) and API:** `xiaomi-cam mcp` is an MCP server (stdio) for AI assistants
+(`claude mcp add --scope user xiaomi-cam -- ~/.local/bin/xiaomi-cam mcp`); it starts the app
+hidden in the tray if needed. Tools: `list_cameras`, `get_snapshot` (JPEG image to the model),
+`get_camera_state`, `move_camera`, `set_zoom`, `set_spotlight`, `set_siren`. The running app
+also serves a local HTTP API on `127.0.0.1:11984` – see the table above (`/api/xiaomi-cam/...`).
 
 **How it works:** the app uses the Xiaomi MISS protocol over CS2 P2P like Mi Home.
 It asks the Xiaomi CS2 servers to introduce the camera, then uses UDP hole punching
