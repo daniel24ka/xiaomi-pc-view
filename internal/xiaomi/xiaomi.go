@@ -371,6 +371,26 @@ func Motor(name string, operation int) error {
 	return errors.New("xiaomi: motor: camera is not connected")
 }
 
+// Commander is a source that can send MISS commands.
+type Commander interface {
+	Command(cmd uint32, params string) error
+}
+
+// Command sends a MISS command with JSON params to the camera behind stream `name`,
+// over the session the stream already holds.
+func Command(name string, cmd uint32, params string) error {
+	stream := streams.Get(name)
+	if stream == nil {
+		return fmt.Errorf("xiaomi: command: no stream %q", name)
+	}
+	for _, conn := range stream.Conns() {
+		if c, ok := conn.(Commander); ok {
+			return c.Command(cmd, params)
+		}
+	}
+	return errors.New("xiaomi: command: camera is not connected")
+}
+
 // CloudRequest calls Mi Home cloud API with the account from xiaomi:// source URL.
 func CloudRequest(rawURL, apiURL, params string) ([]byte, error) {
 	u, err := url.Parse(rawURL)

@@ -190,6 +190,18 @@ func motor(name string, op int) error {
 	return xiaomi.Motor(name, op)
 }
 
+// cameraZoom sets the optical/sensor zoom of the camera (1.0-9.0), like the Mi Home plugin:
+// MISS command 530 {"value": zoom*10}; older firmware uses MIoT property 6.23 instead.
+func cameraZoom(name string, zoom float64) error {
+	value := int(zoom*10 + 0.5)
+	if err := xiaomi.Command(name, cmdZoomSet, fmt.Sprintf(`{"value":%d}`, value)); err != nil {
+		return setProp(name, propZoom, value)
+	}
+	return nil
+}
+
+const cmdZoomSet = 530
+
 type miotProp struct {
 	Siid  int `json:"siid"`
 	Piid  int `json:"piid"`
@@ -202,6 +214,7 @@ var (
 	propLight      = miotProp{Siid: 6, Piid: 16} // hl-filllight-switch
 	propBrightness = miotProp{Siid: 6, Piid: 11} // hl-filllight-lum 0-100
 	propSiren      = miotProp{Siid: 6, Piid: 10} // hl-audible-alarm
+	propZoom       = miotProp{Siid: 6, Piid: 23} // zoom ratio *10 (not in public spec, from Mi Home plugin)
 )
 
 func cameraDid(src string) string {

@@ -111,7 +111,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool) erro
 	return err
 }
 
-// --- video view widget with digital zoom (mouse wheel) and pan (drag)
+// --- video view widget: mouse wheel - camera zoom, drag - pan/tilt, edges - window resize
 
 type videoView struct {
 	widget.BaseWidget
@@ -121,14 +121,12 @@ type videoView struct {
 	status *canvas.Text
 
 	frame *image.RGBA
-	zoom  float64 // 1 = whole frame
-	cx    float64 // center of visible area, 0..1
-	cy    float64
 
 	onDoubleTap  func()
 	onSecondary  func()
 	onMouseMove  func()
-	onCameraDrag func(dx, dy float32) // drag beyond digital zoom area moves the camera
+	onCameraDrag func(dx, dy float32) // dragging the picture moves the camera
+	onScroll     func(up bool)        // mouse wheel - camera zoom
 
 	// window resize by edges (window without frame)
 	canResize   func() bool
@@ -199,7 +197,7 @@ func (v *videoView) MouseDown(e *desktop.MouseEvent) {
 func (v *videoView) MouseUp(*desktop.MouseEvent) {}
 
 func newVideoView() *videoView {
-	v := &videoView{zoom: 1, cx: 0.5, cy: 0.5, edge: -1}
+	v := &videoView{edge: -1}
 	v.img = canvas.NewImageFromImage(nil)
 	v.img.FillMode = canvas.ImageFillContain
 	v.img.ScaleMode = canvas.ImageScaleSmooth
@@ -242,40 +240,17 @@ func (v *videoView) updateImage() {
 	if v.frame == nil {
 		return
 	}
-	b := v.frame.Bounds()
-	if v.zoom <= 1 {
-		v.img.Image = v.frame
-	} else {
-		w := int(float64(b.Dx()) / v.zoom)
-		h := int(float64(b.Dy()) / v.zoom)
-		x := int(v.cx*float64(b.Dx())) - w/2
-		y := int(v.cy*float64(b.Dy())) - h/2
-		v.img.Image = v.frame.SubImage(image.Rect(x, y, x+w, y+h))
-	}
+	v.img.Image = v.frame
 	v.img.Refresh()
 }
 
-func (v *videoView) clampCenter() {
-	half := 0.5 / v.zoom
-	v.cx = min(max(v.cx, half), 1-half)
-	v.cy = min(max(v.cy, half), 1-half)
-}
-
-func (v *videoView) setZoom(z float64) {
-	v.zoom = min(max(z, 1), 8)
-	v.clampCenter()
-	v.updateImage()
-}
-
 func (v *videoView) Scrolled(e *fyne.ScrollEvent) {
-	if e.Scrolled.DY > 0 {
-		v.setZoom(v.zoom * 1.25)
-	} else if e.Scrolled.DY < 0 {
-		v.setZoom(v.zoom / 1.25)
+	if v.onScroll != nil && e.Scrolled.DY != 0 {
+		v.onScroll(e.Scrolled.DY > 0)
 	}
 }
 
-// Dragged pans the zoomed image ("grab the picture"); what can't be panned moves the camera.
+// Dragged moves the camera ("grab the picture") or resizes the window by its edge.
 func (v *videoView) Dragged(e *fyne.DragEvent) {
 	dx, dy := e.Dragged.DX, e.Dragged.DY
 	if v.wmGrab {
@@ -295,18 +270,6 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 	case wmBottomRight:
 		v.onResize(dx, dy)
 		return
-	}
-	if v.zoom > 1 {
-		size := v.Size()
-		cx := v.cx - float64(dx)/float64(size.Width)/v.zoom
-		cy := v.cy - float64(dy)/float64(size.Height)/v.zoom
-		v.cx, v.cy = cx, cy
-		v.clampCenter()
-		// leftover in screen pixels after hitting the edge of the frame
-		dx = float32((v.cx - cx) * float64(size.Width) * v.zoom)
-		dy = float32((v.cy - cy) * float64(size.Height) * v.zoom)
-		dx, dy = -dx, -dy
-		v.updateImage()
 	}
 	if v.onCameraDrag != nil && (dx != 0 || dy != 0) {
 		v.onCameraDrag(dx, dy)

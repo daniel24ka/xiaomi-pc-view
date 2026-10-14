@@ -204,6 +204,11 @@ func (p *Producer) Motor(operation int) error {
 	return p.client.Motor(operation)
 }
 
+// Command sends a MISS command over this producer's session.
+func (p *Producer) Command(cmd uint32, params string) error {
+	return p.client.Command(cmd, params)
+}
+
 // TimeToRTP convert time in milliseconds to RTP time
 func TimeToRTP(timeMS, clockRate uint64) uint32 {
 	return uint32(timeMS * clockRate / 1000)

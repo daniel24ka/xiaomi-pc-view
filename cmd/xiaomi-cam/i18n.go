@@ -73,16 +73,16 @@ var english = map[string]string{
 	"Zaloguj inne konto":  "Log in another account",
 	"Skróty klawiaturowe": "Keyboard shortcuts",
 	`Strzałki – obrót kamery
-Przeciąganie obrazu myszą – obrót kamery (przy zoomie: przesuwanie powiększenia)
-+ / − (także na klawiaturze numerycznej), kółko myszy – zoom
-0 – zoom 1:1
+Przeciąganie obrazu myszą – obrót kamery
++ / − (także na klawiaturze numerycznej), kółko myszy – zoom kamery (do 9×)
+0 – zoom 1×
 H – tylko obraz (ukrywa panele), prawy przycisk myszy lub Esc – powrót
 F, F11, podwójne kliknięcie – pełny ekran
 S – zdjęcie do ~/Obrazy
 Zamknięcie okna chowa aplikację do zasobnika`: `Arrows – pan/tilt the camera
-Drag the picture with the mouse – pan/tilt (when zoomed: move the zoomed area)
-+ / − (also on the numeric keypad), mouse wheel – zoom
-0 – zoom 1:1
+Drag the picture with the mouse – pan/tilt
++ / − (also on the numeric keypad), mouse wheel – camera zoom (up to 9×)
+0 – zoom 1×
 H – video only (hides panels), right click or Esc – back
 F, F11, double click – full screen
 S – snapshot to ~/Pictures

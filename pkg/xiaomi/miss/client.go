@@ -212,6 +212,14 @@ func (c *Client) StartMedia(channel, quality, audio string) error {
 	return c.WriteCommand(data)
 }
 
+// Command sends a MISS command with JSON params, like sendP2PCommandToDevice in Mi Home
+// plugins (e.g. 530 - zoom {"value": zoom*10} on isa.camera.700sa).
+func (c *Client) Command(cmd uint32, params string) error {
+	data := binary.BigEndian.AppendUint32(nil, cmd)
+	data = append(data, params...)
+	return c.WriteCommand(data)
+}
+
 // Motor moves a pan/tilt camera one step, the same way the Mi Home app does:
 // operation 1 - left, 2 - right, 3 - up, 4 - down.
 func (c *Client) Motor(operation int) error {

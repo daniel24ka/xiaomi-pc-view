@@ -37,7 +37,7 @@ var qualities = []struct {
 	name, subtype string
 	w, h          int
 }{
-	{"2.5K", "3", 2560, 1440}, // full sensor resolution, so digital zoom shows all details
+	{"2.5K", "3", 2560, 1440},
 	{"720p", "", 1280, 720},
 	{"SD", "sd", 1280, 720},
 }
@@ -68,6 +68,10 @@ type ui struct {
 	hideTimer  *time.Timer
 	normalSize fyne.Size // window size before video-only mode
 
+	camZoom   float64 // camera zoom 1.0-9.0
+	zoomTimer *time.Timer
+	zoomLabel *widget.Label
+
 	dragX, dragY float32      // accumulated mouse drag for camera moves
 	mover        *mover       // pan/tilt steps
 	current      atomic.Value // name of the selected camera (string), for background goroutines
@@ -90,6 +94,7 @@ func main() {
 	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
+	u.camZoom = 1
 	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
 		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
 	})
@@ -125,6 +130,14 @@ func (u *ui) build() {
 	}
 	u.video.onMouseMove = u.showExitButton
 	u.video.onCameraDrag = u.cameraDrag
+	u.video.onScroll = func(up bool) {
+		if up {
+			u.zoomBy(zoomStep)
+		} else {
+			u.zoomBy(-zoomStep)
+		}
+	}
+	u.zoomLabel = widget.NewLabel(fmt.Sprintf("%.1f×", u.camZoom))
 	u.video.canResize = func() bool { return u.viewOnly && !u.win.FullScreen() }
 	u.video.onResize = u.resizeKeepAspect
 	u.video.onEdgePress = func(dir int) bool { return wmMoveResize(u.win, dir) }
@@ -229,9 +242,10 @@ func (u *ui) build() {
 		ptz(theme.MoveDownIcon(), motorDown),
 		ptz(theme.NavigateNextIcon(), motorRight),
 		widget.NewSeparator(),
-		newButton("", theme.ZoomOutIcon(), func() { u.video.setZoom(u.video.zoom / 1.25) }),
-		newButton("", theme.ZoomInIcon(), func() { u.video.setZoom(u.video.zoom * 1.25) }),
-		newButton("", theme.ZoomFitIcon(), func() { u.video.setZoom(1) }),
+		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }),
+		u.zoomLabel,
+		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }),
+		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }),
 		widget.NewSeparator(),
 		u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness),
 		u.siren, u.sound,
@@ -271,11 +285,11 @@ func (u *ui) build() {
 	u.win.Canvas().SetOnTypedRune(func(r rune) {
 		switch r {
 		case '+', '=':
-			u.video.setZoom(u.video.zoom * 1.25)
+			u.zoomBy(zoomStep)
 		case '-':
-			u.video.setZoom(u.video.zoom / 1.25)
+			u.zoomBy(-zoomStep)
 		case '0':
-			u.video.setZoom(1)
+			u.zoomBy(-maxZoom)
 		case 'h', 'H':
 			u.setViewOnly(!u.viewOnly)
 		case 'f', 'F':
@@ -591,9 +605,9 @@ func (u *ui) languageSelect() *ptrSelect {
 
 func (u *ui) showShortcuts() {
 	text := T(`Strzałki – obrót kamery
-Przeciąganie obrazu myszą – obrót kamery (przy zoomie: przesuwanie powiększenia)
-+ / − (także na klawiaturze numerycznej), kółko myszy – zoom
-0 – zoom 1:1
+Przeciąganie obrazu myszą – obrót kamery
++ / − (także na klawiaturze numerycznej), kółko myszy – zoom kamery (do 9×)
+0 – zoom 1×
 H – tylko obraz (ukrywa panele), prawy przycisk myszy lub Esc – powrót
 F, F11, podwójne kliknięcie – pełny ekran
 S – zdjęcie do ~/Obrazy
@@ -626,4 +640,25 @@ func (u *ui) resizeKeepAspect(dx, dy float32) {
 	}
 	w = max(w, 320)
 	u.win.Resize(fyne.NewSize(w, w*aspect))
+}
+
+const (
+	zoomStep = 0.5
+	maxZoom  = 9.0 // hlCameraVideoMaxZoomScale in the Mi Home plugin
+)
+
+// zoomBy changes the camera zoom. Only the last value is sent after a short pause,
+// so scrolling the wheel doesn't flood the camera with commands.
+func (u *ui) zoomBy(delta float64) {
+	u.camZoom = min(max(u.camZoom+delta, 1), maxZoom)
+	u.zoomLabel.SetText(fmt.Sprintf("%.1f×", u.camZoom))
+	if u.zoomTimer != nil {
+		u.zoomTimer.Stop()
+	}
+	name, zoom := u.camera.Selected, u.camZoom
+	u.zoomTimer = time.AfterFunc(300*time.Millisecond, func() {
+		if err := cameraZoom(name, zoom); err != nil {
+			fyne.Do(func() { u.status.SetText("Zoom: " + err.Error()) })
+		}
+	})
 }
