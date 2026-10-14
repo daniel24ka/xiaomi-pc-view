@@ -127,6 +127,7 @@ func onMinimize(w fyne.Window, f func()) {
 type moveHandle struct {
 	widget.Button
 	win fyne.Window
+	wm  bool // moved by the window manager
 }
 
 func newMoveHandle(win fyne.Window) *moveHandle {
@@ -138,7 +139,18 @@ func newMoveHandle(win fyne.Window) *moveHandle {
 
 func (*moveHandle) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
+// MouseDown hands moving over to the window manager (smooth, follows the mouse itself).
+func (h *moveHandle) MouseDown(e *desktop.MouseEvent) {
+	h.wm = e.Button == desktop.MouseButtonPrimary && wmMoveResize(h.win, wmMove)
+}
+
+func (*moveHandle) MouseUp(*desktop.MouseEvent) {}
+
+// Dragged - fallback when the window manager can't move the window (not X11).
 func (h *moveHandle) Dragged(e *fyne.DragEvent) {
+	if h.wm {
+		return
+	}
 	if win := glfwWindow(h.win); win != nil {
 		scale := h.win.Canvas().Scale()
 		x, y := win.GetPos()

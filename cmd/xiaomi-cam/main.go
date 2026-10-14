@@ -127,6 +127,7 @@ func (u *ui) build() {
 	u.video.onCameraDrag = u.cameraDrag
 	u.video.canResize = func() bool { return u.viewOnly && !u.win.FullScreen() }
 	u.video.onResize = u.resizeKeepAspect
+	u.video.onEdgePress = func(dir int) bool { return wmMoveResize(u.win, dir) }
 	u.status = widget.NewLabel("")
 	u.player.onFrame = func(img *image.RGBA) {
 		fyne.Do(func() {
@@ -468,6 +469,11 @@ func (u *ui) setViewOnly(on bool) {
 		}
 		w := u.normalSize.Width
 		u.win.Resize(fyne.NewSize(w, w*aspect))
+		if f := u.video.frame; f != nil {
+			setAspectRatio(u.win, f.Bounds().Dx(), f.Bounds().Dy())
+		} else {
+			setAspectRatio(u.win, 16, 9)
+		}
 		u.showExitButton()
 		return
 	}
@@ -476,6 +482,7 @@ func (u *ui) setViewOnly(on bool) {
 		u.win.SetFullScreen(false)
 	}
 	setDecorated(u.win, true)
+	setAspectRatio(u.win, 0, 0)
 	if !u.normalSize.IsZero() {
 		u.win.Resize(u.normalSize)
 		u.normalSize = fyne.Size{}

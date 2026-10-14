@@ -36,7 +36,10 @@ func init() {
 			}
 		}
 
-		step(15*time.Second, func() { fmt.Println("frame:", u.video.frame != nil, u.status.Text) })
+		step(15*time.Second, func() {
+			fmt.Println("frame:", u.video.frame != nil, u.status.Text)
+			fmt.Println("glfw platform X11:", glfw.GetPlatform() == glfw.PlatformX11, "x11 window:", glfwWindow(u.win).GetX11Window() != 0)
+		})
 
 		if os.Getenv("XC_TEST_PTZ") != "" {
 			u.mover.press(motorLeft)

@@ -131,54 +131,75 @@ type videoView struct {
 	onCameraDrag func(dx, dy float32) // drag beyond digital zoom area moves the camera
 
 	// window resize by edges (window without frame)
-	canResize func() bool
-	onResize  func(dx, dy float32)
-	edge      int  // edge under the mouse: edgeNone, edgeRight, edgeBottom, edgeCorner
-	dragging  bool // drag in progress
-	dragEdge  int  // edge grabbed when the drag started
+	canResize   func() bool
+	onEdgePress func(dir int) bool   // window manager resize, wm* direction; false - not available
+	onResize    func(dx, dy float32) // fallback: resize by our own drag (right/bottom edges)
+	edge        int                  // wm* direction under the mouse, -1 - none
+	dragging    bool                 // drag in progress
+	dragEdge    int                  // edge grabbed when the drag started
+	wmGrab      bool                 // the window manager is resizing, ignore drags
 }
 
-const (
-	edgeNone = iota
-	edgeRight
-	edgeBottom
-	edgeCorner
-	edgeSize = 12 // px from the edge that grab the window border
-)
+const edgeSize = 12 // px from the window edge that grab the border
 
+// edgeAt returns the wm* resize direction for a position, or -1.
 func (v *videoView) edgeAt(pos fyne.Position) int {
 	if v.canResize == nil || !v.canResize() {
-		return edgeNone
+		return -1
 	}
 	size := v.Size()
-	right := pos.X >= size.Width-edgeSize
-	bottom := pos.Y >= size.Height-edgeSize
+	left, right := pos.X < edgeSize, pos.X >= size.Width-edgeSize
+	top, bottom := pos.Y < edgeSize, pos.Y >= size.Height-edgeSize
 	switch {
-	case right && bottom:
-		return edgeCorner
-	case right:
-		return edgeRight
+	case top && left:
+		return wmTopLeft
+	case top && right:
+		return wmTopRight
+	case bottom && left:
+		return wmBottomLeft
+	case bottom && right:
+		return wmBottomRight
+	case top:
+		return wmTop
 	case bottom:
-		return edgeBottom
+		return wmBottom
+	case left:
+		return wmLeft
+	case right:
+		return wmRight
 	}
-	return edgeNone
+	return -1
 }
 
 // Cursor shows resize arrows over the edges of a window without frame.
 func (v *videoView) Cursor() desktop.Cursor {
 	switch v.edge {
-	case edgeRight:
+	case wmLeft, wmRight:
 		return desktop.HResizeCursor
-	case edgeBottom:
+	case wmTop, wmBottom:
 		return desktop.VResizeCursor
-	case edgeCorner:
+	case wmTopLeft, wmBottomRight:
 		return desktop.NWSEResizeCursor
+	case wmTopRight, wmBottomLeft:
+		return desktop.NESWResizeCursor
 	}
 	return desktop.DefaultCursor
 }
 
+func (v *videoView) MouseDown(e *desktop.MouseEvent) {
+	v.wmGrab = false
+	if e.Button != desktop.MouseButtonPrimary {
+		return
+	}
+	if dir := v.edgeAt(e.Position); dir >= 0 && v.onEdgePress != nil && v.onEdgePress(dir) {
+		v.wmGrab = true
+	}
+}
+
+func (v *videoView) MouseUp(*desktop.MouseEvent) {}
+
 func newVideoView() *videoView {
-	v := &videoView{zoom: 1, cx: 0.5, cy: 0.5}
+	v := &videoView{zoom: 1, cx: 0.5, cy: 0.5, edge: -1}
 	v.img = canvas.NewImageFromImage(nil)
 	v.img.FillMode = canvas.ImageFillContain
 	v.img.ScaleMode = canvas.ImageScaleSmooth
@@ -257,17 +278,21 @@ func (v *videoView) Scrolled(e *fyne.ScrollEvent) {
 // Dragged pans the zoomed image ("grab the picture"); what can't be panned moves the camera.
 func (v *videoView) Dragged(e *fyne.DragEvent) {
 	dx, dy := e.Dragged.DX, e.Dragged.DY
+	if v.wmGrab {
+		return
+	}
 	if !v.dragging {
 		v.dragging = true
 		v.dragEdge = v.edgeAt(e.Position.Subtract(fyne.NewPos(dx, dy)))
 	}
-	if v.dragEdge != edgeNone {
-		switch v.dragEdge {
-		case edgeRight:
-			dy = 0
-		case edgeBottom:
-			dx = 0
-		}
+	switch v.dragEdge { // fallback when the window manager can't resize
+	case wmRight:
+		v.onResize(dx, 0)
+		return
+	case wmBottom:
+		v.onResize(0, dy)
+		return
+	case wmBottomRight:
 		v.onResize(dx, dy)
 		return
 	}
@@ -290,6 +315,7 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 
 func (v *videoView) DragEnd() {
 	v.dragging = false
+	v.wmGrab = false
 }
 
 func (v *videoView) TappedSecondary(*fyne.PointEvent) {
