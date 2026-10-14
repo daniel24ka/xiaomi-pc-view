@@ -191,6 +191,7 @@ type videoView struct {
 	frame *image.RGBA
 
 	onDoubleTap     func()
+	onTap           func() // click: select the tile in the grid
 	onSecondary     func()
 	onMouseMove     func()
 	onCameraDrag    func(dx, dy float32) // dragging the picture moves the camera
@@ -350,6 +351,12 @@ func (v *videoView) DragEnd() {
 	v.wmGrab = false
 	if v.onCameraDragEnd != nil {
 		v.onCameraDragEnd()
+	}
+}
+
+func (v *videoView) Tapped(*fyne.PointEvent) {
+	if v.onTap != nil {
+		v.onTap()
 	}
 }
 

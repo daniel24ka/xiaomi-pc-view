@@ -35,10 +35,11 @@ func (u *ui) loadPoints() {
 	go func() {
 		list, err := getPresets(name)
 		fyne.Do(func() {
-			if err != nil {
-				return
+			if name != u.camera.Selected {
+				return // another camera was selected meanwhile
 			}
-			u.points = presetSlotsOf(list)
+			u.points = presetSlotsOf(list) // empty on error (e.g. a camera without points)
+			_ = err
 			for i, b := range u.pointButtons {
 				if b == nil {
 					continue

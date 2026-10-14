@@ -31,6 +31,10 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - **Video-only mode**: no panels and no window frame. The window keeps the picture's aspect
   ratio and can be resized by any edge or moved with the ✥ button. Pan/tilt buttons and a
   zoom slider with a scale appear when you move the mouse.
+- **Several cameras**: switch between one camera and a **grid** of all cameras (button in the
+  top bar, shown with 2+ cameras). In the grid click a camera to select it – all controls
+  (pan/tilt, zoom, points, spotlight, quality, snapshot, recording, sound) work on the
+  selected one; double click opens it alone.
 - Full screen mode.
 - **System tray**: closing or minimizing the window hides the app and stops streaming.
 - Window size and position are remembered, separately with and without the frame.

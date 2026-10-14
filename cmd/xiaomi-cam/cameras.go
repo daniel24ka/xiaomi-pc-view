@@ -81,11 +81,9 @@ func (u *ui) renameCamera(name string, done func()) {
 			if err := removeCamera(name); err != nil {
 				dialog.ShowError(err, u.win)
 			}
-			u.camera.Options = cameraNames()
+			u.camerasChanged()
 			if selected {
 				u.camera.SetSelected(newName) // restarts video
-			} else {
-				u.camera.Refresh()
 			}
 			done()
 		}, u.win)
@@ -103,7 +101,7 @@ func (u *ui) deleteCamera(name string, done func()) {
 		if err := removeCamera(name); err != nil {
 			dialog.ShowError(err, u.win)
 		}
-		u.camera.Options = cameraNames()
+		u.camerasChanged()
 		if selected {
 			u.camera.ClearSelected()
 			if len(u.camera.Options) > 0 {
@@ -111,8 +109,6 @@ func (u *ui) deleteCamera(name string, done func()) {
 			} else {
 				u.restart()
 			}
-		} else {
-			u.camera.Refresh()
 		}
 		done()
 	}, u.win)

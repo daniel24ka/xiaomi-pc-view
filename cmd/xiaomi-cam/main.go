@@ -72,6 +72,10 @@ type ui struct {
 	recButton    *ptrButton
 	ai           *aiEngine            // AI tasks (Settings → AI)
 	points       [presetSlots]*preset // camera points 1-3
+	grid         bool                 // grid of all cameras
+	tiles        []*tile
+	videoArea    *fyne.Container
+	gridButton   *ptrButton
 	pointButtons [presetSlots]*ptrButton
 	gotFrame     bool // first frame of the current playback arrived
 	decodeW      int  // width the video is decoded to (tier, see decodeSize)
@@ -169,6 +173,9 @@ func main() {
 	if !startHidden {
 		u.show()
 	}
+	if a.Preferences().String(prefLayout) == "grid" {
+		u.setGrid(true)
+	}
 	if len(cameraNames()) == 0 && !startHidden {
 		showAddCamera(u.win, u.selectCamera)
 	}
@@ -227,7 +234,11 @@ func (u *ui) build() {
 		})
 	}
 
-	u.camera = newSelect(cameraNames(), func(string) {
+	u.camera = newSelect(cameraNames(), func(name string) {
+		if !u.syncing && u.grid {
+			u.selectTile(name)
+			return
+		}
 		if !u.syncing {
 			if u.hist.on {
 				u.goLive() // history is per camera
@@ -256,13 +267,15 @@ func (u *ui) build() {
 	})
 
 	u.buildHistory()
+	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
 	u.recButton = newButton("", recordIcon, u.toggleRecording)
 	top := container.NewHBox(
 		widget.NewLabel(T("Kamera:")), u.camera,
 		widget.NewLabel(T("Jakość:")), u.quality,
 		widget.NewLabel(T("Połączenie:")), u.connection,
 		layout.NewSpacer(),
-		// view: history, snapshot, video only, full screen
+		// view: grid, history, snapshot, video only, full screen
+		u.gridButton,
 		u.hist.button,
 		u.recButton,
 		newButton("", theme.MediaPhotoIcon(), u.snapshot),
@@ -380,7 +393,8 @@ func (u *ui) build() {
 		container.New(layout.NewCustomPaddedLayout(0, 0, 0, 10), // 10 px from right edge, centered
 			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
-	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, container.NewStack(u.video, u.exitView)))
+	u.videoArea = container.NewStack(u.video, u.exitView)
+	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, u.videoArea))
 
 	u.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		switch e.Name {
@@ -455,6 +469,7 @@ func (u *ui) hide() {
 	u.visible = false
 	u.win.Hide()
 	u.player.stop()
+	u.stopTiles()
 }
 
 func (u *ui) show() {
@@ -465,11 +480,17 @@ func (u *ui) show() {
 		win.Restore() // it was minimized to tray
 	}
 	u.win.RequestFocus()
+	if u.grid {
+		for _, t := range u.tiles {
+			u.startTile(t, false)
+		}
+		return
+	}
 	u.restart()
 }
 
 func (u *ui) selectCamera(name string) {
-	u.camera.Options = cameraNames()
+	u.camerasChanged()
 	u.camera.SetSelected(name) // triggers restart
 }
 
@@ -477,6 +498,13 @@ func (u *ui) selectCamera(name string) {
 func (u *ui) restart() {
 	name := u.camera.Selected
 	if !u.visible {
+		return
+	}
+	if u.grid {
+		if t := u.tileOf(name); t != nil {
+			u.cameraSelected(name)
+			u.startTile(t, false)
+		}
 		return
 	}
 	if name == "" {
@@ -522,6 +550,12 @@ func (u *ui) syncControls(name string) int {
 // one when it has a picture.
 func (u *ui) refresh() {
 	name := u.camera.Selected
+	if u.grid {
+		if t := u.tileOf(name); t != nil && u.visible {
+			u.startTile(t, true)
+		}
+		return
+	}
 	if !u.visible || name == "" || u.video.frame == nil {
 		u.restart()
 		return
@@ -538,6 +572,9 @@ func (u *ui) changeSource(params map[string]string) {
 		return
 	}
 	u.player.stop() // close camera session, it will be redialed with new params
+	if t := u.tileOf(name); t != nil {
+		t.player.stop()
+	}
 	time.Sleep(300 * time.Millisecond)
 	if err := setSourceParams(name, params); err != nil {
 		dialog.ShowError(err, u.win)
@@ -740,6 +777,11 @@ func (u *ui) languageSelect() *ptrSelect {
 		lang = code
 		u.app.Preferences().SetString(prefLanguage, code)
 		// rebuild UI with new texts; live video keeps playing (the new view gets its frames)
+		wasGrid := u.grid
+		if wasGrid {
+			u.stopTiles()
+			u.tiles, u.grid = nil, false
+		}
 		wasHistory := u.hist.on
 		if wasHistory {
 			u.player.stop()
@@ -752,7 +794,9 @@ func (u *ui) languageSelect() *ptrSelect {
 		u.sound.SetChecked(sound)
 		u.syncing = false
 		u.setupTray()
-		if wasHistory || frame == nil {
+		if wasGrid {
+			u.setGrid(true)
+		} else if wasHistory || frame == nil {
 			u.restart()
 		} else {
 			u.syncControls(u.camera.Selected)
@@ -869,6 +913,9 @@ func (u *ui) decodeSize(w, h int) (int, int) {
 // checkDecodeSize restarts live video when the window was resized to another tier
 // (e.g. full screen); called every second.
 func (u *ui) checkDecodeSize() {
+	if u.grid {
+		return // tiles have a fixed decode size
+	}
 	if !u.visible || u.hist.on || u.decodeW == 0 || u.camera.Selected == "" {
 		return
 	}

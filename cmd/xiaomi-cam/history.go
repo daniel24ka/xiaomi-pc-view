@@ -107,6 +107,9 @@ func (u *ui) setHistoryTime(t time.Time) {
 }
 
 func (u *ui) openHistory() {
+	if u.grid {
+		u.setGrid(false) // history works with one camera
+	}
 	h := &u.hist
 	h.on = true
 	h.bar.Show()
