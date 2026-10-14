@@ -154,7 +154,7 @@ func cameraLabel(name string) string {
 
 // editTask - form to add (t == nil) or edit an AI task.
 func (u *ui) editTask(t *aiTask, done func()) {
-	task := &aiTask{Enabled: true, Provider: providerClaude, Schedule: "@every 5m", Notify: true, CooldownMin: 10}
+	task := &aiTask{Enabled: true, Provider: providerClaude, Schedule: "@every 5m", Notify: true, CooldownMin: 10, RecordSec: 60}
 	if t != nil {
 		c := *t
 		task = &c
@@ -211,10 +211,31 @@ func (u *ui) editTask(t *aiTask, done func()) {
 	cronHelp.Wrapping = fyne.TextWrapWord
 	cronHelp.Importance = widget.LowImportance
 
+	fullRes := widget.NewCheck(T("Pełna rozdzielczość (2560×1440)"), nil)
+	fullRes.SetChecked(task.FullRes)
+	fullResHelp := widget.NewLabel(T("Lepiej rozpoznaje szczegóły (marki, tablice), ale zapytanie jest droższe. Domyślnie 1280 px."))
+	fullResHelp.Wrapping = fyne.TextWrapWord
+	fullResHelp.Importance = widget.LowImportance
 	notify := widget.NewCheck(T("Powiadomienie systemowe"), nil)
 	notify.SetChecked(task.Notify)
 	saveSnap := widget.NewCheck(T("Zapisz zdjęcie"), nil)
 	saveSnap.SetChecked(task.SaveSnapshot)
+	recordSec := widget.NewEntry()
+	if task.RecordSec <= 0 {
+		task.RecordSec = 60
+	}
+	recordSec.SetText(strconv.Itoa(task.RecordSec))
+	record := widget.NewCheck(T("Nagraj film"), func(on bool) {
+		if on {
+			recordSec.Enable()
+		} else {
+			recordSec.Disable()
+		}
+	})
+	record.SetChecked(task.Record)
+	if !task.Record {
+		recordSec.Disable()
+	}
 	cooldown := widget.NewEntry()
 	cooldown.SetText(strconv.Itoa(task.CooldownMin))
 
@@ -223,8 +244,10 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		widget.NewFormItem(T("Kamera"), camera),
 		widget.NewFormItem(T("Model AI"), provider),
 		widget.NewFormItem(T("Polecenie (prompt)"), prompt),
+		widget.NewFormItem(T("Zdjęcie"), container.NewVBox(fullRes, fullResHelp)),
 		widget.NewFormItem(T("Harmonogram"), container.NewVBox(preset, cronEntry, cronHelp)),
-		widget.NewFormItem(T("Gdy wykryje"), container.NewVBox(notify, saveSnap)),
+		widget.NewFormItem(T("Gdy wykryje"), container.NewVBox(notify, saveSnap,
+			container.NewBorder(nil, nil, record, widget.NewLabel(T("s")), recordSec))),
 		widget.NewFormItem(T("Nie powtarzaj przez (min)"), cooldown),
 	)
 
@@ -245,7 +268,12 @@ func (u *ui) editTask(t *aiTask, done func()) {
 			task.Camera = camera.Selected
 		}
 		task.Provider = providers[max(provider.SelectedIndex(), 0)].id
-		task.Notify, task.SaveSnapshot = notify.Checked, saveSnap.Checked
+		task.Notify, task.SaveSnapshot, task.Record = notify.Checked, saveSnap.Checked, record.Checked
+		task.FullRes = fullRes.Checked
+		task.RecordSec, _ = strconv.Atoi(strings.TrimSpace(recordSec.Text))
+		if task.RecordSec <= 0 {
+			task.RecordSec = 60
+		}
 		task.CooldownMin, _ = strconv.Atoi(strings.TrimSpace(cooldown.Text))
 		if task.Name == "" || task.Prompt == "" {
 			dialog.ShowError(fmt.Errorf("%s", T("Podaj nazwę i polecenie.")), u.win)

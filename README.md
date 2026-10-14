@@ -92,8 +92,11 @@ API key in *Settings → AI*. Then add tasks:
   (`minute hour day month weekday`, e.g. `*/10 7-22 * * *` = every 10 min from 7:00 to 22:59).
 - **Model**: Claude (default `claude-opus-5-5`) or OpenAI (default `gpt-5-mini`); the model
   names can be changed in the settings.
-- **When detected**: system notification and/or save a full resolution snapshot. More action
-  types can be added later. *Don't repeat for N minutes* prevents repeated notifications.
+- **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as
+  car brands or number plates (the request costs more).
+- **When detected**: system notification, save a full resolution snapshot, and/or **record
+  a video** of a chosen length (seconds, MP4 to the recordings folder). More action types can
+  be added later. *Don't repeat for N minutes* prevents repeated actions.
 - Each task can be switched on/off, run immediately (▶) to test it, edited or removed. The
   list shows the time and result of the last check.
 

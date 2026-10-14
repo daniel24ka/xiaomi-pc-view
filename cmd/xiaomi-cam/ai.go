@@ -42,11 +42,14 @@ type aiTask struct {
 	Provider string `json:"provider"` // claude / openai
 	Prompt   string `json:"prompt"`
 	Schedule string `json:"schedule"` // CRON (5 fields) or @every 5m, @hourly...
+	FullRes  bool   `json:"full_res"` // send 2560x1440 instead of 1280 px (small details: brands, plates)
 
 	// actions when detected
 	Notify       bool `json:"notify"`
 	SaveSnapshot bool `json:"save_snapshot"`
-	CooldownMin  int  `json:"cooldown_min"` // don't repeat actions for N minutes
+	Record       bool `json:"record"`         // record an MP4 video
+	RecordSec    int  `json:"record_seconds"` // video length
+	CooldownMin  int  `json:"cooldown_min"`   // don't repeat actions for N minutes
 
 	// state
 	LastRun      time.Time `json:"last_run,omitzero"`
@@ -279,6 +282,14 @@ func (e *aiEngine) runActions(t *aiTask, answer string) {
 	if t.SaveSnapshot {
 		_, _ = saveSnapshot(taskCamera(t))
 	}
+	if t.Record {
+		sec := t.RecordSec
+		if sec <= 0 {
+			sec = 60
+		}
+		// already recording (e.g. started by hand) - keep that recording
+		_, _ = startRecording(taskCamera(t), time.Duration(sec)*time.Second)
+	}
 }
 
 func taskCamera(t *aiTask) string {
@@ -316,7 +327,11 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, error) {
 	if camera == "" {
 		return false, "", errors.New("no camera")
 	}
-	img, err := snapshotJPEG(camera, 1280)
+	width := 1280
+	if t.FullRes {
+		width = 0 // full camera resolution
+	}
+	img, err := snapshotJPEG(camera, width)
 	if err != nil {
 		return false, "", err
 	}
