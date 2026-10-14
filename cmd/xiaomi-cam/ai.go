@@ -49,6 +49,8 @@ type aiTask struct {
 	SaveSnapshot bool `json:"save_snapshot"`
 	Email        bool `json:"email"`          // e-mail with the snapshot attached
 	Slack        bool `json:"slack"`          // Slack message (Incoming Webhook)
+	Ntfy         bool `json:"ntfy"`           // push to the phone (ntfy app), with the snapshot
+	Telegram     bool `json:"telegram"`       // Telegram bot message, with the snapshot
 	Record       bool `json:"record"`         // record an MP4 video
 	RecordSec    int  `json:"record_seconds"` // video length
 	CooldownMin  int  `json:"cooldown_min"`   // don't repeat actions for N minutes
@@ -62,13 +64,15 @@ type aiTask struct {
 }
 
 type aiConfig struct {
-	AnthropicKey   string      `json:"anthropic_key,omitempty"`
-	AnthropicModel string      `json:"anthropic_model,omitempty"`
-	OpenAIKey      string      `json:"openai_key,omitempty"`
-	OpenAIModel    string      `json:"openai_model,omitempty"`
-	Email          emailConfig `json:"email,omitzero"`
-	SlackWebhook   string      `json:"slack_webhook,omitempty"`
-	Tasks          []*aiTask   `json:"tasks"`
+	AnthropicKey   string         `json:"anthropic_key,omitempty"`
+	AnthropicModel string         `json:"anthropic_model,omitempty"`
+	OpenAIKey      string         `json:"openai_key,omitempty"`
+	OpenAIModel    string         `json:"openai_model,omitempty"`
+	Email          emailConfig    `json:"email,omitzero"`
+	SlackWebhook   string         `json:"slack_webhook,omitempty"`
+	Ntfy           ntfyConfig     `json:"ntfy,omitzero"`
+	Telegram       telegramConfig `json:"telegram,omitzero"`
+	Tasks          []*aiTask      `json:"tasks"`
 }
 
 // actions are implemented in the app (notification needs the UI)
@@ -153,10 +157,20 @@ func (e *aiEngine) setProviders(anthropicKey, anthropicModel, openaiKey, openaiM
 	return e.save()
 }
 
-func (e *aiEngine) setNotifications(email emailConfig, slackWebhook string) error {
+// notifyChannels - settings of all notification channels
+type notifyChannels struct {
+	Email        emailConfig
+	SlackWebhook string
+	Ntfy         ntfyConfig
+	Telegram     telegramConfig
+}
+
+func (e *aiEngine) setNotifications(n notifyChannels) error {
 	e.mu.Lock()
-	e.cfg.Email = email
-	e.cfg.SlackWebhook = strings.TrimSpace(slackWebhook)
+	e.cfg.Email = n.Email
+	e.cfg.SlackWebhook = strings.TrimSpace(n.SlackWebhook)
+	e.cfg.Ntfy = n.Ntfy
+	e.cfg.Telegram = n.Telegram
 	e.mu.Unlock()
 	return e.save()
 }
@@ -322,6 +336,17 @@ func (e *aiEngine) runActions(t *aiTask, cfg aiConfig, answer string, img []byte
 	if t.Slack {
 		text := fmt.Sprintf("*%s*\n%s\n_%s · %s_", title, answer, camera, when)
 		if err := sendSlack(cfg.SlackWebhook, text); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if t.Ntfy {
+		if err := sendNtfy(cfg.Ntfy, title, answer, img, fileName(camera, "jpg")); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if t.Telegram {
+		text := fmt.Sprintf("%s\n%s\n%s · %s", title, answer, camera, when)
+		if err := sendTelegram(cfg.Telegram, text, img, fileName(camera, "jpg")); err != nil {
 			errs = append(errs, err)
 		}
 	}

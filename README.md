@@ -94,13 +94,21 @@ API key in *Settings → AI*. Then add tasks:
   names can be changed in the settings.
 - **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as
   car brands or number plates (the request costs more).
-- **When detected**: system notification, **e-mail** (with the snapshot attached), **Slack**
+- **When detected**: system notification, **push to the phone** (ntfy, with the snapshot),
+  **Telegram** (snapshot with a caption), **e-mail** (with the snapshot attached), **Slack**
   message, save a full resolution snapshot, and/or **record a video** of a chosen length
   (seconds, MP4 to the recordings folder). *Don't repeat for N minutes* prevents repeated
   actions. If an action fails (e.g. wrong SMTP password), the error is shown in the task list.
 
 **Notifications (Settings → Notifications):**
 
+- **Phone push (ntfy)**: install the [ntfy](https://ntfy.sh) app (Android/iOS), subscribe to
+  a topic and enter the same topic in Xiaomi Cam (*Generate random* creates a long one – on the
+  public ntfy.sh server anyone who knows the topic can read it). Optional own server and
+  access token, priority (normal / high / urgent). The notification shows the snapshot.
+- **Telegram**: create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), paste the
+  token, send any message to your bot and click *Detect chat ID*. Notifications come as a
+  picture with a caption.
 - **E-mail**: SMTP server and port, encryption (STARTTLS / SSL/TLS / none), user, password,
   sender and recipients (comma separated). For Gmail use `smtp.gmail.com`, port 587, STARTTLS
   and an [app password](https://myaccount.google.com/apppasswords).

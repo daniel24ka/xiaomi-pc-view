@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -161,4 +162,155 @@ func sendSlack(webhook, text string) error {
 		return fmt.Errorf("Slack %d: %s", res.StatusCode, strings.TrimSpace(string(b)))
 	}
 	return nil
+}
+
+// --- ntfy (https://ntfy.sh, also self-hosted): push notification to the phone app
+
+type ntfyConfig struct {
+	Server   string `json:"server,omitempty"` // default https://ntfy.sh
+	Topic    string `json:"topic,omitempty"`
+	Token    string `json:"token,omitempty"`    // access token for protected topics/servers
+	Priority string `json:"priority,omitempty"` // min, low, default, high, urgent
+}
+
+func (c ntfyConfig) configured() bool { return c.Topic != "" }
+
+// sendNtfy publishes a notification; with jpeg the picture is attached (shown in the
+// notification). Title and message go in RFC 2047 encoded headers (UTF-8).
+func sendNtfy(c ntfyConfig, title, message string, jpeg []byte, jpegName string) error {
+	if !c.configured() {
+		return errors.New("ntfy: no topic (Settings → Notifications)")
+	}
+	server := strings.TrimRight(c.Server, "/")
+	if server == "" {
+		server = "https://ntfy.sh"
+	}
+	var body io.Reader = strings.NewReader(message)
+	method := "POST"
+	if len(jpeg) > 0 {
+		method, body = "PUT", bytes.NewReader(jpeg)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, server+"/"+c.Topic, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Title", mime.BEncoding.Encode("utf-8", title))
+	req.Header.Set("Tags", "camera")
+	if c.Priority != "" && c.Priority != "default" {
+		req.Header.Set("Priority", c.Priority)
+	}
+	if len(jpeg) > 0 {
+		req.Header.Set("Filename", jpegName)
+		req.Header.Set("Message", mime.BEncoding.Encode("utf-8", message))
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("ntfy: %w", err)
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("ntfy %d: %s", res.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
+}
+
+// --- Telegram bot
+
+type telegramConfig struct {
+	Token  string `json:"token,omitempty"`   // from @BotFather
+	ChatID string `json:"chat_id,omitempty"` // user or group chat
+}
+
+func (c telegramConfig) configured() bool { return c.Token != "" && c.ChatID != "" }
+
+var telegramAPI = "https://api.telegram.org" // replaced in tests
+
+func telegramCall(ctx context.Context, token, method string, body io.Reader, contentType string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", telegramAPI+"/bot"+token+"/"+method, body)
+	if err != nil {
+		return nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("Telegram: %v", strings.ReplaceAll(err.Error(), token, "***"))
+	}
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	var r struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+	}
+	_ = json.Unmarshal(b, &r)
+	if !r.OK {
+		return nil, fmt.Errorf("Telegram %d: %s", res.StatusCode, r.Description)
+	}
+	return b, nil
+}
+
+// sendTelegram sends the picture with a caption (or a text message without a picture).
+func sendTelegram(c telegramConfig, text string, jpeg []byte, jpegName string) error {
+	if !c.configured() {
+		return errors.New("Telegram: no bot token or chat ID (Settings → Notifications)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if len(jpeg) == 0 {
+		body, _ := json.Marshal(map[string]any{"chat_id": c.ChatID, "text": text})
+		_, err := telegramCall(ctx, c.Token, "sendMessage", bytes.NewReader(body), "application/json")
+		return err
+	}
+	if r := []rune(text); len(r) > 1024 { // caption limit
+		text = string(r[:1021]) + "..."
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	_ = mw.WriteField("chat_id", c.ChatID)
+	_ = mw.WriteField("caption", text)
+	fw, _ := mw.CreateFormFile("photo", jpegName)
+	_, _ = fw.Write(jpeg)
+	_ = mw.Close()
+	_, err := telegramCall(ctx, c.Token, "sendPhoto", &buf, mw.FormDataContentType())
+	return err
+}
+
+// telegramFindChatID returns the chat of the last message sent to the bot
+// (the user writes anything to the bot first).
+func telegramFindChatID(token string) (string, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	b, err := telegramCall(ctx, token, "getUpdates", nil, "")
+	if err != nil {
+		return "", "", err
+	}
+	var r struct {
+		Result []struct {
+			Message *struct {
+				Chat struct {
+					ID        int64  `json:"id"`
+					FirstName string `json:"first_name"`
+					Title     string `json:"title"`
+				} `json:"chat"`
+			} `json:"message"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal(b, &r)
+	for i := len(r.Result) - 1; i >= 0; i-- {
+		if m := r.Result[i].Message; m != nil {
+			name := m.Chat.FirstName
+			if m.Chat.Title != "" {
+				name = m.Chat.Title
+			}
+			return strconv.FormatInt(m.Chat.ID, 10), name, nil
+		}
+	}
+	return "", "", errors.New("Telegram: no messages yet - send any message to your bot and try again")
 }
