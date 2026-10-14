@@ -237,7 +237,8 @@ func (u *ui) build() {
 	exitBtn := widget.NewButtonWithIcon(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
 	// button lies on the picture, on a translucent background
 	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}), exitBtn)
-	u.exitView = container.NewVBox(container.NewHBox(layout.NewSpacer(), exitBox))
+	u.exitView = container.NewVBox(container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
+		container.NewHBox(layout.NewSpacer(), exitBox))) // 10 px from top and right edge
 	u.exitView.Hide()
 	u.win.SetContent(container.NewBorder(top, bottom, nil, nil, container.NewStack(u.video, u.exitView)))
 
