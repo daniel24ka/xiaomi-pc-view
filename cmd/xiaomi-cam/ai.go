@@ -29,6 +29,7 @@ import (
 const (
 	providerClaude = "claude"
 	providerOpenAI = "openai"
+	providerLocal  = "local" // own OpenAI-compatible server: LM Studio, Ollama...
 
 	defaultClaudeModel = "claude-opus-5-5"
 	defaultOpenAIModel = "gpt-5-mini"
@@ -68,6 +69,9 @@ type aiConfig struct {
 	AnthropicModel string         `json:"anthropic_model,omitempty"`
 	OpenAIKey      string         `json:"openai_key,omitempty"`
 	OpenAIModel    string         `json:"openai_model,omitempty"`
+	LocalURL       string         `json:"local_url,omitempty"` // e.g. http://192.168.1.50:1234
+	LocalModel     string         `json:"local_model,omitempty"`
+	LocalKey       string         `json:"local_key,omitempty"` // optional
 	Email          emailConfig    `json:"email,omitzero"`
 	SlackWebhook   string         `json:"slack_webhook,omitempty"`
 	Ntfy           ntfyConfig     `json:"ntfy,omitzero"`
@@ -153,6 +157,15 @@ func (e *aiEngine) setProviders(anthropicKey, anthropicModel, openaiKey, openaiM
 	e.cfg.AnthropicModel = strings.TrimSpace(anthropicModel)
 	e.cfg.OpenAIKey = strings.TrimSpace(openaiKey)
 	e.cfg.OpenAIModel = strings.TrimSpace(openaiModel)
+	e.mu.Unlock()
+	return e.save()
+}
+
+func (e *aiEngine) setLocal(url, model, key string) error {
+	e.mu.Lock()
+	e.cfg.LocalURL = normalizeBaseURL(url)
+	e.cfg.LocalModel = strings.TrimSpace(model)
+	e.cfg.LocalKey = strings.TrimSpace(key)
 	e.mu.Unlock()
 	return e.save()
 }
@@ -419,6 +432,8 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, []byte, error) 
 	switch t.Provider {
 	case providerOpenAI:
 		text, err = askOpenAI(ctx, cfg.OpenAIKey, cfg.OpenAIModel, t.Prompt, img)
+	case providerLocal:
+		text, err = askLocal(ctx, cfg.LocalURL, cfg.LocalKey, cfg.LocalModel, t.Prompt, img)
 	default:
 		text, err = askClaude(ctx, cfg.AnthropicKey, cfg.AnthropicModel, t.Prompt, img)
 	}
@@ -481,7 +496,7 @@ func askClaude(ctx context.Context, key, model, prompt string, jpeg []byte) (str
 	return out.String(), nil
 }
 
-// askOpenAI - Chat Completions with an image and a JSON schema response format.
+// askOpenAI - OpenAI Chat Completions with an image and a JSON schema response format.
 func askOpenAI(ctx context.Context, key, model, prompt string, jpeg []byte) (string, error) {
 	if key == "" {
 		return "", errors.New("OpenAI: no API key (Settings → AI)")
@@ -489,7 +504,65 @@ func askOpenAI(ctx context.Context, key, model, prompt string, jpeg []byte) (str
 	if model == "" {
 		model = defaultOpenAIModel
 	}
-	body, _ := json.Marshal(map[string]any{
+	return chatCompletions(ctx, "OpenAI", "https://api.openai.com/v1", key, model, prompt, jpeg)
+}
+
+// askLocal - own OpenAI-compatible server (LM Studio, Ollama, vLLM, LocalAI...) in the
+// network; the model must support images (e.g. Qwen2.5-VL, Gemma 3, LLaVA).
+func askLocal(ctx context.Context, baseURL, key, model, prompt string, jpeg []byte) (string, error) {
+	if baseURL == "" {
+		return "", errors.New("local server: no address (Settings → AI)")
+	}
+	if model == "" {
+		return "", errors.New("local server: no model (Settings → AI)")
+	}
+	return chatCompletions(ctx, "local server", baseURL, key, model, prompt, jpeg)
+}
+
+// normalizeBaseURL - "192.168.1.50:1234", "http://host:11434/v1/" -> "http://host:port/v1"
+func normalizeBaseURL(s string) string {
+	s = strings.TrimRight(strings.TrimSpace(s), "/")
+	if s == "" {
+		return ""
+	}
+	if !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	if !strings.HasSuffix(s, "/v1") {
+		s += "/v1"
+	}
+	return s
+}
+
+func apiRequest(ctx context.Context, method, url, key string, body []byte) ([]byte, int, error) {
+	var r io.Reader
+	if body != nil {
+		r = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, r)
+	if err != nil {
+		return nil, 0, err
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(res.Body)
+	return b, res.StatusCode, err
+}
+
+// chatCompletions - /chat/completions with the picture; asks for a JSON schema response,
+// and when the server doesn't support response_format (400), asks again without it
+// (the system prompt asks for JSON too).
+func chatCompletions(ctx context.Context, label, baseURL, key, model, prompt string, jpeg []byte) (string, error) {
+	req := map[string]any{
 		"model": model,
 		"messages": []any{
 			map[string]any{"role": "system", "content": aiSystemPrompt},
@@ -506,21 +579,20 @@ func askOpenAI(ctx context.Context, key, model, prompt string, jpeg []byte) (str
 				"name": "detection", "strict": true, "schema": aiSchema,
 			},
 		},
-	})
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+key)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("OpenAI: %w", err)
+	url := baseURL + "/chat/completions"
+	body, _ := json.Marshal(req)
+	b, status, err := apiRequest(ctx, "POST", url, key, body)
+	if err == nil && status == http.StatusBadRequest && bytes.Contains(bytes.ToLower(b), []byte("response_format")) {
+		delete(req, "response_format")
+		body, _ = json.Marshal(req)
+		b, status, err = apiRequest(ctx, "POST", url, key, body)
 	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(res.Body)
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenAI %d: %.300s", res.StatusCode, b)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", label, err)
+	}
+	if status != http.StatusOK {
+		return "", fmt.Errorf("%s %d: %.300s", label, status, b)
 	}
 	var out struct {
 		Choices []struct {
@@ -531,10 +603,40 @@ func askOpenAI(ctx context.Context, key, model, prompt string, jpeg []byte) (str
 		} `json:"choices"`
 	}
 	if err = json.Unmarshal(b, &out); err != nil || len(out.Choices) == 0 {
-		return "", fmt.Errorf("OpenAI: unexpected response: %.200s", b)
+		return "", fmt.Errorf("%s: unexpected response: %.200s", label, b)
 	}
 	if r := out.Choices[0].Message.Refusal; r != "" {
-		return "", fmt.Errorf("OpenAI declined: %s", r)
+		return "", fmt.Errorf("%s declined: %s", label, r)
 	}
 	return out.Choices[0].Message.Content, nil
+}
+
+// listModels - model ids from an OpenAI-compatible server (GET /v1/models).
+func listModels(baseURL, key string) ([]string, error) {
+	baseURL = normalizeBaseURL(baseURL)
+	if baseURL == "" {
+		return nil, errors.New("no server address")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	b, status, err := apiRequest(ctx, "GET", baseURL+"/models", key, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("%d: %.200s", status, b)
+	}
+	var out struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err = json.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("not an OpenAI-compatible server: %.100s", b)
+	}
+	var ids []string
+	for _, m := range out.Data {
+		ids = append(ids, m.ID)
+	}
+	return ids, nil
 }

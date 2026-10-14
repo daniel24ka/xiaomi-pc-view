@@ -27,6 +27,7 @@ var schedulePresets = []struct{ name, spec string }{
 var providers = []struct{ name, id string }{
 	{"Claude (Anthropic)", providerClaude},
 	{"OpenAI", providerOpenAI},
+	{"Własny serwer (LM Studio / Ollama)", providerLocal},
 }
 
 // aiSettings - the "AI" tab of the settings: providers and tasks.
@@ -43,11 +44,44 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 	openaiKey.SetPlaceHolder("sk-...")
 	openaiModel := widget.NewEntry()
 	openaiModel.SetText(cfg.OpenAIModel)
+	localURL := widget.NewEntry()
+	localURL.SetText(cfg.LocalURL)
+	localURL.SetPlaceHolder("http://192.168.1.50:1234  (LM Studio)  /  http://192.168.1.50:11434  (Ollama)")
+	localKey := widget.NewPasswordEntry()
+	localKey.SetText(cfg.LocalKey)
+	localKey.SetPlaceHolder(T("opcjonalnie"))
+	localModel := widget.NewSelectEntry(nil)
+	localModel.SetText(cfg.LocalModel)
+	localModel.SetPlaceHolder("qwen2.5-vl-7b-instruct")
+	fetchModels := newButton(T("Pobierz modele"), theme.DownloadIcon(), func() {
+		url, key := localURL.Text, localKey.Text
+		u.status.SetText(T("Łączę z serwerem…"))
+		go func() {
+			ids, err := listModels(url, key)
+			fyne.Do(func() {
+				if err != nil {
+					dialog.ShowError(err, u.win)
+					u.status.SetText("")
+					return
+				}
+				localModel.SetOptions(ids)
+				if localModel.Text == "" && len(ids) > 0 {
+					localModel.SetText(ids[0])
+				}
+				u.status.SetText(fmt.Sprintf(T("Serwer odpowiada, modeli: %d"), len(ids)))
+			})
+		}()
+	})
 	saveKeys := newButton(T("Zapisz klucze"), theme.DocumentSaveIcon(), func() {
 		if err := u.ai.setProviders(claudeKey.Text, claudeModel.Text, openaiKey.Text, openaiModel.Text); err != nil {
 			dialog.ShowError(err, u.win)
 			return
 		}
+		if err := u.ai.setLocal(localURL.Text, localModel.Text, localKey.Text); err != nil {
+			dialog.ShowError(err, u.win)
+			return
+		}
+		localURL.SetText(u.ai.config().LocalURL)
 		u.status.SetText(T("Zapisano ustawienia AI"))
 	})
 	providersForm := widget.NewForm(
@@ -55,6 +89,9 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 		widget.NewFormItem(T("Claude – model"), claudeModel),
 		widget.NewFormItem(T("OpenAI – klucz API"), openaiKey),
 		widget.NewFormItem(T("OpenAI – model"), openaiModel),
+		widget.NewFormItem(T("Własny serwer – adres"), localURL),
+		widget.NewFormItem(T("Własny serwer – klucz"), localKey),
+		widget.NewFormItem(T("Własny serwer – model"), container.NewBorder(nil, nil, nil, fetchModels, localModel)),
 	)
 
 	list := container.NewVBox()
@@ -141,10 +178,10 @@ func scheduleName(spec string) string {
 func providerName(id string) string {
 	for _, p := range providers {
 		if p.id == id {
-			return p.name
+			return T(p.name)
 		}
 	}
-	return providers[0].name
+	return T(providers[0].name)
 }
 
 func cameraLabel(name string) string {
@@ -172,7 +209,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 
 	var provNames []string
 	for _, p := range providers {
-		provNames = append(provNames, p.name)
+		provNames = append(provNames, T(p.name))
 	}
 	provider := widget.NewSelect(provNames, nil)
 	provider.SetSelected(providerName(task.Provider))

@@ -93,8 +93,12 @@ API key in *Settings → AI*. Then add tasks:
   from 7:00 to 22:59) or an interval (`@every 20s`, `@every 2m`). A check that is still running
   is not started again. For frequent checks the camera session stays open (closed a minute
   after the last check). Every 10 s is about 8600 paid requests a day.
-- **Model**: Claude (default `claude-opus-5-5`) or OpenAI (default `gpt-5-mini`); the model
-  names can be changed in the settings.
+- **Model**: Claude (default `claude-opus-5-5`), OpenAI (default `gpt-5-mini`), or **your own
+  server** in the network with an OpenAI-compatible API – **LM Studio** (`http://IP:1234`) or
+  **Ollama** (`http://IP:11434`). Enter the address, an optional key, and pick the model with
+  *Get models*; it must be a vision model (e.g. Qwen2.5-VL, Gemma 3, LLaVA). For LM Studio
+  enable *Serve on Local Network* in the server settings; for Ollama set
+  `OLLAMA_HOST=0.0.0.0`.
 - **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as
   car brands or number plates (the request costs more).
 - **When detected**: system notification, **push to the phone** (ntfy, with the snapshot),
