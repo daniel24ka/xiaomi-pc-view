@@ -81,7 +81,21 @@ func NewClient(rawURL string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{Conn: conn, key: key, model: model}, nil
+	client := &Client{Conn: conn, key: key, model: model}
+	client.startCommandLoop()
+	return client, nil
+}
+
+// startCommandLoop drains command responses (e.g. motor 0x113), otherwise the cs2 command
+// channel overflows and the stream breaks with "pop buffer is full" (AlexxIT/go2rtc#2489).
+func (c *Client) startCommandLoop() {
+	go func() {
+		for {
+			if _, _, err := c.Conn.ReadCommand(); err != nil {
+				return
+			}
+		}
+	}()
 }
 
 type Client struct {

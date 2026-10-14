@@ -1,0 +1,105 @@
+package main
+
+import (
+	"reflect"
+	"sync/atomic"
+	"unsafe"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/widget"
+	"github.com/go-gl/glfw/v3.4/glfw"
+)
+
+// mover sends pan/tilt steps to the camera one by one. One step is small (~1-2°),
+// so like in Mi Home the camera keeps moving while a button/key is held or the
+// picture is dragged; each step waits for camera ack, so commands never pile up.
+type mover struct {
+	ops     chan int
+	held    atomic.Int32 // op of the held button, 0 - none
+	onError func(error)
+	camera  func() string
+}
+
+func newMover(camera func() string, onError func(error)) *mover {
+	m := &mover{ops: make(chan int, 4), camera: camera, onError: onError}
+	go m.worker()
+	return m
+}
+
+func (m *mover) worker() {
+	for op := range m.ops {
+		for {
+			if err := motor(m.camera(), op); err != nil {
+				m.onError(err)
+				break
+			}
+			// continue while the button is still held
+			if m.held.Load() != int32(op) {
+				break
+			}
+		}
+	}
+}
+
+// step queues one step, extra steps are dropped while the queue is full
+func (m *mover) step(op int) {
+	select {
+	case m.ops <- op:
+	default:
+	}
+}
+
+func (m *mover) press(op int) {
+	m.held.Store(int32(op))
+	m.step(op)
+}
+
+func (m *mover) release() {
+	m.held.Store(0)
+}
+
+// holdButton - button that reports press and release (moves the camera while held)
+type holdButton struct {
+	widget.Button
+	onPress, onRelease func()
+}
+
+func newHoldButton(icon fyne.Resource, onPress, onRelease func()) *holdButton {
+	b := &holdButton{onPress: onPress, onRelease: onRelease}
+	b.Icon = icon
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+func (b *holdButton) MouseDown(e *desktop.MouseEvent) {
+	if e.Button == desktop.MouseButtonPrimary {
+		b.onPress()
+	}
+}
+
+func (b *holdButton) MouseUp(*desktop.MouseEvent) { b.onRelease() }
+func (b *holdButton) MouseOut() {
+	b.Button.MouseOut()
+	b.onRelease()
+}
+
+// setDecorated shows or hides the window frame (title bar and borders).
+// Fyne has no API for it, so the GLFW window is taken from Fyne's window
+// (private field "viewport"); must be called on the main thread (fyne.Do / UI events).
+func setDecorated(w fyne.Window, on bool) {
+	v := reflect.ValueOf(w)
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
+		return
+	}
+	f := v.Elem().FieldByName("viewport")
+	if !f.IsValid() || f.Type() != reflect.TypeOf((*glfw.Window)(nil)) || f.IsNil() {
+		return
+	}
+	win := (*glfw.Window)(unsafe.Pointer(f.Pointer()))
+	attr := glfw.False
+	if on {
+		attr = glfw.True
+	}
+	win.SetAttrib(glfw.Decorated, attr)
+}

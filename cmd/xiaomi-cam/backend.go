@@ -33,6 +33,18 @@ log:
   level: warn
 `
 
+// showRunningInstance asks an already running app to show its window.
+// Only one instance can run: the camera accepts one session and ports are fixed.
+func showRunningInstance() bool {
+	client := http.Client{Timeout: time.Second}
+	res, err := client.Post("http://"+apiAddr+"/api/xiaomi-cam/show", "", nil)
+	if err != nil {
+		return false
+	}
+	_ = res.Body.Close()
+	return res.StatusCode == http.StatusOK
+}
+
 // startBackend runs embedded go2rtc (API, RTSP server and Xiaomi source) on localhost only.
 func startBackend() error {
 	dir, err := os.UserConfigDir()
@@ -58,6 +70,15 @@ func startBackend() error {
 	rtsp.Init()
 	xiaomi.Init()
 	return nil
+}
+
+// onShowRequest is called when another instance of the app was started.
+func onShowRequest(f func()) {
+	api.HandleFunc("api/xiaomi-cam/show", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			f()
+		}
+	})
 }
 
 // --- local go2rtc HTTP API (used for login, the same flow as go2rtc WebUI)

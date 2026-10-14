@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
@@ -24,6 +26,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// devHook runs a self-test (devtest.go, build with -tags devtest)
+var devHook func(u *ui)
+
 // version is set at build time: -ldflags "-X main.version=v1.0.0"
 var version = "dev"
 
@@ -31,7 +36,7 @@ var qualities = []struct {
 	name, subtype string
 	w, h          int
 }{
-	{"2.5K", "3", 1920, 1080}, // camera sends 2560x1440, decoded to 1080p to save CPU
+	{"2.5K", "3", 2560, 1440}, // full sensor resolution, so digital zoom shows all details
 	{"720p", "", 1280, 720},
 	{"SD", "sd", 1280, 720},
 }
@@ -60,15 +65,20 @@ type ui struct {
 	exitView   *fyne.Container // small "exit view-only mode" button over the video
 	viewOnly   bool
 	hideTimer  *time.Timer
+	normalSize fyne.Size // window size before video-only mode
 
-	dragX, dragY float32     // accumulated mouse drag for camera moves
-	moving       atomic.Bool // one motor command at a time
+	dragX, dragY float32      // accumulated mouse drag for camera moves
+	mover        *mover       // pan/tilt steps
+	current      atomic.Value // name of the selected camera (string), for background goroutines
 
 	syncing bool // skip On* handlers while syncing controls with camera state
 	visible bool
 }
 
 func main() {
+	if showRunningInstance() {
+		return
+	}
 	if err := startBackend(); err != nil {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
@@ -78,14 +88,23 @@ func main() {
 	a.SetIcon(appIcon)
 	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
+	u.current.Store("")
+	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
+		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
+	})
 	u.build()
 	u.setupTray()
+	onShowRequest(func() { fyne.Do(u.show) })
+	a.Lifecycle().SetOnStopped(u.player.stop) // no frames to the UI after it stopped
 
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
 	u.show()
 	if len(cameraNames()) == 0 {
 		showAddCamera(u.win, u.selectCamera)
+	}
+	if devHook != nil {
+		go devHook(u) // only in builds with -tags devtest
 	}
 	if path := os.Getenv("XIAOMI_CAM_SCREENSHOT"); path != "" {
 		go u.screenshotAndQuit(path) // for development: window screenshot after 15 s
@@ -158,8 +177,8 @@ func (u *ui) build() {
 		widget.NewButtonWithIcon("", theme.HelpIcon(), u.showShortcuts),
 	)
 
-	ptz := func(icon fyne.Resource, op int) *widget.Button {
-		return widget.NewButtonWithIcon("", icon, func() { u.motor(op) })
+	ptz := func(icon fyne.Resource, op int) *holdButton {
+		return newHoldButton(icon, func() { u.mover.press(op) }, u.mover.release)
 	}
 	u.light = widget.NewCheck(T("Reflektor"), func(on bool) {
 		u.win.Canvas().Unfocus()
@@ -216,8 +235,9 @@ func (u *ui) build() {
 	)
 	u.bars = []fyne.CanvasObject{top, bottom}
 	exitBtn := widget.NewButtonWithIcon(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
-	exitBtn.Importance = widget.LowImportance
-	u.exitView = container.NewVBox(container.NewHBox(layout.NewSpacer(), exitBtn))
+	// button lies on the picture, on a translucent background
+	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}), exitBtn)
+	u.exitView = container.NewVBox(container.NewHBox(layout.NewSpacer(), exitBox))
 	u.exitView.Hide()
 	u.win.SetContent(container.NewBorder(top, bottom, nil, nil, container.NewStack(u.video, u.exitView)))
 
@@ -309,6 +329,7 @@ func (u *ui) restart() {
 		u.video.clear(T("Brak kamery – kliknij „Dodaj”"))
 		return
 	}
+	u.current.Store(name)
 	src := cameraSource(name)
 	u.syncing = true
 	qi := 1
@@ -382,12 +403,7 @@ func (u *ui) setProp(p miotProp, value any) {
 }
 
 func (u *ui) motor(op int) {
-	name := u.camera.Selected
-	go func() {
-		if err := motor(name, op); err != nil {
-			fyne.Do(func() { u.status.SetText("Obrót: " + err.Error()) })
-		}
-	}()
+	u.mover.step(op)
 }
 
 func (u *ui) snapshot() {
@@ -413,28 +429,56 @@ func (u *ui) snapshot() {
 }
 
 func (u *ui) toggleFullScreen() {
-	full := !u.win.FullScreen()
-	u.setViewOnly(full)
-	u.win.SetFullScreen(full)
+	if u.win.FullScreen() {
+		u.setViewOnly(false)
+		return
+	}
+	u.viewOnly = true
+	u.showBars(false)
+	u.win.SetPadded(false)
+	u.showExitButton()
+	u.win.SetFullScreen(true)
 }
 
-// setViewOnly hides all panels, only the camera picture stays visible.
-// Exit: Esc, H, right click or T("Pokaż panele") button shown on mouse move.
+// setViewOnly shows only the camera picture: no panels and no window frame, the window
+// gets the picture's aspect ratio (no black bars). Exit: Esc, H, right click or
+// "Pokaż panele" button shown on the picture when the mouse moves.
 func (u *ui) setViewOnly(on bool) {
+	if on == u.viewOnly {
+		return
+	}
 	u.viewOnly = on
+	u.showBars(!on)
+	u.win.SetPadded(!on)
+	if on {
+		u.normalSize = u.win.Canvas().Size()
+		setDecorated(u.win, false)
+		aspect := float32(9) / 16
+		if f := u.video.frame; f != nil {
+			aspect = float32(f.Bounds().Dy()) / float32(f.Bounds().Dx())
+		}
+		w := u.normalSize.Width
+		u.win.Resize(fyne.NewSize(w, w*aspect))
+		u.showExitButton()
+		return
+	}
+	u.exitView.Hide()
+	if u.win.FullScreen() {
+		u.win.SetFullScreen(false)
+	}
+	setDecorated(u.win, true)
+	if !u.normalSize.IsZero() {
+		u.win.Resize(u.normalSize)
+		u.normalSize = fyne.Size{}
+	}
+}
+
+func (u *ui) showBars(on bool) {
 	for _, b := range u.bars {
 		if on {
-			b.Hide()
-		} else {
 			b.Show()
-		}
-	}
-	if on {
-		u.showExitButton()
-	} else {
-		u.exitView.Hide()
-		if u.win.FullScreen() {
-			u.win.SetFullScreen(false)
+		} else {
+			b.Hide()
 		}
 	}
 }
@@ -455,31 +499,25 @@ func (u *ui) showExitButton() {
 // cameraDrag turns the camera when the picture is dragged: like grabbing the view,
 // dragging right turns the camera left. One motor step per dragStep pixels.
 func (u *ui) cameraDrag(dx, dy float32) {
-	const dragStep = 60
+	const dragStep = 15
 	u.dragX += dx
 	u.dragY += dy
-	op := 0
-	switch {
-	case u.dragX >= dragStep:
-		op, u.dragX = motorLeft, u.dragX-dragStep
-	case u.dragX <= -dragStep:
-		op, u.dragX = motorRight, u.dragX+dragStep
-	case u.dragY >= dragStep:
-		op, u.dragY = motorUp, u.dragY-dragStep
-	case u.dragY <= -dragStep:
-		op, u.dragY = motorDown, u.dragY+dragStep
+	for u.dragX >= dragStep {
+		u.dragX -= dragStep
+		u.mover.step(motorLeft)
 	}
-	if op == 0 || !u.moving.CompareAndSwap(false, true) {
-		return
+	for u.dragX <= -dragStep {
+		u.dragX += dragStep
+		u.mover.step(motorRight)
 	}
-	name := u.camera.Selected
-	go func() {
-		defer u.moving.Store(false)
-		if err := motor(name, op); err != nil {
-			fyne.Do(func() { u.status.SetText("Obrót: " + err.Error()) })
-		}
-		time.Sleep(150 * time.Millisecond)
-	}()
+	for u.dragY >= dragStep {
+		u.dragY -= dragStep
+		u.mover.step(motorUp)
+	}
+	for u.dragY <= -dragStep {
+		u.dragY += dragStep
+		u.mover.step(motorDown)
+	}
 }
 
 func (u *ui) removeCamera() {
