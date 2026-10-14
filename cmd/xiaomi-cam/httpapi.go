@@ -23,7 +23,7 @@ import (
 //	GET  /api/xiaomi-cam/cameras
 //	GET  /api/xiaomi-cam/snapshot?width=1280          image/jpeg
 //	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, zoom
-//	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step ~1-2°
+//	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step = 0.1 s of movement
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
@@ -112,10 +112,13 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		if err := ensureSession(name); err != nil {
 			return nil, err
 		}
-		for i := 0; i < steps; i++ {
-			if err := motor(name, op); err != nil {
-				return nil, err
-			}
+		// the camera moves continuously until stopped: one step = 100 ms of movement
+		var moveErr error
+		m := newMover(func() string { return name }, func(err error) { moveErr = err })
+		m.pulse(op, time.Duration(steps)*100*time.Millisecond)
+		time.Sleep(300 * time.Millisecond) // let the stop command go out
+		if moveErr != nil {
+			return nil, moveErr
 		}
 		return map[string]any{"moved": dir, "steps": steps}, nil
 	})

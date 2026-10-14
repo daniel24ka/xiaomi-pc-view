@@ -189,6 +189,7 @@ func (u *ui) build() {
 	}
 	u.video.onMouseMove = u.showExitButton
 	u.video.onCameraDrag = u.cameraDrag
+	u.video.onCameraDragEnd = u.cameraDragEnd
 	u.video.onScroll = func(up bool) {
 		if up {
 			u.zoomBy(zoomStep)
@@ -376,14 +377,6 @@ func (u *ui) build() {
 
 	u.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		switch e.Name {
-		case fyne.KeyLeft:
-			u.motor(motorLeft)
-		case fyne.KeyRight:
-			u.motor(motorRight)
-		case fyne.KeyUp:
-			u.motor(motorUp)
-		case fyne.KeyDown:
-			u.motor(motorDown)
 		case fyne.KeyF11:
 			u.toggleFullScreen()
 		case fyne.KeyEscape:
@@ -394,6 +387,20 @@ func (u *ui) build() {
 			}
 		}
 	})
+	// arrows move the camera while held (key down - move, key up - stop)
+	arrows := map[fyne.KeyName]int{fyne.KeyLeft: motorLeft, fyne.KeyRight: motorRight, fyne.KeyUp: motorUp, fyne.KeyDown: motorDown}
+	if dc, ok := u.win.Canvas().(desktop.Canvas); ok {
+		dc.SetOnKeyDown(func(e *fyne.KeyEvent) {
+			if op, ok := arrows[e.Name]; ok {
+				u.mover.press(op)
+			}
+		})
+		dc.SetOnKeyUp(func(e *fyne.KeyEvent) {
+			if _, ok := arrows[e.Name]; ok {
+				u.mover.release()
+			}
+		})
+	}
 	u.win.Canvas().SetOnTypedRune(func(r rune) {
 		switch r {
 		case '+', '=':
@@ -544,10 +551,6 @@ func (u *ui) setProp(p miotProp, value any) {
 	}()
 }
 
-func (u *ui) motor(op int) {
-	u.mover.step(op)
-}
-
 // snapshot saves a full resolution JPEG from the camera stream (the window shows a
 // downscaled picture) to the snapshots folder from the settings.
 func (u *ui) snapshot() {
@@ -651,30 +654,41 @@ func (u *ui) hideOverlayAfter(d time.Duration) {
 }
 
 // cameraDrag turns the camera when the picture is dragged: like grabbing the view,
-// dragging right turns the camera left. One motor step per dragStep pixels.
+// dragging right turns the camera left. The camera moves while the mouse keeps dragging
+// in that direction and stops on release (cameraDragEnd).
 func (u *ui) cameraDrag(dx, dy float32) {
 	if u.viewOnly {
 		return // video-only mode has pan/tilt buttons instead
 	}
-	const dragStep = 15
+	const threshold = 15 // px before the camera starts moving
 	u.dragX += dx
 	u.dragY += dy
-	for u.dragX >= dragStep {
-		u.dragX -= dragStep
-		u.mover.step(motorLeft)
+	op := 0
+	switch {
+	case u.dragX >= threshold && u.dragX >= abs32(u.dragY):
+		op = motorLeft
+	case u.dragX <= -threshold && -u.dragX >= abs32(u.dragY):
+		op = motorRight
+	case u.dragY >= threshold:
+		op = motorUp
+	case u.dragY <= -threshold:
+		op = motorDown
 	}
-	for u.dragX <= -dragStep {
-		u.dragX += dragStep
-		u.mover.step(motorRight)
+	if op != 0 {
+		u.mover.press(op)
 	}
-	for u.dragY >= dragStep {
-		u.dragY -= dragStep
-		u.mover.step(motorUp)
+}
+
+func (u *ui) cameraDragEnd() {
+	u.dragX, u.dragY = 0, 0
+	u.mover.release()
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
 	}
-	for u.dragY <= -dragStep {
-		u.dragY += dragStep
-		u.mover.step(motorDown)
-	}
+	return v
 }
 
 func (u *ui) languageSelect() *ptrSelect {

@@ -127,11 +127,12 @@ type videoView struct {
 
 	frame *image.RGBA
 
-	onDoubleTap  func()
-	onSecondary  func()
-	onMouseMove  func()
-	onCameraDrag func(dx, dy float32) // dragging the picture moves the camera
-	onScroll     func(up bool)        // mouse wheel - camera zoom
+	onDoubleTap     func()
+	onSecondary     func()
+	onMouseMove     func()
+	onCameraDrag    func(dx, dy float32) // dragging the picture moves the camera
+	onCameraDragEnd func()               // mouse released: stop the camera
+	onScroll        func(up bool)        // mouse wheel - camera zoom
 
 	// window resize by edges (window without frame)
 	canResize   func() bool
@@ -284,6 +285,9 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 func (v *videoView) DragEnd() {
 	v.dragging = false
 	v.wmGrab = false
+	if v.onCameraDragEnd != nil {
+		v.onCameraDragEnd()
+	}
 }
 
 func (v *videoView) TappedSecondary(*fyne.PointEvent) {

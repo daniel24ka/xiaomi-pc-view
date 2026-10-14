@@ -2,7 +2,8 @@ package main
 
 import (
 	"reflect"
-	"sync/atomic"
+	"sync"
+	"time"
 	"unsafe"
 
 	"fyne.io/fyne/v2"
@@ -12,52 +13,94 @@ import (
 	"github.com/go-gl/glfw/v3.4/glfw"
 )
 
-// mover sends pan/tilt steps to the camera one by one. One step is small (~1-2°),
-// so like in Mi Home the camera keeps moving while a button/key is held or the
-// picture is dragged; each step waits for camera ack, so commands never pile up.
+// mover drives the pan/tilt motor like the Mi Home plugin does: a direction command
+// (operation 1-4) starts a continuous movement and is repeated every 200 ms while the button
+// or key is held; on release the stop command (operation -1001) is sent - right away after
+// a long press, 200 ms later after a short click (so a click moves the camera a bit).
 type mover struct {
-	ops     chan int
-	held    atomic.Int32 // op of the held button, 0 - none
+	mu      sync.Mutex
+	held    int       // direction being held, 0 - none
+	gen     int       // press counter: a stop belongs to the press it was scheduled for
+	since   time.Time // when the current press started
 	onError func(error)
 	camera  func() string
 }
 
+const (
+	motorStop     = -1001 // CMD_OFF in the Mi Home plugin
+	motorRepeat   = 200 * time.Millisecond
+	motorLongHold = 800 * time.Millisecond
+)
+
 func newMover(camera func() string, onError func(error)) *mover {
-	m := &mover{ops: make(chan int, 4), camera: camera, onError: onError}
-	go m.worker()
-	return m
+	return &mover{camera: camera, onError: onError}
 }
 
-func (m *mover) worker() {
-	for op := range m.ops {
+func (m *mover) send(op int) {
+	if err := motor(m.camera(), op); err != nil && m.onError != nil {
+		m.onError(err)
+	}
+}
+
+// press starts moving in the direction (button down / key down / drag).
+func (m *mover) press(op int) {
+	m.mu.Lock()
+	if m.held == op {
+		m.mu.Unlock()
+		return
+	}
+	m.gen++
+	gen := m.gen
+	m.held, m.since = op, time.Now()
+	m.mu.Unlock()
+
+	go func() {
 		for {
-			if err := motor(m.camera(), op); err != nil {
-				m.onError(err)
-				break
-			}
-			// continue while the button is still held
-			if m.held.Load() != int32(op) {
-				break
+			m.send(op)
+			time.Sleep(motorRepeat)
+			m.mu.Lock()
+			still := m.gen == gen && m.held == op
+			m.mu.Unlock()
+			if !still {
+				return
 			}
 		}
-	}
+	}()
 }
 
-// step queues one step, extra steps are dropped while the queue is full
-func (m *mover) step(op int) {
-	select {
-	case m.ops <- op:
-	default:
-	}
-}
-
-func (m *mover) press(op int) {
-	m.held.Store(int32(op))
-	m.step(op)
-}
-
+// release stops the movement (button up / key up / end of drag).
 func (m *mover) release() {
-	m.held.Store(0)
+	m.mu.Lock()
+	if m.held == 0 {
+		m.mu.Unlock()
+		return
+	}
+	gen := m.gen
+	delay := motorRepeat // short click: let it move a bit
+	if time.Since(m.since) > motorLongHold {
+		delay = 0
+	}
+	m.held = 0
+	m.mu.Unlock()
+
+	time.AfterFunc(delay, func() {
+		m.mu.Lock()
+		current := m.gen == gen && m.held == 0 // not pressed again meanwhile
+		m.mu.Unlock()
+		if current {
+			m.send(motorStop)
+		}
+	})
+}
+
+// pulse moves in the direction for d, then stops (API, MCP).
+func (m *mover) pulse(op int, d time.Duration) {
+	m.press(op)
+	time.Sleep(d)
+	m.mu.Lock()
+	m.since = time.Now().Add(-time.Hour) // stop right away
+	m.mu.Unlock()
+	m.release()
 }
 
 // holdButton - button that reports press and release (moves the camera while held)

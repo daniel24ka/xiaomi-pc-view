@@ -67,7 +67,7 @@ func runMCP() error {
 	type moveArgs struct {
 		cameraArg
 		Direction string `json:"direction" jsonschema:"left, right, up or down"`
-		Steps     int    `json:"steps,omitempty" jsonschema:"number of motor steps, one step is about 1-2 degrees; default 10, max 100"`
+		Steps     int    `json:"steps,omitempty" jsonschema:"how long to move, in steps of 0.1 s (10 = 1 s); default 10, max 100"`
 	}
 	mcp.AddTool(server, &mcp.Tool{Name: "move_camera", Description: "Pan/tilt the camera."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in moveArgs) (*mcp.CallToolResult, any, error) {

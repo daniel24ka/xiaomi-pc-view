@@ -161,7 +161,7 @@ default is the first camera.
 | `list_cameras` | – | camera names and models |
 | `get_snapshot` | `width` (default 1280, max 2560) | live JPEG image (returned to the model as an image) |
 | `get_camera_state` | – | zoom, spotlight on/off and brightness, siren |
-| `move_camera` | `direction` (`left`/`right`/`up`/`down`), `steps` (default 10, max 100; 1 step ≈ 1–2°) | pan/tilt |
+| `move_camera` | `direction` (`left`/`right`/`up`/`down`), `steps` (default 10, max 100; 1 step = 0.1 s of movement) | pan/tilt |
 | `set_zoom` | `zoom` (1.0–9.0) | camera zoom |
 | `set_spotlight` | `on` (bool), `brightness` (0–100) | spotlight |
 | `set_siren` | `on` (bool) | alarm siren |
@@ -184,7 +184,7 @@ camera. Errors return a non-200 status with a text message.
 | GET | `/api/xiaomi-cam/cameras` | – | `[{"name": "...", "model": "..."}]` |
 | GET | `/api/xiaomi-cam/snapshot` | `width` (optional) | `image/jpeg` of live video |
 | GET | `/api/xiaomi-cam/state` | – | `{"zoom", "spotlight", "spotlight_brightness", "siren"}` |
-| POST | `/api/xiaomi-cam/move` | `direction` = `left`/`right`/`up`/`down`, `steps` (1–100) | `{"moved", "steps"}` |
+| POST | `/api/xiaomi-cam/move` | `direction` = `left`/`right`/`up`/`down`, `steps` (1–100, 1 step = 0.1 s of movement) | `{"moved", "steps"}` |
 | POST | `/api/xiaomi-cam/zoom` | `value` (1.0–9.0) | `{"zoom"}` |
 | POST | `/api/xiaomi-cam/spotlight` | `on` (`true`/`false`), `brightness` (0–100) | `{"ok": true}` |
 | POST | `/api/xiaomi-cam/siren` | `on` (`true`/`false`) | `{"siren"}` |
