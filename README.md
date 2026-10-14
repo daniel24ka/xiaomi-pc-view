@@ -32,6 +32,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - **System tray**: closing or minimizing the window hides the app and stops streaming.
 - Window size and position are remembered, separately with and without the frame.
 - Only one instance runs; starting the app again shows the window that is already open.
+- **AI tasks**: Claude or OpenAI checks the camera picture on a schedule (CRON) for what you
+  describe in a prompt, and sends a system notification when it is detected.
 - Polish / English UI.
 - Mi Home login with captcha and 2FA code support.
 
@@ -78,6 +80,27 @@ make install        # builds and installs to ~/.local
 | `F`, `F11`, double click | full screen |
 | `S` | snapshot |
 | red dot button | start / stop recording |
+
+## AI tasks (Settings → AI)
+
+Let an AI model watch the camera for you. Add your **Claude** (Anthropic) and/or **OpenAI**
+API key in *Settings → AI*. Then add tasks:
+
+- **Prompt**: what to look for, e.g. *"Is there a delivery van at the gate?"* or *"Is there a
+  person on the property?"*.
+- **Schedule**: every 1/5/15/30 minutes, every hour, or a custom **CRON** expression
+  (`minute hour day month weekday`, e.g. `*/10 7-22 * * *` = every 10 min from 7:00 to 22:59).
+- **Model**: Claude (default `claude-opus-5-5`) or OpenAI (default `gpt-5-mini`); the model
+  names can be changed in the settings.
+- **When detected**: system notification and/or save a full resolution snapshot. More action
+  types can be added later. *Don't repeat for N minutes* prevents repeated notifications.
+- Each task can be switched on/off, run immediately (▶) to test it, edited or removed. The
+  list shows the time and result of the last check.
+
+Every check takes a snapshot (1280 px) and sends one request with the picture to the chosen
+model, which answers `{"detected": true/false, "description": "..."}`. Mind the API cost for
+frequent schedules. Tasks run while the app is running, also hidden in the tray. The keys and
+tasks are stored in `~/.config/xiaomi-cam-viewer/ai.json` (mode 600).
 
 ## AI control (MCP)
 

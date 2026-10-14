@@ -70,9 +70,10 @@ type ui struct {
 
 	hist         history // SD card playback
 	recButton    *ptrButton
-	gotFrame     bool // first frame of the current playback arrived
-	decodeW      int  // width the video is decoded to (tier, see decodeSize)
-	decodeStable int  // seconds the window has needed another decode size
+	ai           *aiEngine // AI tasks (Settings → AI)
+	gotFrame     bool      // first frame of the current playback arrived
+	decodeW      int       // width the video is decoded to (tier, see decodeSize)
+	decodeStable int       // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -146,6 +147,9 @@ func main() {
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
 	onRecordingChanged = func(string) { fyne.Do(u.updateRecordButton) }
+	u.ai = newAIEngine(aiActions{notify: func(title, text string) {
+		a.SendNotification(fyne.NewNotification(title, text))
+	}})
 	initHTTPAPI(func(name string, z float64) {
 		fyne.Do(func() {
 			if name == u.camera.Selected {

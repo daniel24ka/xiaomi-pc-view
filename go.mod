@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	fyne.io/fyne/v2 v2.8.2
+	github.com/anthropics/anthropic-sdk-go v1.80.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/expr-lang/expr v1.17.7
 	github.com/go-gl/glfw/v3.4/glfw v0.1.0-pre.2
@@ -21,6 +22,7 @@ require (
 	github.com/pion/srtp/v3 v3.0.10
 	github.com/pion/stun/v3 v3.1.1
 	github.com/pion/webrtc/v4 v4.2.3
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
 	github.com/sigurn/crc16 v0.0.0-20240131213347-83fcde1e29d1
 	github.com/sigurn/crc8 v0.0.0-20220107193325-2243fe600f9f
@@ -36,6 +38,8 @@ require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -50,12 +54,14 @@ require (
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
+	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.5.1 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pion/datachannel v1.6.0 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect
@@ -69,9 +75,15 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
+	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
+	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect

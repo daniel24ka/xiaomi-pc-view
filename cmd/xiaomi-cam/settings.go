@@ -41,8 +41,13 @@ func (u *ui) showSettings() {
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),
 	)
-	d := dialog.NewCustom(T("Ustawienia"), T("Zamknij"), form, u.win)
-	d.Resize(fyne.NewSize(640, 0))
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon(T("Ogólne"), theme.SettingsIcon(), container.NewVBox(form)),
+		container.NewTabItemWithIcon("AI", theme.ComputerIcon(), u.aiSettings()),
+	)
+	d := dialog.NewCustom(T("Ustawienia"), T("Zamknij"), tabs, u.win)
+	d.SetOnClosed(func() { u.ai.onChange = nil })
+	d.Resize(fyne.NewSize(860, 640))
 	d.Show()
 }
 
