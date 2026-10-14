@@ -14,6 +14,8 @@ import (
 )
 
 var schedulePresets = []struct{ name, spec string }{
+	{"Co 10 sekund", "@every 10s"},
+	{"Co 30 sekund", "@every 30s"},
 	{"Co minutę", "@every 1m"},
 	{"Co 5 minut", "@every 5m"},
 	{"Co 15 minut", "@every 15m"},
@@ -207,7 +209,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 	}
 	cronEntry.SetText(task.Schedule)
 	preset.SetSelectedIndex(selected)
-	cronHelp := widget.NewLabel(T("CRON: minuta godzina dzień miesiąc dzień-tygodnia, np. „*/10 7-22 * * *” – co 10 min od 7 do 22. Każde sprawdzenie to jedno zapytanie do AI ze zdjęciem (koszt)."))
+	cronHelp := widget.NewLabel(T("CRON: minuta godzina dzień miesiąc dzień-tygodnia, np. „*/10 7-22 * * *” – co 10 min od 7 do 22, albo odstęp: „@every 20s”, „@every 2m”. Każde sprawdzenie to jedno płatne zapytanie do AI ze zdjęciem – co 10 s to ok. 8600 zapytań na dobę."))
 	cronHelp.Wrapping = fyne.TextWrapWord
 	cronHelp.Importance = widget.LowImportance
 

@@ -88,8 +88,11 @@ API key in *Settings → AI*. Then add tasks:
 
 - **Prompt**: what to look for, e.g. *"Is there a delivery van at the gate?"* or *"Is there a
   person on the property?"*.
-- **Schedule**: every 1/5/15/30 minutes, every hour, or a custom **CRON** expression
-  (`minute hour day month weekday`, e.g. `*/10 7-22 * * *` = every 10 min from 7:00 to 22:59).
+- **Schedule**: every 10/30 seconds, every 1/5/15/30 minutes, every hour, or custom: a
+  **CRON** expression (`minute hour day month weekday`, e.g. `*/10 7-22 * * *` = every 10 min
+  from 7:00 to 22:59) or an interval (`@every 20s`, `@every 2m`). A check that is still running
+  is not started again. For frequent checks the camera session stays open (closed a minute
+  after the last check). Every 10 s is about 8600 paid requests a day.
 - **Model**: Claude (default `claude-opus-5-5`) or OpenAI (default `gpt-5-mini`); the model
   names can be changed in the settings.
 - **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as

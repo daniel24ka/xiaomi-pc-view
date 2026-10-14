@@ -399,6 +399,11 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, []byte, error) 
 	if camera == "" {
 		return false, "", nil, errors.New("no camera")
 	}
+	// keep the camera session open between frequent checks (closed a minute after the last one),
+	// otherwise every check connects to the camera again (2-4 s)
+	if err := ensureSession(camera); err != nil {
+		return false, "", nil, err
+	}
 	width := 1280
 	if t.FullRes {
 		width = 0 // full camera resolution
