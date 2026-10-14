@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/go-gl/glfw/v3.4/glfw"
 )
 
 // devHook runs a self-test (devtest.go, build with -tags devtest)
@@ -95,7 +96,8 @@ func main() {
 	u.build()
 	u.setupTray()
 	onShowRequest(func() { fyne.Do(u.show) })
-	a.Lifecycle().SetOnStopped(u.player.stop) // no frames to the UI after it stopped
+	a.Lifecycle().SetOnStarted(func() { onMinimize(u.win, u.hide) }) // minimize = hide to tray
+	a.Lifecycle().SetOnStopped(u.player.stop)                        // no frames to the UI after it stopped
 
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
@@ -238,7 +240,8 @@ func (u *ui) build() {
 	u.bars = []fyne.CanvasObject{top, bottom}
 	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
 	// button lies on the picture, on a translucent background
-	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}), exitBtn)
+	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}),
+		container.NewHBox(newMoveHandle(u.win), exitBtn))
 	u.exitView = container.NewVBox(container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
 		container.NewHBox(layout.NewSpacer(), exitBox))) // 10 px from top and right edge
 	u.exitView.Hide()
@@ -312,6 +315,9 @@ func (u *ui) hide() {
 func (u *ui) show() {
 	u.visible = true
 	u.win.Show()
+	if win := glfwWindow(u.win); win != nil && win.GetAttrib(glfw.Iconified) == glfw.True {
+		win.Restore() // it was minimized to tray
+	}
 	u.win.RequestFocus()
 	u.restart()
 }

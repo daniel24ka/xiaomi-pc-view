@@ -7,6 +7,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/go-gl/glfw/v3.4/glfw"
 )
@@ -85,25 +86,69 @@ func (b *holdButton) MouseOut() {
 	b.onRelease()
 }
 
-// setDecorated shows or hides the window frame (title bar and borders).
-// Fyne has no API for it, so the GLFW window is taken from Fyne's window
-// (private field "viewport"); must be called on the main thread (fyne.Do / UI events).
-func setDecorated(w fyne.Window, on bool) {
+// glfwWindow returns the GLFW window of a Fyne window. Fyne has no API for window
+// frame, position and minimize events, so it is taken from the private field "viewport".
+// GLFW calls must be done on the main thread (fyne.Do / UI events).
+func glfwWindow(w fyne.Window) *glfw.Window {
 	v := reflect.ValueOf(w)
 	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
-		return
+		return nil
 	}
 	f := v.Elem().FieldByName("viewport")
 	if !f.IsValid() || f.Type() != reflect.TypeOf((*glfw.Window)(nil)) || f.IsNil() {
-		return
+		return nil
 	}
-	win := (*glfw.Window)(unsafe.Pointer(f.Pointer()))
-	attr := glfw.False
-	if on {
-		attr = glfw.True
-	}
-	win.SetAttrib(glfw.Decorated, attr)
+	return (*glfw.Window)(unsafe.Pointer(f.Pointer()))
 }
+
+// setDecorated shows or hides the window frame (title bar and borders).
+func setDecorated(w fyne.Window, on bool) {
+	if win := glfwWindow(w); win != nil {
+		attr := glfw.False
+		if on {
+			attr = glfw.True
+		}
+		win.SetAttrib(glfw.Decorated, attr)
+	}
+}
+
+// onMinimize calls f when the window is minimized.
+func onMinimize(w fyne.Window, f func()) {
+	if win := glfwWindow(w); win != nil {
+		win.SetIconifyCallback(func(_ *glfw.Window, iconified bool) {
+			if iconified {
+				f()
+			}
+		})
+	}
+}
+
+// moveHandle - drag it to move the window (the window has no title bar in video-only mode)
+type moveHandle struct {
+	widget.Button
+	win fyne.Window
+}
+
+func newMoveHandle(win fyne.Window) *moveHandle {
+	h := &moveHandle{win: win}
+	h.Icon = moveIcon
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+func (*moveHandle) Cursor() desktop.Cursor { return desktop.PointerCursor }
+
+func (h *moveHandle) Dragged(e *fyne.DragEvent) {
+	if win := glfwWindow(h.win); win != nil {
+		scale := h.win.Canvas().Scale()
+		x, y := win.GetPos()
+		win.SetPos(x+int(e.Dragged.DX*scale), y+int(e.Dragged.DY*scale))
+	}
+}
+
+func (*moveHandle) DragEnd() {}
+
+var moveIcon = theme.NewThemedResource(fyne.NewStaticResource("move.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2l3.5 3.5h-2.5v5.5h5.5v-2.5l3.5 3.5-3.5 3.5v-2.5h-5.5v5.5h2.5l-3.5 3.5-3.5-3.5h2.5v-5.5h-5.5v2.5l-3.5-3.5 3.5-3.5v2.5h5.5v-5.5h-2.5z"/></svg>`)))
 
 // Clickable widgets with the pointer (hand) cursor on hover; Fyne uses the default arrow.
 
