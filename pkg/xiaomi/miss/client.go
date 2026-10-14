@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/AlexxIT/go2rtc/pkg/tutk"
@@ -55,7 +56,15 @@ func NewClient(rawURL string) (*Client, error) {
 	var conn Conn
 	switch s := query.Get("vendor"); s {
 	case "cs2":
-		conn, err = cs2.Dial(u.Host, query.Get("transport"))
+		if query.Get("p2p") == "server" {
+			var servers []string
+			if s := query.Get("servers"); s != "" {
+				servers = strings.Split(s, ",")
+			}
+			conn, err = cs2.DialServer(query.Get("uid"), servers)
+		} else {
+			conn, err = cs2.Dial(u.Host, query.Get("transport"))
+		}
 	case "tutk":
 		conn, err = tutk.Dial(u.Host, query.Get("uid"), "Miss", "client")
 	default:
@@ -186,6 +195,14 @@ func (c *Client) StartMedia(channel, quality, audio string) error {
 	} else {
 		data = fmt.Appendf(data, `{"videoquality":-1,"videoquality2":%s,"enableaudio":%s}`, quality, audio)
 	}
+	return c.WriteCommand(data)
+}
+
+// Motor moves a pan/tilt camera one step, the same way the Mi Home app does:
+// operation 1 - left, 2 - right, 3 - up, 4 - down.
+func (c *Client) Motor(operation int) error {
+	data := binary.BigEndian.AppendUint32(nil, cmdMotorReq)
+	data = fmt.Appendf(data, `{"operation":%d}`, operation)
 	return c.WriteCommand(data)
 }
 

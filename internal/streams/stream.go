@@ -61,6 +61,21 @@ func (s *Stream) SetSource(source string) {
 	}
 }
 
+// Conns returns connected producers of the stream.
+func (s *Stream) Conns() []core.Producer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var conns []core.Producer
+	for _, producer := range s.producers {
+		producer.mu.Lock()
+		if producer.conn != nil {
+			conns = append(conns, producer.conn)
+		}
+		producer.mu.Unlock()
+	}
+	return conns
+}
+
 func (s *Stream) RemoveConsumer(cons core.Consumer) {
 	_ = cons.Stop()
 

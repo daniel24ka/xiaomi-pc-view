@@ -19,7 +19,10 @@ func Dial(host, transport string) (*Conn, error) {
 	}
 
 	_, isTCP := conn.(*tcpConn)
+	return newConn(conn, isTCP), nil
+}
 
+func newConn(conn net.Conn, isTCP bool) *Conn {
 	c := &Conn{
 		Conn:  conn,
 		isTCP: isTCP,
@@ -28,7 +31,7 @@ func Dial(host, transport string) (*Conn, error) {
 		},
 	}
 	go c.worker()
-	return c, nil
+	return c
 }
 
 type Conn struct {
@@ -58,6 +61,7 @@ const (
 	msgPing      = 0xE0
 	msgPong      = 0xE1
 	msgClose     = 0xF1
+	msgDevClose  = 0xF0 // PPPP MSG_CLOSE, sent by the camera (and the app) when a session ends
 )
 
 func handshake(host, transport string) (net.Conn, error) {
@@ -103,6 +107,17 @@ func handshake(host, transport string) (net.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+// Close tells the camera that the session is over, so it accepts a new one right away
+// (cameras allow only one session and otherwise wait for a timeout).
+func (c *Conn) Close() error {
+	if !c.isTCP {
+		for i := 0; i < 3; i++ {
+			_, _ = c.Conn.Write([]byte{magic, msgDevClose, 0, 0})
+		}
+	}
+	return c.Conn.Close()
 }
 
 func (c *Conn) worker() {
@@ -160,9 +175,13 @@ func (c *Conn) worker() {
 				return
 			}
 
+		case msgDevClose:
+			c.err = fmt.Errorf("%s: closed by camera", "cs2")
+			return
+
 		case msgPing:
 			_, _ = c.Conn.Write([]byte{magic, msgPong, 0, 0})
-		case msgPong, msgP2PRdyUDP, msgP2PRdyTCP, msgClose: // skip it
+		case msgPong, msgPunchPkt, msgP2PRdyUDP, msgP2PRdyTCP, msgClose: // skip it
 		case msgDrwAck: // only for UDP
 			if c.cmdAck != nil {
 				c.cmdAck()

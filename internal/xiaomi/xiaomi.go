@@ -186,7 +186,8 @@ func getMissURL(url *url.URL) (string, error) {
 	query.Set("sign", v.Sign)
 	query.Set("vendor", getVendorName(v.Vendor.ID))
 
-	if v.Vendor.ID == 1 {
+	// uid is used by tutk and by cs2 connection via servers (p2p=server)
+	if v.Vendor.Params.UID != "" {
 		query.Set("uid", v.Vendor.Params.UID)
 	}
 
@@ -348,4 +349,36 @@ func GetBaseURL(region string) string {
 		return "https://" + region + ".api.io.mi.com/app"
 	}
 	return "https://api.io.mi.com/app"
+}
+
+// Motorer is a source that can move its camera one pan/tilt step.
+type Motorer interface {
+	Motor(operation int) error
+}
+
+// Motor moves the camera behind stream `name` one step (1 left, 2 right, 3 up, 4 down).
+// It uses the session the stream already holds, so the stream must be running.
+func Motor(name string, operation int) error {
+	stream := streams.Get(name)
+	if stream == nil {
+		return fmt.Errorf("xiaomi: motor: no stream %q", name)
+	}
+	for _, conn := range stream.Conns() {
+		if m, ok := conn.(Motorer); ok {
+			return m.Motor(operation)
+		}
+	}
+	return errors.New("xiaomi: motor: camera is not connected")
+}
+
+// CloudRequest calls Mi Home cloud API with the account from xiaomi:// source URL.
+func CloudRequest(rawURL, apiURL, params string) ([]byte, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.User == nil {
+		return nil, errors.New("xiaomi: source without account")
+	}
+	return cloudUserRequest(u.User, apiURL, params)
 }
