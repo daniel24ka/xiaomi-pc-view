@@ -136,7 +136,12 @@ func main() {
 		}
 	}()
 	a.Lifecycle().SetOnStarted(func() {
-		onMinimize(u.win, u.hide) // minimize = hide to tray
+		onMinimize(u.win, u.hide)     // minimize = hide to tray
+		onCursorLeave(u.win, func() { // the mouse left the window: hide the video-only buttons soon
+			if u.viewOnly {
+				u.hideOverlayAfter(time.Second)
+			}
+		})
 		u.restoreGeometry(geomFramed)
 	})
 	a.Lifecycle().SetOnStopped(func() {
@@ -632,10 +637,15 @@ func (u *ui) showExitButton() {
 		return
 	}
 	u.exitView.Show()
+	u.hideOverlayAfter(3 * time.Second) // no mouse movement inside the window
+}
+
+// hideOverlayAfter hides the video-only buttons after d (restarted on every call).
+func (u *ui) hideOverlayAfter(d time.Duration) {
 	if u.hideTimer != nil {
 		u.hideTimer.Stop()
 	}
-	u.hideTimer = time.AfterFunc(3*time.Second, func() {
+	u.hideTimer = time.AfterFunc(d, func() {
 		fyne.Do(func() { u.exitView.Hide() })
 	})
 }

@@ -124,6 +124,18 @@ func onMinimize(w fyne.Window, f func()) {
 	}
 }
 
+// onCursorLeave calls f when the mouse cursor leaves the window (GLFW cursor enter
+// callback, not used by Fyne).
+func onCursorLeave(w fyne.Window, f func()) {
+	if win := glfwWindow(w); win != nil {
+		win.SetCursorEnterCallback(func(_ *glfw.Window, entered bool) {
+			if !entered {
+				f()
+			}
+		})
+	}
+}
+
 // moveHandle - drag it to move the window (the window has no title bar in video-only mode)
 type moveHandle struct {
 	widget.Button
