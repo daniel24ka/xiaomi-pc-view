@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.16.0`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.17.0`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.16.0 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.17.0 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
