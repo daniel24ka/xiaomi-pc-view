@@ -58,6 +58,14 @@ type ui struct {
 	activity   *spinner // spinner next to the status line: an action in progress
 	busyCount  int      // actions in progress (busy.go)
 	snapButton *ptrButton
+	picWait    *pictureWait // sound on/off: waiting for the new decoder's picture
+	night      *ptrSelect   // night vision mode
+	// wallpaper mode (wallpaper.go)
+	wallpaper     bool
+	remapping     bool // the window is being re-mapped with another window type
+	wallpaperItem *fyne.MenuItem
+	trayMenu      *fyne.Menu
+	capNight      fyne.CanvasObject
 	// "run now" buttons of AI tasks being checked (Settings)
 	aiRunButtons []*ptrButton
 
@@ -160,6 +168,9 @@ func main() {
 			}
 		})
 		u.restoreGeometry(geomFramed)
+		if a.Preferences().Bool(prefWallpaper) {
+			time.AfterFunc(time.Second, func() { fyne.Do(func() { u.setWallpaper(true) }) })
+		}
 	})
 	a.Lifecycle().SetOnStopped(func() {
 		u.player.stop() // no frames to the UI after it stopped
@@ -237,6 +248,7 @@ func (u *ui) build() {
 			}
 			u.historyFrame()
 			u.video.setFrame(img)
+			u.pictureShown(&u.player, gen)
 		})
 	}
 	u.player.onStatus = func(s string) {
@@ -347,9 +359,27 @@ func (u *ui) build() {
 			}
 		}, u.win)
 	})
+	var nightNames []string
+	for _, m := range nightModes {
+		nightNames = append(nightNames, T(m.name))
+	}
+	u.night = newSelect(nightNames, func(string) {
+		u.win.Canvas().Unfocus()
+		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 {
+			u.setProp(propNightShot, nightModes[i].value, u.night)
+		}
+	})
+	u.night.PlaceHolder = T("Tryb nocny")
+	u.night.tip = T("Tryb nocny: podczerwień (czarno-biały obraz) lub kolor z reflektorem; auto przełącza o zmroku")
+	u.capNight = container.NewHBox(widget.NewIcon(moonIcon), container.NewGridWrap(fyne.NewSize(230, u.night.MinSize().Height), u.night))
 	u.sound = newCheck(T("Dźwięk"), func(bool) {
 		u.win.Canvas().Unfocus()
 		if !u.syncing {
+			p := &u.player
+			if t := u.tileOf(u.camera.Selected); u.grid && t != nil {
+				p = &t.player
+			}
+			u.busyUntilNewPicture(p, u.sound)
 			u.refresh()
 		}
 	})
@@ -378,7 +408,7 @@ func (u *ui) build() {
 		u.capZoom,
 		widget.NewSeparator(),
 		u.capLight,
-		u.siren, u.sound,
+		u.siren, u.capNight, u.sound,
 		widget.NewSeparator(),
 		u.activity,
 		u.status,
@@ -497,14 +527,22 @@ func (u *ui) setupTray() {
 	}
 	show := fyne.NewMenuItem(T("Pokaż"), u.show)
 	hide := fyne.NewMenuItem(T("Ukryj do zasobnika"), u.hide)
+	u.wallpaperItem = fyne.NewMenuItem(T("Tryb tapety (obraz w tle pulpitu)"), func() { u.setWallpaper(!u.wallpaper) })
 	quit := fyne.NewMenuItem(T("Zakończ"), u.app.Quit)
 	quit.IsQuit = true
-	desk.SetSystemTrayMenu(fyne.NewMenu("Xiaomi Cam", show, hide, fyne.NewMenuItemSeparator(), quit))
+	u.trayMenu = fyne.NewMenu("Xiaomi Cam", show, hide, u.wallpaperItem, fyne.NewMenuItemSeparator(), quit)
+	desk.SetSystemTrayMenu(u.trayMenu)
 	desk.SetSystemTrayIcon(appIcon)
 }
 
 // hide closes the window to tray and stops video, so the camera is not streaming in the background.
 func (u *ui) hide() {
+	if u.remapping {
+		return // not a minimize: the wallpaper mode re-maps the window
+	}
+	if u.wallpaper {
+		u.leaveWallpaperHidden()
+	}
 	u.saveGeometry()
 	u.visible = false
 	u.win.Hide()
@@ -513,6 +551,10 @@ func (u *ui) hide() {
 }
 
 func (u *ui) show() {
+	if u.wallpaper {
+		u.setWallpaper(false) // "Show" brings the normal window back
+		return
+	}
 	u.visible = true
 	u.win.Show()
 	u.restoreGeometry(u.geometryKey()) // the WM may place a re-shown window elsewhere
@@ -627,7 +669,7 @@ func (u *ui) loadCameraState() {
 		return // not a Xiaomi camera: no state to read
 	}
 	name := u.camera.Selected
-	props, err := getProps(name, propLight, propBrightness, propSiren)
+	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 	if err != nil {
 		fyne.Do(func() { u.status.SetText("Nie udało się odczytać stanu kamery: " + err.Error()) })
 		return
@@ -646,6 +688,11 @@ func (u *ui) loadCameraState() {
 			case p.Siid == propSiren.Siid && p.Piid == propSiren.Piid:
 				on, _ := p.Value.(bool)
 				u.siren.SetChecked(on)
+			case p.Siid == propNightShot.Siid && p.Piid == propNightShot.Piid && p.Code == 0:
+				v, _ := p.Value.(float64)
+				if i := nightModeByValue(int(v)); i >= 0 {
+					u.night.SetSelectedIndex(i)
+				}
 			}
 		}
 	})

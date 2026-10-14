@@ -20,3 +20,5 @@ var cameraIcon = theme.NewThemedResource(fyne.NewStaticResource("cameras.svg", [
 
 // recordIcon - red dot "record" button
 var recordIcon = fyne.NewStaticResource("record.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#e53935"/></svg>`))
+
+var moonIcon = theme.NewThemedResource(fyne.NewStaticResource("moon.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.3 2a10 10 0 1 0 9.7 12.4A8 8 0 0 1 12.3 2z"/></svg>`)))

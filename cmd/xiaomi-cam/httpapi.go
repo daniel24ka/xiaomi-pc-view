@@ -23,11 +23,12 @@ import (
 //
 //	GET  /api/xiaomi-cam/cameras
 //	GET  /api/xiaomi-cam/snapshot?width=1280          image/jpeg
-//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, zoom
+//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, night mode, zoom
 //	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step = 0.1 s of movement
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
+//	POST /api/xiaomi-cam/night-mode?mode=auto         auto/auto-color/smart-color/on/color/off
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
 //	POST /api/xiaomi-cam/record/start?duration=60&mode=each&cameras=a,b  MP4 (H.265); mode: selected/each/grid
 //	POST /api/xiaomi-cam/record/stop                 stops all recordings
@@ -86,7 +87,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	})
 
 	handle("state", "GET", func(r *http.Request, name string) (any, error) {
-		props, err := getProps(name, propLight, propBrightness, propSiren)
+		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 		if err != nil {
 			return nil, err
 		}
@@ -99,6 +100,12 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 				state["spotlight_brightness"] = p.Value
 			case propSiren.Piid:
 				state["siren"] = p.Value
+			case propNightShot.Piid:
+				if v, ok := p.Value.(float64); ok && p.Code == 0 {
+					if i := nightModeByValue(int(v)); i >= 0 {
+						state["night_mode"] = nightModes[i].id
+					}
+				}
 			}
 		}
 		return state, nil
@@ -162,6 +169,17 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 		}
 		return map[string]any{"ok": true}, nil
+	})
+
+	handle("night-mode", "POST", func(r *http.Request, name string) (any, error) {
+		m, err := nightModeByID(r.URL.Query().Get("mode"))
+		if err != nil {
+			return nil, err
+		}
+		if err = setProp(name, propNightShot, m.value); err != nil {
+			return nil, err
+		}
+		return map[string]any{"night_mode": m.id}, nil
 	})
 
 	handle("snapshot/save", "POST", func(r *http.Request, name string) (any, error) {

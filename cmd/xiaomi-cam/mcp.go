@@ -60,7 +60,7 @@ func runMCP() error {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.ImageContent{Data: b, MIMEType: "image/jpeg"}}}, nil, nil
 		})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "get_camera_state", Description: "Get camera state: zoom, spotlight on/off and brightness, siren."},
+	mcp.AddTool(server, &mcp.Tool{Name: "get_camera_state", Description: "Get camera state: zoom, spotlight on/off and brightness, siren, night vision mode."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
 			return apiText("GET", "state", url.Values{"camera": {in.Camera}})
 		})
@@ -102,6 +102,15 @@ func runMCP() error {
 				q.Set("brightness", strconv.Itoa(*in.Brightness))
 			}
 			return apiText("POST", "spotlight", q)
+		})
+
+	type nightArgs struct {
+		cameraArg
+		Mode string `json:"mode" jsonschema:"auto (infrared when dark), auto-color (full color with the spotlight when dark), smart-color (full color when a person is detected), on (always infrared), color (always full color), off"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "set_night_mode", Description: "Set the camera night vision mode: infrared (black and white) or full color with the spotlight."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in nightArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "night-mode", url.Values{"camera": {in.Camera}, "mode": {in.Mode}})
 		})
 
 	type sirenArgs struct {

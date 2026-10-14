@@ -33,7 +33,7 @@ func (u *ui) geometryKey() string {
 // Called every second, on mode change and when hiding to tray.
 func (u *ui) saveGeometry() {
 	win := glfwWindow(u.win)
-	if win == nil || !u.visible || u.win.FullScreen() || win.GetAttrib(glfw.Iconified) == glfw.True {
+	if win == nil || !u.visible || u.wallpaper || u.remapping || u.win.FullScreen() || win.GetAttrib(glfw.Iconified) == glfw.True {
 		return
 	}
 	var g geometry

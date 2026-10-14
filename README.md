@@ -21,6 +21,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   slider in video-only mode.
 - **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
 - **Spotlight** with brightness, and **siren**.
+- **Night mode** (infrared): auto infrared, auto / smart full color (with the spotlight),
+  always infrared, always full color, or off.
 - **Local recording to MP4**: H.265 video copied as it comes from the camera (no
   re-encoding, almost no CPU), AAC audio. Fragmented MP4, so a file stays playable even if
   the app is closed while recording. Recording works with the window hidden.
@@ -52,6 +54,10 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   camera points, notification tests, …) shows a spinner and ignores repeated clicks; a spinner
   next to the status line while the camera is changing a setting (spotlight, siren, zoom), and
   over the picture while connecting to the camera or searching for a recording.
+- **Wallpaper mode** (tray menu): the window stays where it is, with its size and look, but
+  lies under all windows like the desktop background, on all workspaces, and clicks go
+  through it. Remembered after a restart; "Show" in the tray menu brings the normal window
+  back (X11 / XWayland).
 - Polish / English UI.
 - Mi Home login with captcha and 2FA code support.
 

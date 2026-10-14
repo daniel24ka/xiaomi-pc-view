@@ -2,7 +2,7 @@ Package: xiaomi-cam
 Version: @VERSION@
 Architecture: amd64
 Maintainer: genosajd <genosajd@gmail.com>
-Depends: ffmpeg, libc6, libgl1, libx11-6, libwayland-client0
+Depends: ffmpeg, libc6, libgl1, libx11-6, libxext6, libwayland-client0
 Recommends: xdg-user-dirs
 Section: video
 Priority: optional

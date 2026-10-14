@@ -1,10 +1,11 @@
 package main
 
 /*
-#cgo LDFLAGS: -lX11
+#cgo LDFLAGS: -lX11 -lXext
 #include <X11/Xlib.h>
 #include <string.h>
 #include <X11/Xatom.h>
+#include <X11/extensions/shape.h>
 
 // Ask the window manager to move/resize the window (_NET_WM_MOVERESIZE, as GTK does for
 // windows without frame). The WM follows the mouse itself, so it is smooth.
@@ -72,6 +73,31 @@ static int wm_on_current_desktop(void *dpy, unsigned long win) {
 	if (wd < 0 || cd < 0 || wd == 0xFFFFFFFF) return 1;
 	return wd == cd;
 }
+
+// Desktop (wallpaper) window: below all windows, on all workspaces, not in the task bar,
+// and an empty input region, so the mouse goes through it to the desktop. The window
+// type and state are read by the WM when the window is mapped: call while it is unmapped.
+static void wm_set_desktop(void *dpy, unsigned long win, int on) {
+	Display *d = (Display *)dpy;
+	Atom type = XInternAtom(d, on ? "_NET_WM_WINDOW_TYPE_DESKTOP" : "_NET_WM_WINDOW_TYPE_NORMAL", False);
+	XChangeProperty(d, win, XInternAtom(d, "_NET_WM_WINDOW_TYPE", False), XA_ATOM, 32,
+		PropModeReplace, (unsigned char *)&type, 1);
+	Atom state = XInternAtom(d, "_NET_WM_STATE", False);
+	if (on) {
+		Atom s[4] = {
+			XInternAtom(d, "_NET_WM_STATE_BELOW", False),
+			XInternAtom(d, "_NET_WM_STATE_STICKY", False),
+			XInternAtom(d, "_NET_WM_STATE_SKIP_TASKBAR", False),
+			XInternAtom(d, "_NET_WM_STATE_SKIP_PAGER", False),
+		};
+		XChangeProperty(d, win, state, XA_ATOM, 32, PropModeReplace, (unsigned char *)s, 4);
+		XShapeCombineRectangles(d, win, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+	} else {
+		XDeleteProperty(d, win, state);
+		XShapeCombineMask(d, win, ShapeInput, 0, 0, None, ShapeSet); // the whole window again
+	}
+	XSync(d, False);
+}
 */
 import "C"
 
@@ -126,4 +152,19 @@ func wmOnCurrentDesktop(w fyne.Window) bool {
 		return true
 	}
 	return C.wm_on_current_desktop(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window())) != 0
+}
+
+// wmSetDesktop makes the window a desktop (wallpaper) window or a normal one again; false
+// when not possible (not X11). The window must be unmapped (hidden) at the time.
+func wmSetDesktop(w fyne.Window, on bool) bool {
+	win := glfwWindow(w)
+	if win == nil || glfw.GetPlatform() != glfw.PlatformX11 {
+		return false
+	}
+	v := C.int(0)
+	if on {
+		v = 1
+	}
+	C.wm_set_desktop(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()), v)
+	return true
 }

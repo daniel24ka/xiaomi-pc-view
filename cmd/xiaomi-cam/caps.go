@@ -12,10 +12,10 @@ import (
 // known zoom models are listed.
 
 type camCaps struct {
-	PTZ, Zoom, Light, Siren, Points, History bool
+	PTZ, Zoom, Light, Siren, Points, History, NightMode bool
 }
 
-var allCaps = camCaps{true, true, true, true, true, true}
+var allCaps = camCaps{true, true, true, true, true, true, true}
 
 var zoomModels = map[string]bool{
 	"isa.camera.700sa":  true, // Outdoor Camera CW700S (CW400 Pro OverSea)
@@ -35,7 +35,7 @@ func cameraCaps(name string) camCaps {
 	var c camCaps
 	src := cameraSource(name)
 	c.Zoom = zoomModels[sourceParam(src, "model")]
-	props, err := getProps(name, propLight, propSiren, propMotorLocation, propPresets, propSDStatus, propZoom)
+	props, err := getProps(name, propLight, propSiren, propMotorLocation, propPresets, propSDStatus, propZoom, propNightShot)
 	if err != nil {
 		if src == "" {
 			return c // not a Xiaomi camera: no controls
@@ -57,6 +57,8 @@ func cameraCaps(name string) camCaps {
 			c.History = ok
 		case p.Siid == propZoom.Siid && p.Piid == propZoom.Piid:
 			c.Zoom = c.Zoom || ok
+		case p.Siid == propNightShot.Siid && p.Piid == propNightShot.Piid:
+			c.NightMode = ok
 		}
 	}
 	capsCache.Store(name, c)
@@ -100,5 +102,6 @@ func (u *ui) applyCaps() {
 	show(c.Zoom, u.capZoom, u.capOverlayZoom)
 	show(c.Light, u.capLight)
 	show(c.Siren, u.siren)
+	show(c.NightMode, u.capNight)
 	show(c.History, u.hist.button)
 }

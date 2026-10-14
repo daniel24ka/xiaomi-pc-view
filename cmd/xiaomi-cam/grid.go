@@ -46,6 +46,7 @@ func newTile(u *ui, name string) *tile {
 		fyne.Do(func() {
 			if gen == t.player.gen.Load() {
 				t.view.setFrame(img)
+				u.pictureShown(&t.player, gen)
 			}
 		})
 	}

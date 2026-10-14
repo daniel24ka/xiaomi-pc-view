@@ -163,3 +163,37 @@ func (u *ui) busy(b *ptrButton, ws ...fyne.Disableable) (done func()) {
 		}
 	}
 }
+
+// pictureWait - an action in progress until the player shows a picture of a playback
+// started after it (sound on/off restarts the decoder)
+type pictureWait struct {
+	p    *player
+	gen  int64 // generation shown when the action started
+	done func()
+}
+
+// busyUntilNewPicture shows the action in progress, with w disabled, until p shows a
+// frame of a new playback (at most 20 s).
+func (u *ui) busyUntilNewPicture(p *player, w fyne.Disableable) {
+	if u.picWait != nil {
+		u.picWait.done()
+	}
+	pw := &pictureWait{p: p, gen: p.gen.Load(), done: u.busy(nil, w)}
+	u.picWait = pw
+	time.AfterFunc(20*time.Second, func() {
+		fyne.Do(func() {
+			if u.picWait == pw {
+				pw.done()
+				u.picWait = nil
+			}
+		})
+	})
+}
+
+// pictureShown is called for every frame shown (UI thread).
+func (u *ui) pictureShown(p *player, gen int64) {
+	if pw := u.picWait; pw != nil && pw.p == p && gen != pw.gen {
+		pw.done()
+		u.picWait = nil
+	}
+}
