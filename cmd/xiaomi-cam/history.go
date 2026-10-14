@@ -79,7 +79,7 @@ func (u *ui) buildHistory() {
 	)
 	h.bar.Hide()
 
-	h.button = newButton(T("Historia"), theme.HistoryIcon(), func() {
+	h.button = newButton("", theme.HistoryIcon(), func() {
 		if h.on {
 			u.goLive()
 		} else {
@@ -110,8 +110,9 @@ func (u *ui) openHistory() {
 	h := &u.hist
 	h.on = true
 	h.bar.Show()
-	h.button.SetText(T("Na żywo"))
-	h.button.SetIcon(theme.MediaRecordIcon())
+	h.button.SetIcon(theme.MediaRecordIcon()) // "back to live"
+	h.button.Importance = widget.HighImportance
+	h.button.Refresh()
 	u.quality.Disable()
 	u.connection.Disable()
 	u.playHistory(time.Now().Add(-5 * time.Minute))
@@ -147,8 +148,9 @@ func (u *ui) goLive() {
 	}
 	h.on = false
 	h.bar.Hide()
-	h.button.SetText(T("Historia"))
 	h.button.SetIcon(theme.HistoryIcon())
+	h.button.Importance = widget.MediumImportance
+	h.button.Refresh()
 	u.quality.Enable()
 	u.connection.Enable()
 	u.player.stop()

@@ -237,12 +237,14 @@ func (u *ui) build() {
 		widget.NewLabel(T("Jakość:")), u.quality,
 		widget.NewLabel(T("Połączenie:")), u.connection,
 		layout.NewSpacer(),
+		// view: history, snapshot, video only, full screen
 		u.hist.button,
 		newButton("", theme.MediaPhotoIcon(), u.snapshot),
-		newButton(T("Tylko obraz"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
+		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
 		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
-		newButton(T("Dodaj"), theme.ContentAddIcon(), func() { showAddCamera(u.win, u.selectCamera) }),
-		newButton("", theme.DeleteIcon(), u.removeCamera),
+		widget.NewSeparator(),
+		// app: cameras, language, help
+		newButton("", cameraIcon, u.showCameras),
 		u.languageSelect(),
 		newButton("", theme.HelpIcon(), u.showShortcuts),
 	)
@@ -651,29 +653,6 @@ func (u *ui) cameraDrag(dx, dy float32) {
 		u.dragY += dragStep
 		u.mover.step(motorDown)
 	}
-}
-
-func (u *ui) removeCamera() {
-	name := u.camera.Selected
-	if name == "" {
-		return
-	}
-	dialog.ShowConfirm(T("Usuń kamerę"), fmt.Sprintf(T("Usunąć „%s” z aplikacji?"), name), func(ok bool) {
-		if !ok {
-			return
-		}
-		u.player.stop()
-		if err := removeCamera(name); err != nil {
-			dialog.ShowError(err, u.win)
-		}
-		u.camera.Options = cameraNames()
-		u.camera.ClearSelected()
-		if len(u.camera.Options) > 0 {
-			u.camera.SetSelectedIndex(0)
-		} else {
-			u.restart()
-		}
-	}, u.win)
 }
 
 func (u *ui) languageSelect() *ptrSelect {
