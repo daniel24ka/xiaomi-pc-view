@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,7 +44,8 @@ type aiTask struct {
 	Provider string `json:"provider"` // claude / openai
 	Prompt   string `json:"prompt"`
 	Schedule string `json:"schedule"` // CRON (5 fields) or @every 5m, @hourly...
-	FullRes  bool   `json:"full_res"` // send 2560x1440 instead of 1280 px (small details: brands, plates)
+	FullRes  bool   `json:"full_res"`
+	Point    int    `json:"point,omitempty"` // turn the camera to point 1-3 before the check // send 2560x1440 instead of 1280 px (small details: brands, plates)
 
 	// actions when detected
 	Notify       bool `json:"notify"`
@@ -411,6 +413,15 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, []byte, error) 
 	camera := taskCamera(t)
 	if camera == "" {
 		return false, "", nil, errors.New("no camera")
+	}
+	if t.Point > 0 {
+		p, err := findPoint(camera, strconv.Itoa(t.Point))
+		if err != nil {
+			return false, "", nil, err
+		}
+		if err = gotoPresetAndWait(camera, p.Idx); err != nil {
+			return false, "", nil, err
+		}
 	}
 	// keep the camera session open between frequent checks (closed a minute after the last one),
 	// otherwise every check connects to the camera again (2-4 s)

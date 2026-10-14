@@ -214,6 +214,17 @@ func (u *ui) editTask(t *aiTask, done func()) {
 	provider := widget.NewSelect(provNames, nil)
 	provider.SetSelected(providerName(task.Provider))
 
+	pointNames := []string{T("bez zmiany")}
+	for i := 1; i <= presetSlots; i++ {
+		label := fmt.Sprintf(T("Punkt %d"), i)
+		if p := u.points[i-1]; p != nil {
+			label += " – " + p.Label()
+		}
+		pointNames = append(pointNames, label)
+	}
+	point := widget.NewSelect(pointNames, nil)
+	point.SetSelectedIndex(min(max(task.Point, 0), presetSlots))
+
 	prompt := widget.NewMultiLineEntry()
 	prompt.SetText(task.Prompt)
 	prompt.SetPlaceHolder(T("np. Czy przed bramą stoi samochód dostawczy? Czy na posesji jest człowiek?"))
@@ -292,6 +303,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		widget.NewFormItem(T("Nazwa"), name),
 		widget.NewFormItem(T("Kamera"), camera),
 		widget.NewFormItem(T("Model AI"), provider),
+		widget.NewFormItem(T("Ustaw kamerę na"), point),
 		widget.NewFormItem(T("Polecenie (prompt)"), prompt),
 		widget.NewFormItem(T("Zdjęcie"), container.NewVBox(fullRes, fullResHelp)),
 		widget.NewFormItem(T("Harmonogram"), container.NewVBox(preset, cronEntry, cronHelp)),
@@ -319,6 +331,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		task.Provider = providers[max(provider.SelectedIndex(), 0)].id
 		task.Notify, task.SaveSnapshot, task.Record = notify.Checked, saveSnap.Checked, record.Checked
 		task.FullRes = fullRes.Checked
+		task.Point = max(point.SelectedIndex(), 0)
 		task.Email, task.Slack = email.Checked, slack.Checked
 		task.Ntfy, task.Telegram = ntfy.Checked, telegram.Checked
 		task.RecordSec, _ = strconv.Atoi(strings.TrimSpace(recordSec.Text))

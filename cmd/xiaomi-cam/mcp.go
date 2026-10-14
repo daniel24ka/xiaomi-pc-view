@@ -136,6 +136,30 @@ func runMCP() error {
 			return apiText("GET", "record", url.Values{"camera": {in.Camera}})
 		})
 
+	mcp.AddTool(server, &mcp.Tool{Name: "list_points", Description: "List camera points 1-3 (saved positions, e.g. 1 = car, 2 = driveway) with their names."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
+			return apiText("GET", "points", url.Values{"camera": {in.Camera}})
+		})
+
+	type pointArgs struct {
+		cameraArg
+		Point string `json:"point" jsonschema:"point number 1-3 or its name from list_points"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "goto_point", Description: "Turn the camera to a saved point and wait until it stops; then take a snapshot to see it."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in pointArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "points/goto", url.Values{"camera": {in.Camera}, "point": {in.Point}})
+		})
+
+	type savePointArgs struct {
+		cameraArg
+		Point int    `json:"point" jsonschema:"point number 1-3"`
+		Name  string `json:"name,omitempty" jsonschema:"name of the point, e.g. car, driveway"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "save_point", Description: "Save the current camera position (direction and zoom) as point 1-3. Overwrites the point."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in savePointArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "points/save", url.Values{"camera": {in.Camera}, "point": {strconv.Itoa(in.Point)}, "name": {in.Name}})
+		})
+
 	return server.Run(context.Background(), &mcp.StdioTransport{})
 }
 

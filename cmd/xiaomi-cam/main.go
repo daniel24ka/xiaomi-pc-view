@@ -70,10 +70,12 @@ type ui struct {
 
 	hist         history // SD card playback
 	recButton    *ptrButton
-	ai           *aiEngine // AI tasks (Settings → AI)
-	gotFrame     bool      // first frame of the current playback arrived
-	decodeW      int       // width the video is decoded to (tier, see decodeSize)
-	decodeStable int       // seconds the window has needed another decode size
+	ai           *aiEngine            // AI tasks (Settings → AI)
+	points       [presetSlots]*preset // camera points 1-3
+	pointButtons [presetSlots]*ptrButton
+	gotFrame     bool // first frame of the current playback arrived
+	decodeW      int  // width the video is decoded to (tier, see decodeSize)
+	decodeStable int  // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -152,6 +154,7 @@ func main() {
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
 	onRecordingChanged = func(string) { fyne.Do(u.updateRecordButton) }
+	pointsChanged = func() { fyne.Do(u.loadPoints) }
 	u.ai = newAIEngine(aiActions{notify: func(title, text string) {
 		a.SendNotification(fyne.NewNotification(title, text))
 	}})
@@ -231,6 +234,7 @@ func (u *ui) build() {
 			}
 			u.restart()
 			go u.loadCameraState()
+			u.loadPoints()
 		}
 	})
 	var qNames, cNames []string
@@ -318,6 +322,7 @@ func (u *ui) build() {
 		ptz(theme.MoveUpIcon(), motorUp),
 		ptz(theme.MoveDownIcon(), motorDown),
 		ptz(theme.NavigateNextIcon(), motorRight),
+		u.buildPoints(),
 		widget.NewSeparator(),
 		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }),
 		u.zoomLabel,
@@ -409,6 +414,8 @@ func (u *ui) build() {
 			u.zoomBy(-zoomStep)
 		case '0':
 			u.zoomBy(-maxZoom)
+		case '1', '2', '3':
+			u.pointPressed(int(r - '0'))
 		case 'h', 'H':
 			u.setViewOnly(!u.viewOnly)
 		case 'f', 'F':
@@ -423,6 +430,7 @@ func (u *ui) build() {
 		u.camera.SetSelected(names[0])
 		u.syncing = false
 		go u.loadCameraState()
+		u.loadPoints()
 	}
 }
 
@@ -720,6 +728,7 @@ func (u *ui) languageSelect() *ptrSelect {
 		u.setupTray()
 		u.restart()
 		go u.loadCameraState()
+		u.loadPoints()
 	}
 	return sel
 }
@@ -729,6 +738,7 @@ func (u *ui) showShortcuts() {
 Przeciąganie obrazu myszą – obrót kamery
 + / − (także na klawiaturze numerycznej), kółko myszy – zoom kamery (do 9×)
 0 – zoom 1×
+1, 2, 3 – punkty kamery (zapisane pozycje)
 H – tylko obraz (ukrywa panele), prawy przycisk myszy lub Esc – powrót
 F, F11, podwójne kliknięcie – pełny ekran
 S – zdjęcie do ~/Obrazy

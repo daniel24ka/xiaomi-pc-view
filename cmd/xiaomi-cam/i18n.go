@@ -76,6 +76,7 @@ var english = map[string]string{
 Przeciąganie obrazu myszą – obrót kamery
 + / − (także na klawiaturze numerycznej), kółko myszy – zoom kamery (do 9×)
 0 – zoom 1×
+1, 2, 3 – punkty kamery (zapisane pozycje)
 H – tylko obraz (ukrywa panele), prawy przycisk myszy lub Esc – powrót
 F, F11, podwójne kliknięcie – pełny ekran
 S – zdjęcie do ~/Obrazy
@@ -83,6 +84,7 @@ Zamknięcie okna chowa aplikację do zasobnika`: `Arrows – pan/tilt the camera
 Drag the picture with the mouse – pan/tilt
 + / − (also on the numeric keypad), mouse wheel – camera zoom (up to 9×)
 0 – zoom 1×
+1, 2, 3 – camera points (saved positions)
 H – video only (hides panels), right click or Esc – back
 F, F11, double click – full screen
 S – snapshot to ~/Pictures
@@ -196,7 +198,18 @@ Closing the window hides the app to the tray`,
 	"Własny serwer – adres":               "Own server – address",
 	"Własny serwer – klucz":               "Own server – key",
 	"Własny serwer – model":               "Own server – model",
-	"Zapisano ":                           "Saved ",
-	"Zdalne":                              "Remote",
-	"Znaleziono kamer: %d":                "Cameras found: %d",
+	"Obracam do punktu %d (%s)…":          "Turning to point %d (%s)…",
+	"np. auto, podjazd, brama":            "e.g. car, driveway, gate",
+	"Punkt %d – zapisz bieżącą pozycję":   "Point %d – save the current position",
+	"Zapisano punkt %d":                   "Point %d saved",
+	"(pusty)":                             "(empty)",
+	"Punkt %d":                            "Point %d",
+	"Zapisz bieżącą pozycję":              "Save current position",
+	"Ustaw kamerę (strzałki, zoom) i zapisz pozycję jako punkt. Kliknięcie punktu lub klawisz 1–3 obraca kamerę do niego. Punkty są zapisane w kamerze (widoczne też w Mi Home).": "Set the camera (arrows, zoom) and save the position as a point. Clicking a point or key 1–3 turns the camera to it. Points are stored in the camera (also visible in Mi Home).",
+	"Punkty kamery":        "Camera points",
+	"bez zmiany":           "no change",
+	"Ustaw kamerę na":      "Turn camera to",
+	"Zapisano ":            "Saved ",
+	"Zdalne":               "Remote",
+	"Znaleziono kamer: %d": "Cameras found: %d",
 }

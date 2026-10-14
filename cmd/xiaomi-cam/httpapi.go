@@ -31,6 +31,9 @@ import (
 //	POST /api/xiaomi-cam/record/start?duration=60    MP4 (H.265) to the recordings folder
 //	POST /api/xiaomi-cam/record/stop
 //	GET  /api/xiaomi-cam/record                      recording status
+//	GET  /api/xiaomi-cam/points                      camera points 1-3
+//	POST /api/xiaomi-cam/points/goto?point=1         turn to a point (number or name)
+//	POST /api/xiaomi-cam/points/save?point=1&name=auto  save the current position
 func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	handle := func(path, method string, f func(r *http.Request, name string) (any, error)) {
 		api.HandleFunc("api/xiaomi-cam/"+path, func(w http.ResponseWriter, r *http.Request) {
@@ -199,6 +202,45 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			"elapsed_s": int(time.Since(rec.started).Seconds())}, nil
 	})
 
+	handle("points", "GET", func(r *http.Request, name string) (any, error) {
+		list, err := getPresets(name)
+		if err != nil {
+			return nil, err
+		}
+		points := []map[string]any{}
+		for i, p := range presetSlotsOf(list) {
+			item := map[string]any{"point": i + 1, "defined": p != nil}
+			if p != nil {
+				item["name"] = p.Label()
+			}
+			points = append(points, item)
+		}
+		return points, nil
+	})
+
+	handle("points/goto", "POST", func(r *http.Request, name string) (any, error) {
+		p, err := findPoint(name, r.URL.Query().Get("point"))
+		if err != nil {
+			return nil, err
+		}
+		if err = gotoPresetAndWait(name, p.Idx); err != nil {
+			return nil, err
+		}
+		return map[string]any{"point": p.Idx, "name": p.Label()}, nil
+	})
+
+	handle("points/save", "POST", func(r *http.Request, name string) (any, error) {
+		slot, _ := strconv.Atoi(r.URL.Query().Get("point"))
+		label := r.URL.Query().Get("name")
+		if err := savePresetSlot(name, slot, label); err != nil {
+			return nil, err
+		}
+		if pointsChanged != nil {
+			pointsChanged()
+		}
+		return map[string]any{"point": slot, "name": label}, nil
+	})
+
 	handle("siren", "POST", func(r *http.Request, name string) (any, error) {
 		on := r.URL.Query().Get("on")
 		if err := setProp(name, propSiren, on == "true" || on == "1"); err != nil {
@@ -207,6 +249,9 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		return map[string]any{"siren": on == "true" || on == "1"}, nil
 	})
 }
+
+// pointsChanged - points saved through the API (UI refresh)
+var pointsChanged func()
 
 // --- camera zoom state (the camera can be zoomed by the UI and the API)
 

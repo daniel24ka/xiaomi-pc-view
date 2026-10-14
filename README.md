@@ -13,6 +13,9 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - **Remote connection from any network**, like Mi Home, without port forwarding or VPN.
   There is also a local (LAN) mode.
 - **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.
+- **Camera points 1–3**: save the current direction and zoom as a point (e.g. 1 = car,
+  2 = driveway) and turn the camera back to it with one click or key 1–3. Points are stored
+  in the camera, so Mi Home sees them too.
 - **Native camera zoom up to 9×**: the camera zooms itself, so details stay sharp and the
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
@@ -76,6 +79,7 @@ make install        # builds and installs to ~/.local
 | drag the picture | pan/tilt (not in video-only mode) |
 | `+` / `−`, mouse wheel | camera zoom |
 | `0` | zoom 1× |
+| `1`, `2`, `3` | turn to camera point 1–3 |
 | `H` | video-only mode; `Esc` or right click to go back |
 | `F`, `F11`, double click | full screen |
 | `S` | snapshot |
@@ -99,6 +103,8 @@ API key in *Settings → AI*. Then add tasks:
   *Get models*; it must be a vision model (e.g. Qwen2.5-VL, Gemma 3, LLaVA). For LM Studio
   enable *Serve on Local Network* in the server settings; for Ollama set
   `OLLAMA_HOST=0.0.0.0`.
+- **Camera point**: optionally turn the camera to point 1–3 before each check (e.g. look at
+  the car, then ask about it).
 - **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as
   car brands or number plates (the request costs more).
 - **When detected**: system notification, **push to the phone** (ntfy, with the snapshot),
@@ -165,6 +171,9 @@ default is the first camera.
 | `set_zoom` | `zoom` (1.0–9.0) | camera zoom |
 | `set_spotlight` | `on` (bool), `brightness` (0–100) | spotlight |
 | `set_siren` | `on` (bool) | alarm siren |
+| `list_points` | – | camera points 1–3 and their names |
+| `goto_point` | `point` (1–3 or name) | turns the camera to the point and waits until it stops |
+| `save_point` | `point` (1–3), `name` | saves the current position (direction and zoom) as the point |
 | `save_snapshot` | – | saves a 2560×1440 JPEG to the snapshots folder, returns the path |
 | `start_recording` | `duration_seconds` (optional, auto stop) | starts an MP4 recording, returns the path |
 | `stop_recording` | – | finishes the MP4 file, returns the path and duration |
@@ -192,6 +201,9 @@ camera. Errors return a non-200 status with a text message.
 | POST | `/api/xiaomi-cam/record/start` | `duration` (seconds, optional) | `{"recording", "file"}` |
 | POST | `/api/xiaomi-cam/record/stop` | – | `{"recording", "file", "duration_s"}` |
 | GET | `/api/xiaomi-cam/record` | – | `{"recording", "file", "elapsed_s"}` |
+| GET | `/api/xiaomi-cam/points` | – | `[{"point", "defined", "name"}]` |
+| POST | `/api/xiaomi-cam/points/goto` | `point` (1–3 or name) | `{"point", "name"}` after the camera stops |
+| POST | `/api/xiaomi-cam/points/save` | `point` (1–3), `name` | `{"point", "name"}` |
 
 ```sh
 # snapshot
@@ -230,7 +242,8 @@ Other controls:
 
 | Function | How it is done |
 |---|---|
-| Pan/tilt | MISS command `0x112` |
+| Pan/tilt | MISS command `0x112` `{"operation": 1-4}` starts moving, `{"operation": -1001}` stops |
+| Points | MIoT `6.12` current position, `9.1` saved positions, `9.2` turn to a position |
 | Zoom | MISS command `530` `{"value": zoom×10}`, found in the camera's Mi Home plugin |
 | Spotlight, siren | Xiaomi cloud (MIoT properties) |
 | History | MISS `PLAYBACK_REQ` `0x10D` |
