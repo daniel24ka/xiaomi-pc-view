@@ -112,6 +112,7 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 				}
 			})
 			enabled.SetChecked(t.Enabled)
+			enabled.tip = T("Zadanie włączone / wyłączone")
 			title := widget.NewLabelWithStyle(t.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			info := widget.NewLabel(fmt.Sprintf("%s · %s · %s", scheduleName(t.Schedule), providerName(t.Provider), cameraLabel(t.Camera)))
 			info.Importance = widget.LowImportance
@@ -121,8 +122,8 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 				newButton("", theme.MediaPlayIcon(), func() {
 					u.ai.runNow(t.ID)
 					u.status.SetText(fmt.Sprintf(T("Zadanie „%s” uruchomione"), t.Name))
-				}),
-				newButton("", theme.DocumentCreateIcon(), func() { u.editTask(t, refresh) }),
+				}).withTip(T("Uruchom teraz – sprawdzenie testowe")),
+				newButton("", theme.DocumentCreateIcon(), func() { u.editTask(t, refresh) }).withTip(T("Edytuj zadanie")),
 				newButton("", theme.DeleteIcon(), func() {
 					dialog.ShowConfirm(T("Usuń zadanie"), fmt.Sprintf(T("Usunąć zadanie „%s”?"), t.Name), func(ok bool) {
 						if ok {
@@ -132,7 +133,7 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 							refresh()
 						}
 					}, u.win)
-				}),
+				}).withTip(T("Usuń zadanie")),
 			)
 			list.Add(container.NewBorder(nil, nil, enabled, buttons,
 				container.NewVBox(container.NewHBox(title, info), status)))

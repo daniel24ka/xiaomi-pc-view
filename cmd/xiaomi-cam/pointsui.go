@@ -19,10 +19,11 @@ func (u *ui) buildPoints() fyne.CanvasObject {
 	for i := 0; i < presetSlots; i++ {
 		slot := i + 1
 		b := newButton(fmt.Sprint(slot), nil, func() { u.pointPressed(slot) })
+		b.tip = fmt.Sprintf(T("Punkt %d – kliknij, aby obrócić kamerę; pusty: zapisz bieżącą pozycję (klawisz %d)"), slot, slot)
 		u.pointButtons[i] = b
 		box.Add(b)
 	}
-	box.Add(newButton("", theme.SettingsIcon(), u.showPoints))
+	box.Add(newButton("", theme.SettingsIcon(), u.showPoints).withTip(T("Punkty kamery – zapisz bieżącą pozycję, usuń")))
 	return box
 }
 

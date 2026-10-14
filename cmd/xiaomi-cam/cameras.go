@@ -32,8 +32,8 @@ func (u *ui) showCameras() {
 			info.Importance = widget.LowImportance
 			list.Add(container.NewBorder(nil, nil, nil,
 				container.NewHBox(
-					newButton("", theme.DocumentCreateIcon(), func() { u.renameCamera(name, refresh) }),
-					newButton("", theme.DeleteIcon(), func() { u.deleteCamera(name, refresh) }),
+					newButton("", theme.DocumentCreateIcon(), func() { u.renameCamera(name, refresh) }).withTip(T("Zmień nazwę kamery")),
+					newButton("", theme.DeleteIcon(), func() { u.deleteCamera(name, refresh) }).withTip(T("Usuń kamerę z aplikacji")),
 				),
 				container.NewHBox(title, info),
 			))

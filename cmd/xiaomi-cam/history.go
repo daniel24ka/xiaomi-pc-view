@@ -40,7 +40,7 @@ func (u *ui) buildHistory() {
 		}
 	}
 
-	h.slider = newSlider(0, 24*60-1)
+	h.slider = newSlider(0, 24*60-1).withTip(T("Godzina odtwarzania – przeciągnij i puść"))
 	h.label = widget.NewLabel("")
 	h.slider.OnChanged = func(v float64) { h.label.SetText(fmt.Sprintf("%02d:%02d", int(v)/60, int(v)%60)) }
 	h.slider.OnChangeEnded = func(float64) {
@@ -58,6 +58,7 @@ func (u *ui) buildHistory() {
 		}
 	})
 	h.speed.SetSelectedIndex(0)
+	h.speed.tip = T("Prędkość odtwarzania")
 
 	step := func(d time.Duration) func() {
 		return func() { u.playHistory(u.historyTime().Add(d)) }
@@ -66,13 +67,13 @@ func (u *ui) buildHistory() {
 		container.NewHBox(
 			widget.NewLabel(T("Historia:")),
 			container.NewGridWrap(fyne.NewSize(150, 36), h.date),
-			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)),
-			newButton("", theme.MediaSkipPreviousIcon(), step(-time.Minute)),
+			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)).withTip(T("10 minut wstecz")),
+			newButton("", theme.MediaSkipPreviousIcon(), step(-time.Minute)).withTip(T("1 minuta wstecz")),
 		),
 		container.NewHBox(
 			h.label,
-			newButton("", theme.MediaSkipNextIcon(), step(time.Minute)),
-			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)),
+			newButton("", theme.MediaSkipNextIcon(), step(time.Minute)).withTip(T("1 minuta do przodu")),
+			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)).withTip(T("10 minut do przodu")),
 			widget.NewLabel(T("Prędkość:")), h.speed,
 		),
 		h.slider,

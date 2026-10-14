@@ -106,6 +106,7 @@ func (m *mover) pulse(op int, d time.Duration) {
 // holdButton - button that reports press and release (moves the camera while held)
 type holdButton struct {
 	widget.Button
+	tip                string
 	onPress, onRelease func()
 }
 
@@ -127,6 +128,7 @@ func (*holdButton) Cursor() desktop.Cursor        { return desktop.PointerCursor
 func (b *holdButton) MouseOut() {
 	b.Button.MouseOut()
 	b.onRelease()
+	tipOut()
 }
 
 // glfwWindow returns the GLFW window of a Fyne window. Fyne has no API for window
@@ -182,6 +184,7 @@ func onCursorLeave(w fyne.Window, f func()) {
 // moveHandle - drag it to move the window (the window has no title bar in video-only mode)
 type moveHandle struct {
 	widget.Button
+	tip string
 	win fyne.Window
 	wm  bool // moved by the window manager
 }
@@ -221,7 +224,10 @@ var moveIcon = theme.NewThemedResource(fyne.NewStaticResource("move.svg", []byte
 
 // Clickable widgets with the pointer (hand) cursor on hover; Fyne uses the default arrow.
 
-type ptrButton struct{ widget.Button }
+type ptrButton struct {
+	widget.Button
+	tip string // tooltip
+}
 
 func (*ptrButton) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
@@ -232,7 +238,10 @@ func newButton(label string, icon fyne.Resource, tapped func()) *ptrButton {
 	return b
 }
 
-type ptrSelect struct{ widget.Select }
+type ptrSelect struct {
+	widget.Select
+	tip string
+}
 
 func (*ptrSelect) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
@@ -243,7 +252,10 @@ func newSelect(options []string, changed func(string)) *ptrSelect {
 	return s
 }
 
-type ptrCheck struct{ widget.Check }
+type ptrCheck struct {
+	widget.Check
+	tip string
+}
 
 func (*ptrCheck) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
@@ -254,7 +266,10 @@ func newCheck(label string, changed func(bool)) *ptrCheck {
 	return c
 }
 
-type ptrSlider struct{ widget.Slider }
+type ptrSlider struct {
+	widget.Slider
+	tip string
+}
 
 func (*ptrSlider) Cursor() desktop.Cursor { return desktop.PointerCursor }
 

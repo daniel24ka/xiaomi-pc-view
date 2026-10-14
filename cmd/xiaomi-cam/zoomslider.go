@@ -18,6 +18,7 @@ type zoomSlider struct {
 	value          float64
 	onChanged      func(v float64) // while dragging
 	onChangeEnded  func(v float64) // on release / tap
+	tip            string
 }
 
 const (

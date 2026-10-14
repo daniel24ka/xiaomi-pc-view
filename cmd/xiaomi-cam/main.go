@@ -269,6 +269,13 @@ func (u *ui) build() {
 	u.buildHistory()
 	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
 	u.recButton = newButton("", recordIcon, u.toggleRecording)
+	// tooltips of the named controls
+	u.camera.tip = T("Wybór kamery")
+	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD")
+	u.connection.tip = T("Połączenie: zdalne przez serwery Xiaomi (z każdej sieci) lub lokalne w sieci LAN")
+	u.gridButton.tip = T("Siatka wszystkich kamer / jedna kamera")
+	u.recButton.tip = T("Nagrywanie do MP4 – start/stop (tryb i kamery w Ustawieniach)")
+	u.hist.button.tip = T("Historia nagrań z karty SD / powrót na żywo")
 	top := container.NewHBox(
 		widget.NewLabel(T("Kamera:")), u.camera,
 		widget.NewLabel(T("Jakość:")), u.quality,
@@ -278,19 +285,19 @@ func (u *ui) build() {
 		u.gridButton,
 		u.hist.button,
 		u.recButton,
-		newButton("", theme.MediaPhotoIcon(), u.snapshot),
-		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
-		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
+		newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)")),
+		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }).withTip(T("Tylko obraz – ukrywa panele i ramkę okna (H, powrót: Esc)")),
+		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen).withTip(T("Pełny ekran (F, F11, podwójne kliknięcie)")),
 		widget.NewSeparator(),
 		// app: cameras, language, help
-		newButton("", cameraIcon, u.showCameras),
-		newButton("", theme.SettingsIcon(), u.showSettings),
+		newButton("", cameraIcon, u.showCameras).withTip(T("Kamery – dodawanie, zmiana nazwy, usuwanie")),
+		newButton("", theme.SettingsIcon(), u.showSettings).withTip(T("Ustawienia: nagrywanie, foldery, zadania AI, powiadomienia")),
 		u.languageSelect(),
-		newButton("", theme.HelpIcon(), u.showShortcuts),
+		newButton("", theme.HelpIcon(), u.showShortcuts).withTip(T("Skróty klawiaturowe i wersja")),
 	)
 
 	ptz := func(icon fyne.Resource, op int) *holdButton {
-		return newHoldButton(icon, func() { u.mover.press(op) }, u.mover.release)
+		return newHoldButton(icon, func() { u.mover.press(op) }, u.mover.release).withTip(ptzTip(op))
 	}
 	u.light = newCheck(T("Reflektor"), func(on bool) {
 		u.win.Canvas().Unfocus()
@@ -332,6 +339,10 @@ func (u *ui) build() {
 		}
 	})
 
+	u.light.tip = T("Reflektor kamery (białe światło)")
+	u.brightness.tip = T("Jasność reflektora")
+	u.siren.tip = T("Syrena alarmowa kamery (z potwierdzeniem)")
+	u.sound.tip = T("Dźwięk z kamery")
 	bottom := container.NewHBox(
 		ptz(theme.NavigateBackIcon(), motorLeft),
 		ptz(theme.MoveUpIcon(), motorUp),
@@ -339,10 +350,10 @@ func (u *ui) build() {
 		ptz(theme.NavigateNextIcon(), motorRight),
 		u.buildPoints(),
 		widget.NewSeparator(),
-		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }),
+		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }).withTip(T("Oddal – zoom kamery (−, kółko myszy)")),
 		u.zoomLabel,
-		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }),
-		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }),
+		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }).withTip(T("Przybliż – zoom kamery do 9× (+, kółko myszy)")),
+		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }).withTip(T("Zoom 1× (0)")),
 		widget.NewSeparator(),
 		u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness),
 		u.siren, u.sound,
@@ -351,11 +362,13 @@ func (u *ui) build() {
 	)
 	bottomBox := container.NewVBox(u.hist.bar, bottom)
 	u.bars = []fyne.CanvasObject{top, bottomBox}
-	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
+	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) }).withTip(T("Wróć do widoku z panelami i ramką okna (Esc, prawy przycisk myszy)"))
 	exitBtn.Importance = widget.LowImportance
+	moveH := newMoveHandle(u.win, widget.LowImportance)
+	moveH.tip = T("Przesuń okno – przeciągnij")
 	// button lies on the picture, on a translucent background
 	exitBox := container.NewStack(canvas.NewRectangle(overlayBg),
-		container.NewHBox(newMoveHandle(u.win, widget.LowImportance), exitBtn))
+		container.NewHBox(moveH, exitBtn))
 	// pan/tilt buttons for video-only mode (dragging the picture doesn't move the camera there);
 	// pressing keeps the overlay visible
 	overlayPTZ := func(icon fyne.Resource, op int) *holdButton {
@@ -364,7 +377,7 @@ func (u *ui) build() {
 			u.mover.press(op)
 		}, u.mover.release)
 		b.Importance = widget.LowImportance // no button background, only the light overlay one
-		return b
+		return b.withTip(ptzTip(op))
 	}
 	ptzBox := container.NewStack(canvas.NewRectangle(overlayBg), container.NewHBox(
 		overlayPTZ(theme.NavigateBackIcon(), motorLeft),
@@ -373,6 +386,7 @@ func (u *ui) build() {
 		overlayPTZ(theme.NavigateNextIcon(), motorRight),
 	))
 	u.zoomSlider = newZoomSlider(1, maxZoom, zoomStep)
+	u.zoomSlider.tip = T("Zoom kamery – przeciągnij lub kliknij")
 	u.zoomSlider.SetValue(u.camZoom)
 	u.zoomSlider.onChanged = func(v float64) {
 		u.showExitButton()
@@ -394,6 +408,7 @@ func (u *ui) build() {
 			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
 	u.videoArea = container.NewStack(u.video, u.exitView)
+	u.updateGridButton()
 	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, u.videoArea))
 
 	u.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
@@ -763,7 +778,7 @@ func (u *ui) languageSelect() *ptrSelect {
 	for _, l := range languages {
 		names = append(names, l.name)
 	}
-	sel := newSelect(names, nil)
+	sel := newSelect(names, nil).withTip(T("Język aplikacji"))
 	for i, l := range languages {
 		if l.code == lang {
 			sel.SetSelectedIndex(i)
@@ -929,4 +944,17 @@ func (u *ui) checkDecodeSize() {
 		return
 	}
 	u.decodeStable = 0
+}
+
+func ptzTip(op int) string {
+	switch op {
+	case motorLeft:
+		return T("Obróć w lewo – przytrzymaj (klawisz ←)")
+	case motorRight:
+		return T("Obróć w prawo – przytrzymaj (klawisz →)")
+	case motorUp:
+		return T("Obróć w górę – przytrzymaj (klawisz ↑)")
+	default:
+		return T("Obróć w dół – przytrzymaj (klawisz ↓)")
+	}
 }

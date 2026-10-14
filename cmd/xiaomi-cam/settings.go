@@ -37,6 +37,8 @@ func (u *ui) showSettings() {
 			u.app.Preferences().RemoveValue(pref) // back to the system folder
 			label.SetText(current())
 		})
+		choose.tip = T("Wybierz folder")
+		reset.tip = T("Przywróć domyślny folder systemowy")
 		return container.NewBorder(nil, nil, nil, container.NewHBox(choose, reset), label)
 	}
 	modes := []struct{ name, id string }{
