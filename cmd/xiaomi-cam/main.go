@@ -68,6 +68,9 @@ type ui struct {
 	hideTimer  *time.Timer
 	normalSize fyne.Size // window size before video-only mode
 
+	hist     history // SD card playback
+	gotFrame bool    // first frame of the current playback arrived
+
 	camZoom   float64 // camera zoom 1.0-9.0
 	zoomTimer *time.Timer
 	zoomLabel *widget.Label
@@ -101,6 +104,11 @@ func main() {
 	u.build()
 	u.setupTray()
 	onShowRequest(func() { fyne.Do(u.show) })
+	go func() {
+		for range time.Tick(time.Second) {
+			fyne.Do(u.historyStatus)
+		}
+	}()
 	a.Lifecycle().SetOnStarted(func() { onMinimize(u.win, u.hide) }) // minimize = hide to tray
 	a.Lifecycle().SetOnStopped(u.player.stop)                        // no frames to the UI after it stopped
 
@@ -142,11 +150,18 @@ func (u *ui) build() {
 	u.video.onResize = u.resizeKeepAspect
 	u.video.onEdgePress = func(dir int) bool { return wmMoveResize(u.win, dir) }
 	u.status = widget.NewLabel("")
-	u.player.onFrame = func(img *image.RGBA) {
+	u.player.onFrame = func(img *image.RGBA, gen int64) {
 		fyne.Do(func() {
-			if u.video.frame == nil {
-				u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
+			if gen != u.player.gen.Load() {
+				return // late frame of a stopped playback
 			}
+			if !u.gotFrame {
+				u.gotFrame = true
+				if !u.hist.on {
+					u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
+				}
+			}
+			u.historyFrame()
 			u.video.setFrame(img)
 		})
 	}
@@ -159,6 +174,9 @@ func (u *ui) build() {
 
 	u.camera = newSelect(cameraNames(), func(string) {
 		if !u.syncing {
+			if u.hist.on {
+				u.goLive() // history is per camera
+			}
 			u.restart()
 			go u.loadCameraState()
 		}
@@ -181,11 +199,13 @@ func (u *ui) build() {
 		}
 	})
 
+	u.buildHistory()
 	top := container.NewHBox(
 		widget.NewLabel(T("Kamera:")), u.camera,
 		widget.NewLabel(T("Jakość:")), u.quality,
 		widget.NewLabel(T("Połączenie:")), u.connection,
 		layout.NewSpacer(),
+		u.hist.button,
 		newButton("", theme.MediaPhotoIcon(), u.snapshot),
 		newButton(T("Tylko obraz"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
 		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen),
@@ -252,7 +272,8 @@ func (u *ui) build() {
 		widget.NewSeparator(),
 		u.status,
 	)
-	u.bars = []fyne.CanvasObject{top, bottom}
+	bottomBox := container.NewVBox(u.hist.bar, bottom)
+	u.bars = []fyne.CanvasObject{top, bottomBox}
 	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
 	// button lies on the picture, on a translucent background
 	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}),
@@ -260,7 +281,7 @@ func (u *ui) build() {
 	u.exitView = container.NewVBox(container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
 		container.NewHBox(layout.NewSpacer(), exitBox))) // 10 px from top and right edge
 	u.exitView.Hide()
-	u.win.SetContent(container.NewBorder(top, bottom, nil, nil, container.NewStack(u.video, u.exitView)))
+	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, container.NewStack(u.video, u.exitView)))
 
 	u.win.Canvas().SetOnTypedKey(func(e *fyne.KeyEvent) {
 		switch e.Name {
@@ -373,6 +394,8 @@ func (u *ui) restart() {
 	u.syncing = false
 
 	q := qualities[qi]
+	u.gotFrame = false
+	u.status.SetText(T("Łączenie z kamerą…"))
 	u.video.clear(T("Łączenie z kamerą…"))
 	go u.player.start(rtspURL(name), q.w, q.h, u.sound.Checked)
 }
@@ -593,6 +616,9 @@ func (u *ui) languageSelect() *ptrSelect {
 		u.app.Preferences().SetString(prefLanguage, code)
 		// rebuild UI with new texts
 		u.player.stop()
+		if u.hist.on {
+			_ = setPlayback(u.current.Load().(string), 0, 0)
+		}
 		sound := u.sound.Checked
 		u.build()
 		u.sound.SetChecked(sound)

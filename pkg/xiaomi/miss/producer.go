@@ -3,6 +3,7 @@ package miss
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/AlexxIT/go2rtc/pkg/core"
@@ -26,7 +27,12 @@ func Dial(rawURL string) (core.Producer, error) {
 	u, _ := url.Parse(rawURL)
 	query := u.Query()
 
-	err = client.StartMedia(query.Get("channel"), query.Get("subtype"), query.Get("audio"))
+	if start := query.Get("playback"); start != "" {
+		// recordings from the SD card instead of live video
+		err = client.StartPlayback(start, query.Get("speed"), query.Get("channel"))
+	} else {
+		err = client.StartMedia(query.Get("channel"), query.Get("subtype"), query.Get("audio"))
+	}
 	if err != nil {
 		_ = client.Close()
 		return nil, err
@@ -66,6 +72,10 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 				err = fmt.Errorf("no video")
 			}
 			return nil, fmt.Errorf("xiaomi: probe: %w", err)
+		}
+
+		if debugCommands {
+			fmt.Fprintf(os.Stderr, "miss: probe packet codec 0x%x size %d\n", pkt.CodecID, len(pkt.Payload))
 		}
 
 		switch pkt.CodecID {
@@ -202,6 +212,11 @@ func (p *Producer) Stop() error {
 // one session, so motor commands must share it rather than dial a second one.
 func (p *Producer) Motor(operation int) error {
 	return p.client.Motor(operation)
+}
+
+// Request sends a MISS command and waits for the response with code resp.
+func (p *Producer) Request(cmd uint32, params string, resp uint32, timeout time.Duration) ([]byte, error) {
+	return p.client.Request(cmd, params, resp, timeout)
 }
 
 // Command sends a MISS command over this producer's session.

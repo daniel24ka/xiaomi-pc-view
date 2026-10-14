@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -21,17 +22,19 @@ import (
 // --- player: go2rtc RTSP -> ffmpeg -> raw RGBA frames (+ audio to PulseAudio/PipeWire)
 
 type player struct {
+	gen    atomic.Int64 // playback generation, frames of a stopped playback are dropped
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	onFrame  func(img *image.RGBA)
+	onFrame  func(img *image.RGBA, gen int64)
 	onStatus func(text string)
 }
 
 // start plays url with frames of given size; it reconnects until stop is called.
 func (p *player) start(url string, w, h int, audio bool) {
 	p.stop()
+	gen := p.gen.Add(1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -43,7 +46,7 @@ func (p *player) start(url string, w, h int, audio bool) {
 		defer close(done)
 		for ctx.Err() == nil {
 			p.onStatus(T("Łączenie z kamerą…"))
-			err := p.run(ctx, url, w, h, audio)
+			err := p.run(ctx, url, w, h, audio, gen)
 			if ctx.Err() != nil {
 				return
 			}
@@ -61,13 +64,14 @@ func (p *player) stop() {
 	cancel, done := p.cancel, p.done
 	p.cancel, p.done = nil, nil
 	p.mu.Unlock()
+	p.gen.Add(1)
 	if cancel != nil {
 		cancel()
 		<-done
 	}
 }
 
-func (p *player) run(ctx context.Context, url string, w, h int, audio bool) error {
+func (p *player) run(ctx context.Context, url string, w, h int, audio bool, gen int64) error {
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
@@ -100,7 +104,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool) erro
 		if _, err = io.ReadFull(r, frames[i].Pix); err != nil {
 			break
 		}
-		p.onFrame(frames[i])
+		p.onFrame(frames[i], gen)
 	}
 	_ = cmd.Wait()
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {

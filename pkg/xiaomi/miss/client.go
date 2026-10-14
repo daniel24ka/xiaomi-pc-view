@@ -6,9 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/bits"
 	"net"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AlexxIT/go2rtc/pkg/tutk"
@@ -86,13 +91,29 @@ func NewClient(rawURL string) (*Client, error) {
 	return client, nil
 }
 
+// XIAOMI_MISS_DEBUG=1 prints command responses from the camera
+var debugCommands = os.Getenv("XIAOMI_MISS_DEBUG") != ""
+
 // startCommandLoop drains command responses (e.g. motor 0x113), otherwise the cs2 command
 // channel overflows and the stream breaks with "pop buffer is full" (AlexxIT/go2rtc#2489).
 func (c *Client) startCommandLoop() {
 	go func() {
 		for {
-			if _, _, err := c.Conn.ReadCommand(); err != nil {
+			cmd, data, err := c.Conn.ReadCommand()
+			if err != nil {
 				return
+			}
+			cmd = bits.ReverseBytes32(cmd) // cs2 ReadCommand reads the big endian code as little endian
+			if cmd == cmdEncoded {
+				if data, err = crypto.Decode(data, c.key); err == nil && len(data) >= 4 {
+					cmd, data = binary.BigEndian.Uint32(data), data[4:]
+				}
+			}
+			if debugCommands {
+				fmt.Fprintf(os.Stderr, "miss: command 0x%x %q\n", cmd, data)
+			}
+			if f := c.onCommand.Load(); f != nil {
+				(*f)(cmd, data)
 			}
 		}
 	}()
@@ -102,6 +123,9 @@ type Client struct {
 	Conn
 	key   []byte
 	model string
+
+	reqMu     sync.Mutex
+	onCommand atomic.Pointer[func(cmd uint32, data []byte)]
 }
 
 const (
@@ -212,6 +236,39 @@ func (c *Client) StartMedia(channel, quality, audio string) error {
 	return c.WriteCommand(data)
 }
 
+// Request sends a MISS command and waits for the camera response with code resp
+// (e.g. PLAYBACK_REQ 0x10D -> PLAYBACK_RESP 0x10E).
+func (c *Client) Request(cmd uint32, params string, resp uint32, timeout time.Duration) ([]byte, error) {
+	return c.RequestMatch(cmd, params, resp, nil, timeout)
+}
+
+// RequestMatch is Request that accepts only responses for which match returns true
+// (the camera may repeat old responses).
+func (c *Client) RequestMatch(cmd uint32, params string, resp uint32, match func([]byte) bool, timeout time.Duration) ([]byte, error) {
+	c.reqMu.Lock()
+	defer c.reqMu.Unlock()
+	ch := make(chan []byte, 1)
+	f := func(code uint32, data []byte) {
+		if code == resp && (match == nil || match(data)) {
+			select {
+			case ch <- data:
+			default:
+			}
+		}
+	}
+	c.onCommand.Store(&f)
+	defer c.onCommand.Store(nil)
+	if err := c.Command(cmd, params); err != nil {
+		return nil, err
+	}
+	select {
+	case data := <-ch:
+		return data, nil
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("miss: no response 0x%x", resp)
+	}
+}
+
 // Command sends a MISS command with JSON params, like sendP2PCommandToDevice in Mi Home
 // plugins (e.g. 530 - zoom {"value": zoom*10} on isa.camera.700sa).
 func (c *Client) Command(cmd uint32, params string) error {
@@ -226,6 +283,49 @@ func (c *Client) Motor(operation int) error {
 	data := binary.BigEndian.AppendUint32(nil, cmdMotorReq)
 	data = fmt.Appendf(data, `{"operation":%d}`, operation)
 	return c.WriteCommand(data)
+}
+
+const (
+	cmdPlaybackResp = 0x10E
+	playbackSearch  = 70 // seconds back to search for the file start (files are ~61 s)
+)
+
+// StartPlayback plays SD card recordings from unix time `at` (seconds) at speed
+// (1, 2, 4, 8, 16), like the Mi Home plugin (MISS_CMD_PLAYBACK_REQ). The camera needs the
+// exact start of a recorded file, so it is searched second by second back from `at`
+// (one request ~50 ms). Playback starts at the beginning of the found file (up to ~1 min
+// before `at`): with offset > 0 the camera sends one frame and stops.
+func (c *Client) StartPlayback(at, speed, channel string) error {
+	target, err := strconv.ParseInt(at, 10, 64)
+	if err != nil {
+		return err
+	}
+	if speed == "" {
+		speed = "1"
+	}
+	if channel == "" {
+		channel = "0"
+	}
+	for start := target; start > target-playbackSearch; start-- {
+		params := fmt.Sprintf(
+			`{"sessionid":%d,"starttime":%d,"endtime":0,"autoswitchtolive":0,"offset":0,"speed":%s,"avchannelmerge":1,"channel":%s}`,
+			start, start, speed, channel)
+		id := []byte(fmt.Sprintf(`"id":%d,`, start))
+		match := func(b []byte) bool { return bytes.Contains(b, id) }
+		var res []byte
+		for try := 0; try < 3; try++ {
+			if res, err = c.RequestMatch(cmdPlaybackReq, params, cmdPlaybackResp, match, 2*time.Second); err == nil {
+				break
+			}
+		}
+		if err != nil {
+			return err
+		}
+		if bytes.Contains(res, []byte(`"filefound"`)) {
+			return nil
+		}
+	}
+	return errors.New("miss: no recording at this time")
 }
 
 func (c *Client) StopMedia() error {

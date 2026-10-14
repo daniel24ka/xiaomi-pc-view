@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,7 +159,34 @@ func setSourceParams(name string, params map[string]string) error {
 	u.RawQuery = q.Encode()
 	src = u.String()
 	streams.Get(name).SetSource(src)
-	return app.PatchConfig([]string{"streams", name}, []string{src})
+	// playback params are only for the running session, never saved
+	q.Del("playback")
+	q.Del("speed")
+	u.RawQuery = q.Encode()
+	return app.PatchConfig([]string{"streams", name}, []string{u.String()})
+}
+
+// setPlayback switches the camera source to SD card recordings from unix time at
+// (0 - back to live video). Not saved to the config.
+func setPlayback(name string, at int64, speed int) error {
+	src := cameraSource(name)
+	if src == "" {
+		return fmt.Errorf("no camera %q", name)
+	}
+	u, err := url.Parse(src)
+	if err != nil {
+		return err
+	}
+	q := u.Query()
+	q.Del("playback")
+	q.Del("speed")
+	if at > 0 {
+		q.Set("playback", strconv.FormatInt(at, 10))
+		q.Set("speed", strconv.Itoa(speed))
+	}
+	u.RawQuery = q.Encode()
+	streams.Get(name).SetSource(u.String())
+	return nil
 }
 
 func addCamera(name, src string) error {

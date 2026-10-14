@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/AlexxIT/go2rtc/internal/api"
 	"github.com/AlexxIT/go2rtc/internal/app"
@@ -389,6 +390,26 @@ func Command(name string, cmd uint32, params string) error {
 		}
 	}
 	return errors.New("xiaomi: command: camera is not connected")
+}
+
+// Requester is a source that can send MISS commands and wait for a response.
+type Requester interface {
+	Request(cmd uint32, params string, resp uint32, timeout time.Duration) ([]byte, error)
+}
+
+// Request sends a MISS command to the camera behind stream `name` and waits for the
+// response with code resp.
+func Request(name string, cmd uint32, params string, resp uint32, timeout time.Duration) ([]byte, error) {
+	stream := streams.Get(name)
+	if stream == nil {
+		return nil, fmt.Errorf("xiaomi: request: no stream %q", name)
+	}
+	for _, conn := range stream.Conns() {
+		if r, ok := conn.(Requester); ok {
+			return r.Request(cmd, params, resp, timeout)
+		}
+	}
+	return nil, errors.New("xiaomi: request: camera is not connected")
 }
 
 // CloudRequest calls Mi Home cloud API with the account from xiaomi:// source URL.

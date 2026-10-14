@@ -14,7 +14,9 @@ Jeden plik wykonywalny, z wbudowanym [go2rtc](https://github.com/AlexxIT/go2rtc)
 - **połączenie zdalne**: działa z dowolnej sieci, tak jak Mi Home, bez przekierowania
   portów i bez VPN; jest też tryb lokalny (LAN),
 - **obrót kamery (PTZ)**: przyciski, strzałki na klawiaturze, przeciąganie obrazu myszą,
-- **zoom cyfrowy**: kółko myszy, `+` / `−`, przesuwanie powiększenia myszą,
+- **zoom kamery (natywny, do 9×)**: kółko myszy, `+` / `−`. Powiększa kamera, więc szczegóły
+  są ostre, a data i godzina z kamery zostają tej samej wielkości,
+- **historia z karty SD**: data, suwak doby, ±1/±10 min, prędkość 1–16×; przycisk „Na żywo” wraca do podglądu,
 - **reflektor** (włącz/wyłącz, jasność) i **syrena**,
 - dźwięk z kamery,
 - zdjęcie z podglądu (`~/Obrazy`),
@@ -59,9 +61,9 @@ make install        # buduje i instaluje do ~/.local
 | Klawisz / mysz | Akcja |
 |---|---|
 | strzałki | obrót kamery |
-| przeciąganie obrazu | obrót kamery (przy zoomie: przesuwanie powiększenia) |
-| `+` / `−`, kółko myszy | zoom |
-| `0` | zoom 1:1 |
+| przeciąganie obrazu | obrót kamery |
+| `+` / `−`, kółko myszy | zoom kamery |
+| `0` | zoom 1× |
 | `H` | tylko obraz; `Esc` lub prawy przycisk myszy – powrót |
 | `F`, `F11`, podwójne kliknięcie | pełny ekran |
 | `S` | zdjęcie |
@@ -81,6 +83,10 @@ Ten tryb („Zdalne”) dodałem do go2rtc w tym repozytorium, bo niektóre kame
 nie odpowiadają na wyszukiwanie w sieci lokalnej, którego używa oficjalne go2rtc.
 
 Reflektor i syrena są sterowane przez chmurę Xiaomi (MIoT), obrót przez sesję MISS.
+Zoom to komenda MISS `530` (`{"value": zoom×10}`), odczytana z wtyczki Mi Home tej kamery.
+Historia: komenda `PLAYBACK_REQ` (`0x10D`); kamera wymaga dokładnego początku pliku (pliki
+po ~61 s), więc aplikacja szuka go sekunda po sekundzie i odtwarza od początku pliku, w którym
+leży wybrana chwila.
 
 ## Ograniczenia
 
@@ -105,7 +111,8 @@ Single binary with embedded [go2rtc](https://github.com/AlexxIT/go2rtc).
 
 **Features:** live video up to 2.5K (2560×1440) with 2.5K/720p/SD quality, **remote
 connection from any network** (like Mi Home, no port forwarding or VPN) or local (LAN),
-pan/tilt (buttons, arrow keys, dragging the picture), digital zoom, spotlight with
+pan/tilt (buttons, arrow keys, dragging the picture), native camera zoom up to 9×,
+SD card history playback (date, timeline, ±1/±10 min, speed 1–16×), spotlight with
 brightness, siren, camera audio, snapshots, video-only and full-screen modes, system
 tray icon (closing the window hides the app and stops streaming), Polish/English UI,
 Mi Home login with captcha and 2FA code.
@@ -121,8 +128,8 @@ and copy `xiaomi-cam` to `~/.local/bin` and `xiaomi-cam.desktop` to
 `~/.config/xiaomi-cam-viewer/go2rtc.yaml` with mode 600. Choose the region
 (Europe for EU accounts) and the cameras.
 
-**Shortcuts:** arrows – pan/tilt; drag – pan/tilt (move the zoomed area when zoomed);
-`+`/`−`/wheel – zoom; `0` – zoom 1:1; `H` – video only (`Esc` or right click to go back);
+**Shortcuts:** arrows – pan/tilt; drag – pan/tilt;
+`+`/`−`/wheel – camera zoom; `0` – zoom 1×; `H` – video only (`Esc` or right click to go back);
 `F`/`F11`/double click – full screen; `S` – snapshot.
 
 **How it works:** the app uses the Xiaomi MISS protocol over CS2 P2P like Mi Home.

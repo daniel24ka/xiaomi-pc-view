@@ -87,7 +87,13 @@ H – video only (hides panels), right click or Esc – back
 F, F11, double click – full screen
 S – snapshot to ~/Pictures
 Closing the window hides the app to the tray`,
-	"Zapisano ":            "Saved ",
-	"Zdalne":               "Remote",
-	"Znaleziono kamer: %d": "Cameras found: %d",
+	"Historia":                   "History",
+	"Historia:":                  "History:",
+	"Historia: od %s, +%s (%d×)": "History: from %s, +%s (%d×)",
+	"Prędkość:":                  "Speed:",
+	"Szukam nagrania…":           "Looking for the recording…",
+	"Na żywo":                    "Live",
+	"Zapisano ":                  "Saved ",
+	"Zdalne":                     "Remote",
+	"Znaleziono kamer: %d":       "Cameras found: %d",
 }
