@@ -21,35 +21,78 @@ import (
 // --- player: go2rtc RTSP -> ffmpeg -> raw RGBA frames (+ audio to PulseAudio/PipeWire)
 
 type player struct {
-	gen    atomic.Int64 // playback generation, frames of a stopped playback are dropped
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
+	gen atomic.Int64 // generation whose frames are shown; frames of other playbacks are dropped
+
+	mu      sync.Mutex
+	seq     int64
+	cur     *playback // shown
+	pending *playback // seamless switch: replaces cur when it delivers its first frame
 
 	onFrame  func(img *image.RGBA, gen int64)
 	onStatus func(text string)
 }
 
+type playback struct {
+	gen    int64
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (pb *playback) stop() {
+	pb.cancel()
+	<-pb.done
+}
+
 // start plays url with frames of given size; it reconnects until stop is called.
+// The previous playback is stopped first, so the camera session is closed (needed when the
+// stream source changes, e.g. quality).
 func (p *player) start(url string, w, h int, audio bool) {
 	p.stop()
-	gen := p.gen.Add(1)
+	p.begin(url, w, h, audio, false)
+}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
+// switchTo starts a new playback while the current one keeps running and replaces it
+// when the new one delivers the first frame. Both read the same go2rtc stream, so the
+// camera session stays open: no reconnect, no black screen (sound on/off, decode size).
+func (p *player) switchTo(url string, w, h int, audio bool) {
 	p.mu.Lock()
-	p.cancel, p.done = cancel, done
+	running := p.cur != nil
 	p.mu.Unlock()
+	p.begin(url, w, h, audio, running)
+}
 
+func (p *player) begin(url string, w, h int, audio, seamless bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p.mu.Lock()
+	p.seq++
+	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{})}
+	oldPending := p.pending
+	p.pending = nil
+	if seamless {
+		p.pending = pb
+	} else {
+		p.cur = pb
+		p.gen.Store(pb.gen)
+	}
+	p.mu.Unlock()
+	if oldPending != nil {
+		go oldPending.stop()
+	}
+
+	status := func(text string) {
+		if p.gen.Load() == pb.gen { // a pending playback doesn't cover the picture with "connecting"
+			p.onStatus(text)
+		}
+	}
 	go func() {
-		defer close(done)
+		defer close(pb.done)
 		for ctx.Err() == nil {
-			p.onStatus(T("Łączenie z kamerą…"))
-			err := p.run(ctx, url, w, h, audio, gen)
+			status(T("Łączenie z kamerą…"))
+			err := p.run(ctx, url, w, h, audio, pb)
 			if ctx.Err() != nil {
 				return
 			}
-			p.onStatus(fmt.Sprintf(T("Rozłączono (%v) – ponawiam za 3 s…"), err))
+			status(fmt.Sprintf(T("Rozłączono (%v) – ponawiam za 3 s…"), err))
 			select {
 			case <-ctx.Done():
 			case <-time.After(3 * time.Second):
@@ -58,19 +101,39 @@ func (p *player) start(url string, w, h int, audio bool) {
 	}()
 }
 
+// frame is called by the reader of pb; the first frame of a pending playback promotes it.
+func (p *player) frame(pb *playback, img *image.RGBA) {
+	if p.gen.Load() != pb.gen {
+		p.mu.Lock()
+		if p.pending != pb {
+			p.mu.Unlock()
+			return // replaced or stopped
+		}
+		old := p.cur
+		p.cur, p.pending = pb, nil
+		p.gen.Store(pb.gen)
+		p.mu.Unlock()
+		if old != nil {
+			go old.stop()
+		}
+	}
+	p.onFrame(img, pb.gen)
+}
+
 func (p *player) stop() {
 	p.mu.Lock()
-	cancel, done := p.cancel, p.done
-	p.cancel, p.done = nil, nil
+	cur, pending := p.cur, p.pending
+	p.cur, p.pending = nil, nil
 	p.mu.Unlock()
-	p.gen.Add(1)
-	if cancel != nil {
-		cancel()
-		<-done
+	p.gen.Add(1 << 32) // no frames of these playbacks are shown any more
+	for _, pb := range []*playback{cur, pending} {
+		if pb != nil {
+			pb.stop()
+		}
 	}
 }
 
-func (p *player) run(ctx context.Context, url string, w, h int, audio bool, gen int64) error {
+func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *playback) error {
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
@@ -105,7 +168,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, gen 
 		if _, err = io.ReadFull(r, frames[i].Pix); err != nil {
 			break
 		}
-		p.onFrame(frames[i], gen)
+		p.frame(pb, frames[i])
 	}
 	_ = cmd.Wait()
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {

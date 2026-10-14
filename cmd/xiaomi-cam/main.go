@@ -314,7 +314,9 @@ func (u *ui) build() {
 	})
 	u.sound = newCheck(T("Dźwięk"), func(bool) {
 		u.win.Canvas().Unfocus()
-		u.restart()
+		if !u.syncing {
+			u.refresh()
+		}
 	})
 
 	bottom := container.NewHBox(
@@ -482,9 +484,22 @@ func (u *ui) restart() {
 		u.video.clear(T("Brak kamery – kliknij „Dodaj”"))
 		return
 	}
+	q := qualities[u.syncControls(name)]
+	u.gotFrame = false
+	u.status.SetText(T("Łączenie z kamerą…"))
+	u.video.clear(T("Łączenie z kamerą…"))
+	w, h := u.decodeSize(q.w, q.h)
+	u.decodeW = w
+	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
+}
+
+// syncControls sets the quality and connection lists from the camera source;
+// returns the quality index.
+func (u *ui) syncControls(name string) int {
 	u.current.Store(name)
 	src := cameraSource(name)
 	u.syncing = true
+	defer func() { u.syncing = false }()
 	qi := 1
 	for i, q := range qualities {
 		if q.subtype == sourceParam(src, "subtype") {
@@ -499,15 +514,22 @@ func (u *ui) restart() {
 		}
 	}
 	u.connection.SetSelectedIndex(ci)
-	u.syncing = false
+	return qi
+}
 
-	q := qualities[qi]
-	u.gotFrame = false
-	u.status.SetText(T("Łączenie z kamerą…"))
-	u.video.clear(T("Łączenie z kamerą…"))
+// refresh restarts the decoder with the current settings (sound, decode size) without
+// reconnecting to the camera: the new decoder joins the same stream and replaces the old
+// one when it has a picture.
+func (u *ui) refresh() {
+	name := u.camera.Selected
+	if !u.visible || name == "" || u.video.frame == nil {
+		u.restart()
+		return
+	}
+	q := qualities[max(u.quality.SelectedIndex(), 0)]
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
-	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
+	go u.player.switchTo(rtspURL(name), w, h, u.sound.Checked)
 }
 
 func (u *ui) changeSource(params map[string]string) {
@@ -717,16 +739,27 @@ func (u *ui) languageSelect() *ptrSelect {
 		}
 		lang = code
 		u.app.Preferences().SetString(prefLanguage, code)
-		// rebuild UI with new texts
-		u.player.stop()
-		if u.hist.on {
+		// rebuild UI with new texts; live video keeps playing (the new view gets its frames)
+		wasHistory := u.hist.on
+		if wasHistory {
+			u.player.stop()
 			_ = setPlayback(u.current.Load().(string), 0, 0)
 		}
 		sound := u.sound.Checked
+		frame := u.video.frame
 		u.build()
+		u.syncing = true
 		u.sound.SetChecked(sound)
+		u.syncing = false
 		u.setupTray()
-		u.restart()
+		if wasHistory || frame == nil {
+			u.restart()
+		} else {
+			u.syncControls(u.camera.Selected)
+			u.video.setFrame(frame)
+			u.gotFrame = true
+			u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
+		}
 		go u.loadCameraState()
 		u.loadPoints()
 	}
@@ -844,7 +877,7 @@ func (u *ui) checkDecodeSize() {
 		u.decodeStable++
 		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished
 			u.decodeStable = 0
-			u.restart()
+			u.refresh()
 		}
 		return
 	}
