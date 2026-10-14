@@ -94,9 +94,20 @@ API key in *Settings → AI*. Then add tasks:
   names can be changed in the settings.
 - **Picture**: 1280 px by default, or **full resolution** (2560×1440) for small details such as
   car brands or number plates (the request costs more).
-- **When detected**: system notification, save a full resolution snapshot, and/or **record
-  a video** of a chosen length (seconds, MP4 to the recordings folder). More action types can
-  be added later. *Don't repeat for N minutes* prevents repeated actions.
+- **When detected**: system notification, **e-mail** (with the snapshot attached), **Slack**
+  message, save a full resolution snapshot, and/or **record a video** of a chosen length
+  (seconds, MP4 to the recordings folder). *Don't repeat for N minutes* prevents repeated
+  actions. If an action fails (e.g. wrong SMTP password), the error is shown in the task list.
+
+**Notifications (Settings → Notifications):**
+
+- **E-mail**: SMTP server and port, encryption (STARTTLS / SSL/TLS / none), user, password,
+  sender and recipients (comma separated). For Gmail use `smtp.gmail.com`, port 587, STARTTLS
+  and an [app password](https://myaccount.google.com/apppasswords).
+- **Slack**: an [Incoming Webhook](https://api.slack.com/messaging/webhooks) URL (Slack app →
+  Incoming Webhooks → Add New Webhook to Workspace → choose a channel). Webhooks can't upload
+  files, so Slack gets text only.
+- *Send test* checks each channel.
 - Each task can be switched on/off, run immediately (▶) to test it, edited or removed. The
   list shows the time and result of the last check.
 

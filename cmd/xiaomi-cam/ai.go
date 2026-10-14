@@ -47,6 +47,8 @@ type aiTask struct {
 	// actions when detected
 	Notify       bool `json:"notify"`
 	SaveSnapshot bool `json:"save_snapshot"`
+	Email        bool `json:"email"`          // e-mail with the snapshot attached
+	Slack        bool `json:"slack"`          // Slack message (Incoming Webhook)
 	Record       bool `json:"record"`         // record an MP4 video
 	RecordSec    int  `json:"record_seconds"` // video length
 	CooldownMin  int  `json:"cooldown_min"`   // don't repeat actions for N minutes
@@ -60,11 +62,13 @@ type aiTask struct {
 }
 
 type aiConfig struct {
-	AnthropicKey   string    `json:"anthropic_key,omitempty"`
-	AnthropicModel string    `json:"anthropic_model,omitempty"`
-	OpenAIKey      string    `json:"openai_key,omitempty"`
-	OpenAIModel    string    `json:"openai_model,omitempty"`
-	Tasks          []*aiTask `json:"tasks"`
+	AnthropicKey   string      `json:"anthropic_key,omitempty"`
+	AnthropicModel string      `json:"anthropic_model,omitempty"`
+	OpenAIKey      string      `json:"openai_key,omitempty"`
+	OpenAIModel    string      `json:"openai_model,omitempty"`
+	Email          emailConfig `json:"email,omitzero"`
+	SlackWebhook   string      `json:"slack_webhook,omitempty"`
+	Tasks          []*aiTask   `json:"tasks"`
 }
 
 // actions are implemented in the app (notification needs the UI)
@@ -145,6 +149,14 @@ func (e *aiEngine) setProviders(anthropicKey, anthropicModel, openaiKey, openaiM
 	e.cfg.AnthropicModel = strings.TrimSpace(anthropicModel)
 	e.cfg.OpenAIKey = strings.TrimSpace(openaiKey)
 	e.cfg.OpenAIModel = strings.TrimSpace(openaiModel)
+	e.mu.Unlock()
+	return e.save()
+}
+
+func (e *aiEngine) setNotifications(email emailConfig, slackWebhook string) error {
+	e.mu.Lock()
+	e.cfg.Email = email
+	e.cfg.SlackWebhook = strings.TrimSpace(slackWebhook)
 	e.mu.Unlock()
 	return e.save()
 }
@@ -237,7 +249,7 @@ func (e *aiEngine) run(id string) {
 	cfg := e.cfg
 	e.mu.Unlock()
 
-	detected, answer, err := e.check(&task, cfg)
+	detected, answer, img, err := e.check(&task, cfg)
 
 	e.mu.Lock()
 	delete(e.running, id)
@@ -267,7 +279,13 @@ func (e *aiEngine) run(id string) {
 	e.mu.Unlock()
 
 	if act {
-		e.runActions(&task, answer)
+		if errs := e.runActions(&task, cfg, answer, img); len(errs) > 0 {
+			e.mu.Lock()
+			if t := e.taskByID(id); t != nil {
+				t.LastError = errors.Join(errs...).Error()
+			}
+			e.mu.Unlock()
+		}
 	}
 	_ = e.save()
 	if e.onChange != nil {
@@ -275,9 +293,37 @@ func (e *aiEngine) run(id string) {
 	}
 }
 
-func (e *aiEngine) runActions(t *aiTask, answer string) {
+func (e *aiEngine) taskByID(id string) *aiTask {
+	for _, t := range e.cfg.Tasks {
+		if t.ID == id {
+			return t
+		}
+	}
+	return nil
+}
+
+// runActions runs the actions of a task after a detection; returns errors of the
+// actions that failed (shown in the task status).
+func (e *aiEngine) runActions(t *aiTask, cfg aiConfig, answer string, img []byte) []error {
+	var errs []error
+	title := "Xiaomi Cam: " + t.Name
+	camera := taskCamera(t)
+	when := time.Now().Format("2006-01-02 15:04:05")
 	if t.Notify && e.actions.notify != nil {
-		e.actions.notify("Xiaomi Cam: "+t.Name, answer)
+		e.actions.notify(title, answer)
+	}
+	if t.Email {
+		body := fmt.Sprintf("%s\n\n%s: %s\n%s: %s\n%s: %s\n", answer,
+			"Camera", camera, "Time", when, "Prompt", t.Prompt)
+		if err := sendEmail(cfg.Email, title, body, img, fileName(camera, "jpg")); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if t.Slack {
+		text := fmt.Sprintf("*%s*\n%s\n_%s · %s_", title, answer, camera, when)
+		if err := sendSlack(cfg.SlackWebhook, text); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if t.SaveSnapshot {
 		_, _ = saveSnapshot(taskCamera(t))
@@ -290,6 +336,7 @@ func (e *aiEngine) runActions(t *aiTask, answer string) {
 		// already recording (e.g. started by hand) - keep that recording
 		_, _ = startRecording(taskCamera(t), time.Duration(sec)*time.Second)
 	}
+	return errs
 }
 
 func taskCamera(t *aiTask) string {
@@ -321,11 +368,11 @@ type aiResult struct {
 	Description string `json:"description"`
 }
 
-// check takes a snapshot and asks the model.
-func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, error) {
+// check takes a snapshot and asks the model; returns the snapshot for the actions.
+func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, []byte, error) {
 	camera := taskCamera(t)
 	if camera == "" {
-		return false, "", errors.New("no camera")
+		return false, "", nil, errors.New("no camera")
 	}
 	width := 1280
 	if t.FullRes {
@@ -333,7 +380,7 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, error) {
 	}
 	img, err := snapshotJPEG(camera, width)
 	if err != nil {
-		return false, "", err
+		return false, "", nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -346,13 +393,13 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, error) {
 		text, err = askClaude(ctx, cfg.AnthropicKey, cfg.AnthropicModel, t.Prompt, img)
 	}
 	if err != nil {
-		return false, "", err
+		return false, "", nil, err
 	}
 	var res aiResult
 	if err = json.Unmarshal([]byte(extractJSON(text)), &res); err != nil {
-		return false, "", fmt.Errorf("unexpected answer: %.200s", text)
+		return false, "", nil, fmt.Errorf("unexpected answer: %.200s", text)
 	}
-	return res.Detected, res.Description, nil
+	return res.Detected, res.Description, img, nil
 }
 
 // extractJSON - the JSON object in a text (models may wrap it in ```json)

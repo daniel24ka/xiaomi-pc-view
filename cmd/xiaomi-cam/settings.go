@@ -44,6 +44,7 @@ func (u *ui) showSettings() {
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon(T("Ogólne"), theme.SettingsIcon(), container.NewVBox(form)),
 		container.NewTabItemWithIcon("AI", theme.ComputerIcon(), u.aiSettings()),
+		container.NewTabItemWithIcon(T("Powiadomienia"), theme.MailComposeIcon(), u.notificationSettings()),
 	)
 	d := dialog.NewCustom(T("Ustawienia"), T("Zamknij"), tabs, u.win)
 	d.SetOnClosed(func() { u.ai.onChange = nil })

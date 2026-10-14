@@ -218,6 +218,12 @@ func (u *ui) editTask(t *aiTask, done func()) {
 	fullResHelp.Importance = widget.LowImportance
 	notify := widget.NewCheck(T("Powiadomienie systemowe"), nil)
 	notify.SetChecked(task.Notify)
+	email := widget.NewCheck(T("E-mail (ze zdjęciem)"), nil)
+	email.SetChecked(task.Email)
+	slack := widget.NewCheck("Slack", nil)
+	slack.SetChecked(task.Slack)
+	channelsHint := widget.NewLabel(notificationsHint())
+	channelsHint.Importance = widget.LowImportance
 	saveSnap := widget.NewCheck(T("Zapisz zdjęcie"), nil)
 	saveSnap.SetChecked(task.SaveSnapshot)
 	recordSec := widget.NewEntry()
@@ -246,7 +252,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		widget.NewFormItem(T("Polecenie (prompt)"), prompt),
 		widget.NewFormItem(T("Zdjęcie"), container.NewVBox(fullRes, fullResHelp)),
 		widget.NewFormItem(T("Harmonogram"), container.NewVBox(preset, cronEntry, cronHelp)),
-		widget.NewFormItem(T("Gdy wykryje"), container.NewVBox(notify, saveSnap,
+		widget.NewFormItem(T("Gdy wykryje"), container.NewVBox(notify, email, slack, channelsHint, saveSnap,
 			container.NewBorder(nil, nil, record, widget.NewLabel(T("s")), recordSec))),
 		widget.NewFormItem(T("Nie powtarzaj przez (min)"), cooldown),
 	)
@@ -270,6 +276,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		task.Provider = providers[max(provider.SelectedIndex(), 0)].id
 		task.Notify, task.SaveSnapshot, task.Record = notify.Checked, saveSnap.Checked, record.Checked
 		task.FullRes = fullRes.Checked
+		task.Email, task.Slack = email.Checked, slack.Checked
 		task.RecordSec, _ = strconv.Atoi(strings.TrimSpace(recordSec.Text))
 		if task.RecordSec <= 0 {
 			task.RecordSec = 60

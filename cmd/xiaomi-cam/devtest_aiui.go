@@ -40,10 +40,15 @@ func init() {
 		shot("ai_tab.jpg")
 		fyne.Do(func() {
 			d.Hide()
-			u.editTask(u.ai.config().Tasks[0], func() {})
 		})
 		time.Sleep(time.Second)
-		shot("ai_form.jpg")
+		fyne.Do(func() {
+			nd := dialog.NewCustom(T("Powiadomienia"), "OK", u.notificationSettings(), u.win)
+			nd.Resize(fyne.NewSize(860, 640))
+			nd.Show()
+		})
+		time.Sleep(time.Second)
+		shot("notify_tab.jpg")
 		fyne.Do(u.app.Quit)
 	}
 }
