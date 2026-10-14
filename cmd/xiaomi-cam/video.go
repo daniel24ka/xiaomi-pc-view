@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"image"
@@ -75,6 +74,8 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, gen 
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
+		"-threads", "2", // decoder threads: default is one per CPU core, each with own frame buffers
+		"-filter_threads", "1",
 		"-rtsp_transport", "tcp", "-timeout", "15000000", "-i", url,
 		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d", w, h),
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
@@ -99,7 +100,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, gen 
 	for i := range frames {
 		frames[i] = image.NewRGBA(image.Rect(0, 0, w, h))
 	}
-	r := bufio.NewReaderSize(stdout, w*h*4)
+	r := stdout // frames are read whole with io.ReadFull, no extra buffer
 	for i := 0; ; i = (i + 1) % n {
 		if _, err = io.ReadFull(r, frames[i].Pix); err != nil {
 			break

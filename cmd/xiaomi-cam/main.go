@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -70,8 +71,10 @@ type ui struct {
 	hideTimer  *time.Timer
 	normalSize fyne.Size // window size before video-only mode
 
-	hist     history // SD card playback
-	gotFrame bool    // first frame of the current playback arrived
+	hist         history // SD card playback
+	gotFrame     bool    // first frame of the current playback arrived
+	decodeW      int     // width the video is decoded to (tier, see decodeSize)
+	decodeStable int     // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -87,6 +90,8 @@ type ui struct {
 }
 
 func main() {
+	// video frames are large and short-lived: collect garbage more often to keep memory low
+	debug.SetGCPercent(50)
 	startHidden := false
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -125,6 +130,7 @@ func main() {
 			fyne.Do(func() {
 				u.historyStatus()
 				u.saveGeometry()
+				u.checkDecodeSize()
 			})
 		}
 	}()
@@ -468,7 +474,9 @@ func (u *ui) restart() {
 	u.gotFrame = false
 	u.status.SetText(T("Łączenie z kamerą…"))
 	u.video.clear(T("Łączenie z kamerą…"))
-	go u.player.start(rtspURL(name), q.w, q.h, u.sound.Checked)
+	w, h := u.decodeSize(q.w, q.h)
+	u.decodeW = w
+	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
 }
 
 func (u *ui) changeSource(params map[string]string) {
@@ -764,3 +772,43 @@ func (u *ui) showZoom(z float64) {
 
 // overlayBg - very light background of the buttons over the picture (video-only mode)
 var overlayBg = color.NRGBA{A: 50}
+
+// decodeTiers - widths the video is decoded to. Decoding to the size shown on the screen
+// instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done by the
+// camera, so no detail is lost).
+var decodeTiers = []int{1280, 1920, 2560}
+
+// decodeSize returns the smallest tier not smaller than the picture on the screen
+// (in pixels), limited by the stream size w x h.
+func (u *ui) decodeSize(w, h int) (int, int) {
+	px := int(u.video.Size().Width * u.win.Canvas().Scale())
+	if px <= 0 {
+		px = 1280
+	}
+	dw := w
+	for _, t := range decodeTiers {
+		if t >= px {
+			dw = min(t, w)
+			break
+		}
+	}
+	return dw, dw * h / w
+}
+
+// checkDecodeSize restarts live video when the window was resized to another tier
+// (e.g. full screen); called every second.
+func (u *ui) checkDecodeSize() {
+	if !u.visible || u.hist.on || u.decodeW == 0 || u.camera.Selected == "" {
+		return
+	}
+	q := qualities[max(u.quality.SelectedIndex(), 0)]
+	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW {
+		u.decodeStable++
+		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished
+			u.decodeStable = 0
+			u.restart()
+		}
+		return
+	}
+	u.decodeStable = 0
+}
