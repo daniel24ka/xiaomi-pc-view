@@ -103,6 +103,7 @@ static void wm_set_desktop(void *dpy, unsigned long win, int on) {
 // Put the window at the bottom of its layer (_NET_RESTACK_WINDOW from a pager, which the WM
 // honours without the focus-stealing checks of XLowerWindow). A desktop window goes below
 // the other desktop windows: below the desktop icons (GNOME DING), above the background.
+// d is a connection of its own (wm_open), the calls come from a background goroutine.
 static void wm_lower(void *dpy, unsigned long win) {
 	Display *d = (Display *)dpy;
 	XEvent ev;
@@ -117,10 +118,14 @@ static void wm_lower(void *dpy, unsigned long win) {
 	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
 	XFlush(d);
 }
+
+static void *wm_open(void) { return XOpenDisplay(NULL); }
+static void wm_close(void *dpy) { XCloseDisplay((Display *)dpy); }
 */
 import "C"
 
 import (
+	"time"
 	"unsafe"
 
 	"fyne.io/fyne/v2"
@@ -188,9 +193,29 @@ func wmSetDesktop(w fyne.Window, on bool) bool {
 	return true
 }
 
-// wmLower puts the window at the bottom of its stacking layer (X11 only).
-func wmLower(w fyne.Window) {
-	if win := glfwWindow(w); win != nil && glfw.GetPlatform() == glfw.PlatformX11 {
-		C.wm_lower(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()))
+// wmKeepLowered keeps the window at the bottom of its stacking layer until stop is closed,
+// lowering it every interval from a connection of its own (X11 only; call on the UI thread).
+func wmKeepLowered(w fyne.Window, interval time.Duration, stop chan struct{}) {
+	win := glfwWindow(w)
+	if win == nil || glfw.GetPlatform() != glfw.PlatformX11 {
+		return
 	}
+	xid := C.ulong(win.GetX11Window())
+	go func() {
+		d := C.wm_open()
+		if d == nil {
+			return
+		}
+		defer C.wm_close(d)
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			C.wm_lower(d, xid)
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+			}
+		}
+	}()
 }

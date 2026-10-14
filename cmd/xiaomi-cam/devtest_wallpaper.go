@@ -18,6 +18,10 @@ func init() {
 	if os.Getenv("XC_WALLTEST") == "" {
 		return
 	}
+	var ms int
+	if _, err := fmt.Sscanf(os.Getenv("XC_LOWERMS"), "%d", &ms); err == nil {
+		lowerInterval = time.Duration(ms) * time.Millisecond
+	}
 	devHook = func(u *ui) {
 		geom := func(tag string) {
 			fyne.DoAndWait(func() {

@@ -18,6 +18,8 @@ import (
 
 const prefWallpaper = "wallpaper"
 
+var lowerInterval = 10 * time.Millisecond // keepBelow
+
 // setWallpaper turns the wallpaper mode on or off (UI thread).
 func (u *ui) setWallpaper(on bool) {
 	if on == u.wallpaper {
@@ -48,14 +50,13 @@ func (u *ui) setWallpaper(on bool) {
 		}
 	}
 	u.wallpaper = on
-	u.keepBelow(on)
+	u.keepBelow(false) // on again after the re-map
 	u.updateWallpaperItem()
 	u.app.Preferences().SetBool(prefWallpaper, on)
 	u.exitView.Hide()
 	u.remap(on, place, func() {
-		if on {
-			place() // the WM may have moved it while mapping
-		} else {
+		place() // the WM may have moved it while mapping (e.g. to the focused monitor)
+		if !on {
 			u.win.RequestFocus()
 		}
 	})
@@ -75,8 +76,8 @@ func (u *ui) remap(desktop bool, before, after func()) {
 			time.AfterFunc(300*time.Millisecond, func() {
 				fyne.Do(func() {
 					after()
-					if desktop {
-						wmLower(u.win)
+					if desktop && u.wallpaper {
+						u.keepBelow(true)
 					}
 					u.video.img.Refresh()
 				})
@@ -96,32 +97,18 @@ func (u *ui) remap(desktop bool, before, after func()) {
 }
 
 // keepBelow keeps the window at the bottom of the desktop windows while on. UI thread.
+// A click on the desktop raises the icons window and it lowers itself at once, below this
+// window; the WM tells X11 clients nothing about it, so the window lowers itself often
+// enough to be back before the next frame is drawn (a no-op for the WM when already there).
 func (u *ui) keepBelow(on bool) {
 	if u.wallStop != nil {
 		close(u.wallStop)
 		u.wallStop = nil
 	}
-	if !on {
-		return
+	if on {
+		u.wallStop = make(chan struct{})
+		wmKeepLowered(u.win, lowerInterval, u.wallStop)
 	}
-	stop := make(chan struct{})
-	u.wallStop = stop
-	go func() {
-		t := time.NewTicker(250 * time.Millisecond) // a no-op for the WM when already there
-		defer t.Stop()
-		for {
-			select {
-			case <-stop:
-				return
-			case <-t.C:
-			}
-			fyne.Do(func() {
-				if u.wallStop == stop && !u.remapping {
-					wmLower(u.win)
-				}
-			})
-		}
-	}()
 }
 
 func (u *ui) updateWallpaperItem() {
