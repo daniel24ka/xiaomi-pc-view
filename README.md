@@ -48,6 +48,10 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   (pan/tilt, points, zoom, spotlight, siren, SD card history) are hidden; detected from the
   camera's MIoT properties.
 - **Tooltips** with a description on every button and control.
+- **Progress indicators**: a button whose action takes a moment (snapshot, recording start/stop,
+  camera points, notification tests, …) shows a spinner and ignores repeated clicks; a spinner
+  next to the status line while the camera is changing a setting (spotlight, siren, zoom), and
+  over the picture while connecting to the camera or searching for a recording.
 - Polish / English UI.
 - Mi Home login with captcha and 2FA code support.
 

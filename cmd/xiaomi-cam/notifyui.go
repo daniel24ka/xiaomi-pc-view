@@ -112,11 +112,14 @@ func (u *ui) notificationSettings() fyne.CanvasObject {
 	tgToken.SetPlaceHolder("123456789:AA...")
 	tgChat := widget.NewEntry()
 	tgChat.SetText(cfg.Telegram.ChatID)
-	findChat := newButton(T("Wykryj chat ID"), theme.SearchIcon(), func() {
+	var findChat *ptrButton
+	findChat = newButton(T("Wykryj chat ID"), theme.SearchIcon(), func() {
 		token := strings.TrimSpace(tgToken.Text)
+		done := u.busy(findChat)
 		go func() {
 			id, name, err := telegramFindChatID(token)
 			fyne.Do(func() {
+				done()
 				if err != nil {
 					dialog.ShowError(err, u.win)
 					return
@@ -152,16 +155,18 @@ func (u *ui) notificationSettings() fyne.CanvasObject {
 		return true
 	}
 	testText := T("To jest wiadomość testowa z Xiaomi Cam.")
-	test := func(send func(n notifyChannels) error) func() {
+	test := func(b **ptrButton, send func(n notifyChannels) error) func() {
 		return func() {
 			if !save() {
 				return
 			}
 			n := current()
 			u.status.SetText(T("Wysyłam test…"))
+			done := u.busy(*b)
 			go func() {
 				err := send(n)
 				fyne.Do(func() {
+					done()
 					if err != nil {
 						dialog.ShowError(err, u.win)
 						u.status.SetText("")
@@ -174,7 +179,9 @@ func (u *ui) notificationSettings() fyne.CanvasObject {
 		}
 	}
 	testBtn := func(f func(n notifyChannels) error) *ptrButton {
-		return newButton(T("Wyślij test"), theme.MailSendIcon(), test(f))
+		var b *ptrButton
+		b = newButton(T("Wyślij test"), theme.MailSendIcon(), test(&b, f))
+		return b
 	}
 	saveBtn := newButton(T("Zapisz"), theme.DocumentSaveIcon(), func() {
 		if save() {

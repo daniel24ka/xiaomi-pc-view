@@ -55,6 +55,12 @@ type ui struct {
 	player player
 	status *widget.Label
 
+	activity   *spinner // spinner next to the status line: an action in progress
+	busyCount  int      // actions in progress (busy.go)
+	snapButton *ptrButton
+	// "run now" buttons of AI tasks being checked (Settings)
+	aiRunButtons []*ptrButton
+
 	camera     *ptrSelect
 	quality    *ptrSelect
 	connection *ptrSelect
@@ -86,6 +92,7 @@ type ui struct {
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
+	zoomDone   func() // ends the busy indicator of the pending zoom command
 	zoomLabel  *widget.Label
 	zoomSlider *zoomSlider // vertical, over the picture in video-only mode
 
@@ -216,6 +223,7 @@ func (u *ui) build() {
 	u.video.onResize = u.resizeKeepAspect
 	u.video.onEdgePress = func(dir int) bool { return wmMoveResize(u.win, dir) }
 	u.status = widget.NewLabel("")
+	u.activity = newSpinner(spinnerFrames)
 	u.player.onFrame = func(img *image.RGBA, gen int64) {
 		fyne.Do(func() {
 			if gen != u.player.gen.Load() {
@@ -275,6 +283,7 @@ func (u *ui) build() {
 	u.buildHistory()
 	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
 	u.recButton = newButton("", recordIcon, u.toggleRecording)
+	u.snapButton = newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)"))
 	// tooltips of the named controls
 	u.camera.tip = T("Wybór kamery")
 	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD")
@@ -291,7 +300,7 @@ func (u *ui) build() {
 		u.gridButton,
 		u.hist.button,
 		u.recButton,
-		newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)")),
+		u.snapButton,
 		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }).withTip(T("Tylko obraz – ukrywa panele i ramkę okna (H, powrót: Esc)")),
 		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen).withTip(T("Pełny ekran (F, F11, podwójne kliknięcie)")),
 		widget.NewSeparator(),
@@ -308,7 +317,7 @@ func (u *ui) build() {
 	u.light = newCheck(T("Reflektor"), func(on bool) {
 		u.win.Canvas().Unfocus()
 		if !u.syncing {
-			u.setProp(propLight, on)
+			u.setProp(propLight, on, u.light)
 		}
 	})
 	u.brightness = newSlider(0, 100)
@@ -316,7 +325,7 @@ func (u *ui) build() {
 	u.brightness.OnChangeEnded = func(v float64) {
 		u.win.Canvas().Unfocus()
 		if !u.syncing {
-			u.setProp(propBrightness, int(v))
+			u.setProp(propBrightness, int(v), u.brightness)
 		}
 	}
 	u.siren = newCheck(T("Syrena"), func(on bool) {
@@ -325,12 +334,12 @@ func (u *ui) build() {
 			return
 		}
 		if !on {
-			u.setProp(propSiren, false)
+			u.setProp(propSiren, false, u.siren)
 			return
 		}
 		dialog.ShowConfirm(T("Syrena"), T("Włączyć syrenę alarmową kamery?"), func(ok bool) {
 			if ok {
-				u.setProp(propSiren, true)
+				u.setProp(propSiren, true, u.siren)
 			} else {
 				u.syncing = true
 				u.siren.SetChecked(false)
@@ -371,6 +380,7 @@ func (u *ui) build() {
 		u.capLight,
 		u.siren, u.sound,
 		widget.NewSeparator(),
+		u.activity,
 		u.status,
 	)
 	bottomBox := container.NewVBox(u.hist.bar, bottom)
@@ -539,13 +549,13 @@ func (u *ui) restart() {
 	}
 	if name == "" {
 		u.player.stop()
-		u.video.clear(T("Brak kamery – kliknij „Dodaj”"))
+		u.video.clear(T("Brak kamery – kliknij „Dodaj”"), false)
 		return
 	}
 	q := qualities[u.syncControls(name)]
 	u.gotFrame = false
 	u.status.SetText(T("Łączenie z kamerą…"))
-	u.video.clear(T("Łączenie z kamerą…"))
+	u.video.clear(T("Łączenie z kamerą…"), true)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
 	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
@@ -641,13 +651,17 @@ func (u *ui) loadCameraState() {
 	})
 }
 
-func (u *ui) setProp(p miotProp, value any) {
+// setProp sets a camera property; the control w is disabled until the camera answers.
+func (u *ui) setProp(p miotProp, value any, w fyne.Disableable) {
 	name := u.camera.Selected
+	done := u.busy(nil, w)
 	go func() {
-		if err := setProp(name, p, value); err != nil {
+		err := setProp(name, p, value)
+		if err != nil {
 			fyne.Do(func() { dialog.ShowError(err, u.win) })
 		}
 		u.loadCameraState()
+		fyne.Do(done)
 	}()
 }
 
@@ -655,13 +669,15 @@ func (u *ui) setProp(p miotProp, value any) {
 // downscaled picture) to the snapshots folder from the settings.
 func (u *ui) snapshot() {
 	name := u.camera.Selected
-	if name == "" {
+	if name == "" || u.snapButton.isBusy() {
 		return
 	}
 	u.status.SetText(T("Zapisuję zdjęcie…"))
+	done := u.busy(u.snapButton)
 	go func() {
 		path, err := saveSnapshot(name)
 		fyne.Do(func() {
+			done()
 			if err != nil {
 				dialog.ShowError(err, u.win)
 				return
@@ -905,15 +921,21 @@ func (u *ui) zoomBy(delta float64) {
 func (u *ui) setZoom(z float64) {
 	u.camZoom = min(max(z, 1), maxZoom)
 	u.showZoom(u.camZoom)
-	if u.zoomTimer != nil {
-		u.zoomTimer.Stop()
+	if u.zoomTimer != nil && u.zoomTimer.Stop() {
+		u.zoomDone() // the previous value wasn't sent
 	}
 	name, zoom := u.camera.Selected, u.camZoom
 	setZoomState(name, zoom)
+	done := u.busy(nil)
+	u.zoomDone = done
 	u.zoomTimer = time.AfterFunc(300*time.Millisecond, func() {
-		if err := cameraZoom(name, zoom); err != nil {
-			fyne.Do(func() { u.status.SetText("Zoom: " + err.Error()) })
-		}
+		err := cameraZoom(name, zoom)
+		fyne.Do(func() {
+			done()
+			if err != nil {
+				u.status.SetText("Zoom: " + err.Error())
+			}
+		})
 	})
 }
 

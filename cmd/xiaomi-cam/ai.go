@@ -261,6 +261,12 @@ func (e *aiEngine) reschedule() {
 // runNow runs a task once (button "run now"), in the background.
 func (e *aiEngine) runNow(id string) { go e.run(id) }
 
+func (e *aiEngine) isRunning(id string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.running[id]
+}
+
 func (e *aiEngine) run(id string) {
 	e.mu.Lock()
 	var task aiTask
@@ -277,6 +283,9 @@ func (e *aiEngine) run(id string) {
 	e.running[id] = true
 	cfg := e.cfg
 	e.mu.Unlock()
+	if e.onChange != nil {
+		e.onChange() // the task list shows it's running
+	}
 
 	detected, answer, img, err := e.check(&task, cfg)
 

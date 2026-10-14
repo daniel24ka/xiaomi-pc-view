@@ -109,7 +109,10 @@ func (u *ui) showSettings() {
 		container.NewTabItemWithIcon(T("Powiadomienia"), theme.MailComposeIcon(), u.notificationSettings()),
 	)
 	d := dialog.NewCustom(T("Ustawienia"), T("Zamknij"), tabs, u.win)
-	d.SetOnClosed(func() { u.ai.onChange = nil })
+	d.SetOnClosed(func() {
+		u.ai.onChange = nil
+		u.stopAIRunSpinners()
+	})
 	d.Resize(fyne.NewSize(860, 640))
 	d.Show()
 }
@@ -120,10 +123,16 @@ func (u *ui) toggleRecording() {
 	if name == "" {
 		return
 	}
+	if u.recButton.isBusy() {
+		return
+	}
+	done := u.busy(u.recButton)
 	if len(activeRecordings()) > 0 {
 		go func() {
 			stopped := stopAll()
 			fyne.Do(func() {
+				done()
+				u.updateRecordButton()
 				var files []string
 				for _, r := range stopped {
 					files = append(files, filepath.Base(r.path))
@@ -133,9 +142,17 @@ func (u *ui) toggleRecording() {
 		}()
 		return
 	}
-	if _, err := startRecordings(recordMode(), name, nil, 0); err != nil {
-		dialog.ShowError(err, u.win)
-	}
+	mode := recordMode()
+	go func() {
+		_, err := startRecordings(mode, name, nil, 0)
+		fyne.Do(func() {
+			done()
+			u.updateRecordButton()
+			if err != nil {
+				dialog.ShowError(err, u.win)
+			}
+		})
+	}()
 }
 
 // updateRecordButton - record button look and the status line while recording
@@ -147,14 +164,14 @@ func (u *ui) updateRecordButton() {
 	active := activeRecordings()
 	if len(active) == 0 {
 		if u.recButton.Importance != widget.MediumImportance {
-			u.recButton.SetIcon(recordIcon)
+			u.recButton.setIdleIcon(recordIcon)
 			u.recButton.Importance = widget.MediumImportance
 			u.recButton.Refresh()
 		}
 		return
 	}
 	if u.recButton.Importance != widget.DangerImportance {
-		u.recButton.SetIcon(theme.MediaStopIcon())
+		u.recButton.setIdleIcon(theme.MediaStopIcon())
 		u.recButton.Importance = widget.DangerImportance
 		u.recButton.Refresh()
 	}

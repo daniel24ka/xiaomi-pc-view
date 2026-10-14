@@ -68,12 +68,18 @@ func (u *ui) pointPressed(slot int) {
 	if name == "" || !u.caps.Points {
 		return
 	}
+	b := u.pointButtons[slot-1]
+	if b.isBusy() {
+		return
+	}
 	if p := u.points[slot-1]; p != nil {
 		u.status.SetText(fmt.Sprintf(T("Obracam do punktu %d (%s)…"), slot, p.Label()))
 		idx := p.Idx
+		done := u.busy(b)
 		go func() {
 			err := gotoPreset(name, idx)
 			fyne.Do(func() {
+				done()
 				if err != nil {
 					dialog.ShowError(err, u.win)
 				}
@@ -96,9 +102,12 @@ func (u *ui) savePointDialog(slot int) {
 				return
 			}
 			name, label := u.camera.Selected, strings.TrimSpace(entry.Text)
+			u.status.SetText(fmt.Sprintf(T("Zapisuję punkt %d…"), slot))
+			done := u.busy(u.pointButtons[slot-1])
 			go func() {
 				err := savePresetSlot(name, slot, label)
 				fyne.Do(func() {
+					done()
 					if err != nil {
 						dialog.ShowError(err, u.win)
 						return
@@ -120,15 +129,18 @@ func (u *ui) showPoints() {
 		if p := u.points[i]; p != nil {
 			desc = p.Label()
 		}
-		del := newButton("", theme.DeleteIcon(), func() {
+		var del *ptrButton
+		del = newButton("", theme.DeleteIcon(), func() {
 			p := u.points[slot-1]
 			if p == nil {
 				return
 			}
 			name, idx := u.camera.Selected, p.Idx
+			done := u.busy(del)
 			go func() {
 				err := deletePreset(name, idx)
 				fyne.Do(func() {
+					done()
 					if err != nil {
 						dialog.ShowError(err, u.win)
 					}

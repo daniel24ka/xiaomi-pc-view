@@ -31,6 +31,15 @@ var providers = []struct{ name, id string }{
 }
 
 // aiSettings - the "AI" tab of the settings: providers and tasks.
+// stopAIRunSpinners stops the spinners of the "run now" buttons of running tasks (the
+// task list is rebuilt, or the settings closed).
+func (u *ui) stopAIRunSpinners() {
+	for _, b := range u.aiRunButtons {
+		b.setBusy(false)
+	}
+	u.aiRunButtons = nil
+}
+
 func (u *ui) aiSettings() fyne.CanvasObject {
 	cfg := u.ai.config()
 
@@ -53,12 +62,15 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 	localModel := widget.NewSelectEntry(nil)
 	localModel.SetText(cfg.LocalModel)
 	localModel.SetPlaceHolder("qwen2.5-vl-7b-instruct")
-	fetchModels := newButton(T("Pobierz modele"), theme.DownloadIcon(), func() {
+	var fetchModels *ptrButton
+	fetchModels = newButton(T("Pobierz modele"), theme.DownloadIcon(), func() {
 		url, key := localURL.Text, localKey.Text
 		u.status.SetText(T("Łączę z serwerem…"))
+		done := u.busy(fetchModels)
 		go func() {
 			ids, err := listModels(url, key)
 			fyne.Do(func() {
+				done()
 				if err != nil {
 					dialog.ShowError(err, u.win)
 					u.status.SetText("")
@@ -97,6 +109,7 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 	list := container.NewVBox()
 	var refresh func()
 	refresh = func() {
+		u.stopAIRunSpinners()
 		list.RemoveAll()
 		tasks := u.ai.config().Tasks
 		if len(tasks) == 0 {
@@ -118,11 +131,16 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 			info.Importance = widget.LowImportance
 			status := widget.NewLabel(taskStatus(t))
 			status.Wrapping = fyne.TextWrapWord
+			run := newButton("", theme.MediaPlayIcon(), func() {
+				u.ai.runNow(t.ID)
+				u.status.SetText(fmt.Sprintf(T("Zadanie „%s” uruchomione"), t.Name))
+			}).withTip(T("Uruchom teraz – sprawdzenie testowe"))
+			if u.ai.isRunning(t.ID) {
+				run.setBusy(true) // the list is rebuilt when the run ends
+				u.aiRunButtons = append(u.aiRunButtons, run)
+			}
 			buttons := container.NewHBox(
-				newButton("", theme.MediaPlayIcon(), func() {
-					u.ai.runNow(t.ID)
-					u.status.SetText(fmt.Sprintf(T("Zadanie „%s” uruchomione"), t.Name))
-				}).withTip(T("Uruchom teraz – sprawdzenie testowe")),
+				run,
 				newButton("", theme.DocumentCreateIcon(), func() { u.editTask(t, refresh) }).withTip(T("Edytuj zadanie")),
 				newButton("", theme.DeleteIcon(), func() {
 					dialog.ShowConfirm(T("Usuń zadanie"), fmt.Sprintf(T("Usunąć zadanie „%s”?"), t.Name), func(ok bool) {

@@ -227,9 +227,10 @@ var moveIcon = theme.NewThemedResource(fyne.NewStaticResource("move.svg", []byte
 type ptrButton struct {
 	widget.Button
 	tip string // tooltip
-}
 
-func (*ptrButton) Cursor() desktop.Cursor { return desktop.PointerCursor }
+	busyStop chan struct{} // action in progress (busy.go)
+	busyIcon fyne.Resource // icon shown again when the action ends
+}
 
 func newButton(label string, icon fyne.Resource, tapped func()) *ptrButton {
 	b := &ptrButton{}

@@ -187,6 +187,8 @@ type videoView struct {
 	img    *canvas.Image
 	bg     *canvas.Rectangle
 	status *canvas.Text
+	// spinner above the status text: connecting, searching for a recording
+	spinner *spinner
 
 	frame *image.RGBA
 
@@ -274,6 +276,7 @@ func newVideoView() *videoView {
 	v.bg = canvas.NewRectangle(color.Black)
 	v.status = canvas.NewText("", color.Gray{Y: 200})
 	v.status.Alignment = fyne.TextAlignCenter
+	v.spinner = newSpinner(videoSpinnerFrames)
 	v.ExtendBaseWidget(v)
 	return v
 }
@@ -288,22 +291,32 @@ func (v *videoView) setFrame(f *image.RGBA) {
 	if v.status.Text != "" {
 		v.status.Text = ""
 		v.status.Refresh()
+		v.showSpinner(false)
 	}
 	v.updateImage()
 }
 
+// setStatus shows a text over the picture with a spinner (the player is connecting);
+// "" hides both.
 func (v *videoView) setStatus(text string) {
 	v.status.Text = text
 	v.status.Refresh()
+	v.showSpinner(text != "")
 	if text != "" && v.frame == nil {
 		v.img.Image = nil
 		v.img.Refresh()
 	}
 }
 
-func (v *videoView) clear(text string) {
+// clear removes the picture and shows the text; busy - with the spinner.
+func (v *videoView) clear(text string, busy bool) {
 	v.frame = nil
 	v.setStatus(text)
+	v.showSpinner(busy)
+}
+
+func (v *videoView) showSpinner(on bool) {
+	v.spinner.run(on)
 }
 
 func (v *videoView) updateImage() {
@@ -394,11 +407,14 @@ func (r *videoRenderer) Layout(size fyne.Size) {
 	}
 	r.v.status.Move(fyne.NewPos(0, size.Height/2-10))
 	r.v.status.Resize(fyne.NewSize(size.Width, 20))
+	const sp = 32
+	r.v.spinner.Resize(fyne.NewSize(sp, sp))
+	r.v.spinner.Move(fyne.NewPos((size.Width-sp)/2, size.Height/2-20-sp))
 }
 
 func (r *videoRenderer) MinSize() fyne.Size { return fyne.NewSize(480, 270) }
 func (r *videoRenderer) Refresh()           { canvas.Refresh(r.v) }
 func (r *videoRenderer) Destroy()           {}
 func (r *videoRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.status}
+	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.spinner, r.v.status}
 }
