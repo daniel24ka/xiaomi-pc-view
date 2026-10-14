@@ -65,6 +65,7 @@ Download `xiaomi-cam-<version>-linux-amd64.tar.gz` from [Releases](../../release
 tar xzf xiaomi-cam-*-linux-amd64.tar.gz
 install -Dm755 xiaomi-cam/xiaomi-cam ~/.local/bin/xiaomi-cam
 install -Dm644 xiaomi-cam/xiaomi-cam.desktop ~/.local/share/applications/xiaomi-cam.desktop
+install -Dm644 xiaomi-cam/xiaomi-cam.svg ~/.local/share/icons/hicolor/scalable/apps/xiaomi-cam.svg
 ```
 
 Or build from source (Go ≥ 1.25, a C compiler, X11/GL headers):
