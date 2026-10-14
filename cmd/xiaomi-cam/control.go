@@ -131,9 +131,10 @@ type moveHandle struct {
 	wm  bool // moved by the window manager
 }
 
-func newMoveHandle(win fyne.Window) *moveHandle {
+func newMoveHandle(win fyne.Window, importance widget.Importance) *moveHandle {
 	h := &moveHandle{win: win}
 	h.Icon = moveIcon
+	h.Importance = importance
 	h.ExtendBaseWidget(h)
 	return h
 }

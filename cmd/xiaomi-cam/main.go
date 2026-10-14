@@ -63,7 +63,7 @@ type ui struct {
 	siren      *ptrCheck
 	sound      *ptrCheck
 	bars       []fyne.CanvasObject
-	exitView   *fyne.Container // small "exit view-only mode" button over the video
+	exitView   *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
 	viewOnly   bool
 	hideTimer  *time.Timer
 	normalSize fyne.Size // window size before video-only mode
@@ -71,9 +71,10 @@ type ui struct {
 	hist     history // SD card playback
 	gotFrame bool    // first frame of the current playback arrived
 
-	camZoom   float64 // camera zoom 1.0-9.0
-	zoomTimer *time.Timer
-	zoomLabel *widget.Label
+	camZoom    float64 // camera zoom 1.0-9.0
+	zoomTimer  *time.Timer
+	zoomLabel  *widget.Label
+	zoomSlider *zoomSlider // vertical, over the picture in video-only mode
 
 	dragX, dragY float32      // accumulated mouse drag for camera moves
 	mover        *mover       // pan/tilt steps
@@ -137,7 +138,7 @@ func main() {
 		fyne.Do(func() {
 			if name == u.camera.Selected {
 				u.camZoom = z
-				u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+				u.showZoom(z)
 			}
 		})
 	})
@@ -304,11 +305,46 @@ func (u *ui) build() {
 	bottomBox := container.NewVBox(u.hist.bar, bottom)
 	u.bars = []fyne.CanvasObject{top, bottomBox}
 	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) })
+	exitBtn.Importance = widget.LowImportance
 	// button lies on the picture, on a translucent background
-	exitBox := container.NewStack(canvas.NewRectangle(color.NRGBA{A: 140}),
-		container.NewHBox(newMoveHandle(u.win), exitBtn))
-	u.exitView = container.NewVBox(container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
-		container.NewHBox(layout.NewSpacer(), exitBox))) // 10 px from top and right edge
+	exitBox := container.NewStack(canvas.NewRectangle(overlayBg),
+		container.NewHBox(newMoveHandle(u.win, widget.LowImportance), exitBtn))
+	// pan/tilt buttons for video-only mode (dragging the picture doesn't move the camera there);
+	// pressing keeps the overlay visible
+	overlayPTZ := func(icon fyne.Resource, op int) *holdButton {
+		b := newHoldButton(icon, func() {
+			u.showExitButton()
+			u.mover.press(op)
+		}, u.mover.release)
+		b.Importance = widget.LowImportance // no button background, only the light overlay one
+		return b
+	}
+	ptzBox := container.NewStack(canvas.NewRectangle(overlayBg), container.NewHBox(
+		overlayPTZ(theme.NavigateBackIcon(), motorLeft),
+		overlayPTZ(theme.MoveUpIcon(), motorUp),
+		overlayPTZ(theme.MoveDownIcon(), motorDown),
+		overlayPTZ(theme.NavigateNextIcon(), motorRight),
+	))
+	u.zoomSlider = newZoomSlider(1, maxZoom, zoomStep)
+	u.zoomSlider.SetValue(u.camZoom)
+	u.zoomSlider.onChanged = func(v float64) {
+		u.showExitButton()
+		u.zoomLabel.SetText(fmt.Sprintf("%.1f×", v))
+	}
+	u.zoomSlider.onChangeEnded = func(v float64) {
+		u.showExitButton()
+		u.setZoom(v)
+	}
+	zoomBox := container.NewStack(canvas.NewRectangle(overlayBg),
+		container.New(layout.NewCustomPaddedLayout(4, 4, 4, 8), u.zoomSlider))
+	u.exitView = container.NewBorder(
+		container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
+			container.NewHBox(layout.NewSpacer(), exitBox)), // 10 px from top and right edge
+		container.New(layout.NewCustomPaddedLayout(0, 10, 10, 0),
+			container.NewHBox(ptzBox, layout.NewSpacer())), // 10 px from bottom and left edge
+		nil,
+		container.New(layout.NewCustomPaddedLayout(0, 0, 0, 10), // 10 px from right edge, centered
+			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
 	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, container.NewStack(u.video, u.exitView)))
 
@@ -586,6 +622,9 @@ func (u *ui) showExitButton() {
 // cameraDrag turns the camera when the picture is dragged: like grabbing the view,
 // dragging right turns the camera left. One motor step per dragStep pixels.
 func (u *ui) cameraDrag(dx, dy float32) {
+	if u.viewOnly {
+		return // video-only mode has pan/tilt buttons instead
+	}
 	const dragStep = 15
 	u.dragX += dx
 	u.dragY += dy
@@ -710,8 +749,13 @@ const (
 // zoomBy changes the camera zoom. Only the last value is sent after a short pause,
 // so scrolling the wheel doesn't flood the camera with commands.
 func (u *ui) zoomBy(delta float64) {
-	u.camZoom = min(max(u.camZoom+delta, 1), maxZoom)
-	u.zoomLabel.SetText(fmt.Sprintf("%.1f×", u.camZoom))
+	u.setZoom(u.camZoom + delta)
+}
+
+// setZoom sets the camera zoom; only the last value is sent after a short pause.
+func (u *ui) setZoom(z float64) {
+	u.camZoom = min(max(z, 1), maxZoom)
+	u.showZoom(u.camZoom)
 	if u.zoomTimer != nil {
 		u.zoomTimer.Stop()
 	}
@@ -723,3 +767,14 @@ func (u *ui) zoomBy(delta float64) {
 		}
 	})
 }
+
+// showZoom updates the zoom label and the video-only zoom slider.
+func (u *ui) showZoom(z float64) {
+	u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+	if u.zoomSlider != nil {
+		u.zoomSlider.SetValue(z)
+	}
+}
+
+// overlayBg - very light background of the buttons over the picture (video-only mode)
+var overlayBg = color.NRGBA{A: 50}

@@ -50,8 +50,11 @@ func init() {
 			u.mover.release()
 		}
 
-		step(time.Second, func() { u.setViewOnly(true) })
+		step(time.Second, func() { u.setViewOnly(true); u.zoomSlider.SetValue(3) })
 		step(2*time.Second, func() {
+			u.showExitButton()
+		})
+		step(500*time.Millisecond, func() {
 			save("videoonly.jpg")
 			fmt.Println("decorated:", glfwWindow(u.win).GetAttrib(glfw.Decorated))
 			u.resizeKeepAspect(200, 0)
