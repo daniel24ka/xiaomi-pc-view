@@ -25,7 +25,7 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   re-encoding, almost no CPU), AAC audio. Fragmented MP4, so a file stays playable even if
   the app is closed while recording. Recording works with the window hidden.
 - **Recording mode** (Settings → General): the selected camera, **each camera to its own
-  file**, or **all cameras in one grid video** (H.265, cells 960×540, sound from the selected
+  file**, or **all cameras in one grid video** (choose which cameras with checkboxes) (H.265, cells 960×540, sound from the selected
   camera; this mode re-encodes and uses the CPU). The record button starts/stops all of them.
 - Full resolution (2560×1440) snapshots.
 - **Settings**: folders for recordings (default: your Videos folder) and snapshots (default:
@@ -44,6 +44,10 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - Only one instance runs; starting the app again shows the window that is already open.
 - **AI tasks**: Claude or OpenAI checks the camera picture on a schedule (CRON) for what you
   describe in a prompt, and sends a system notification when it is detected.
+- **Only what the camera can do**: controls of features the selected camera doesn't have
+  (pan/tilt, points, zoom, spotlight, siren, SD card history) are hidden; detected from the
+  camera's MIoT properties.
+- **Tooltips** with a description on every button and control.
 - Polish / English UI.
 - Mi Home login with captcha and 2FA code support.
 

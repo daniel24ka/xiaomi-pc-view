@@ -173,6 +173,7 @@ func (u *ui) cameraSelected(name string) {
 	u.camZoom = currentZoom(name)
 	u.showZoom(u.camZoom)
 	go u.loadCameraState()
+	u.updateCaps()
 	u.loadPoints()
 }
 

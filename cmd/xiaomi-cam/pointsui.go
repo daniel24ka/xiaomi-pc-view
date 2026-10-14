@@ -65,7 +65,7 @@ func (u *ui) loadPoints() {
 // pointPressed turns to a defined point, or offers to save the current position.
 func (u *ui) pointPressed(slot int) {
 	name := u.camera.Selected
-	if name == "" {
+	if name == "" || !u.caps.Points {
 		return
 	}
 	if p := u.points[slot-1]; p != nil {

@@ -68,18 +68,21 @@ type ui struct {
 	hideTimer  *time.Timer
 	normalSize fyne.Size // window size before video-only mode
 
-	hist         history // SD card playback
-	recButton    *ptrButton
-	ai           *aiEngine            // AI tasks (Settings → AI)
-	points       [presetSlots]*preset // camera points 1-3
-	grid         bool                 // grid of all cameras
-	tiles        []*tile
-	videoArea    *fyne.Container
-	gridButton   *ptrButton
-	pointButtons [presetSlots]*ptrButton
-	gotFrame     bool // first frame of the current playback arrived
-	decodeW      int  // width the video is decoded to (tier, see decodeSize)
-	decodeStable int  // seconds the window has needed another decode size
+	hist                                 history // SD card playback
+	recButton                            *ptrButton
+	ai                                   *aiEngine            // AI tasks (Settings → AI)
+	points                               [presetSlots]*preset // camera points 1-3
+	grid                                 bool                 // grid of all cameras
+	tiles                                []*tile
+	videoArea                            *fyne.Container
+	gridButton                           *ptrButton
+	caps                                 camCaps // features of the selected camera
+	capPTZ, capPoints, capZoom, capLight fyne.CanvasObject
+	capOverlayPTZ, capOverlayZoom        fyne.CanvasObject
+	pointButtons                         [presetSlots]*ptrButton
+	gotFrame                             bool // first frame of the current playback arrived
+	decodeW                              int  // width the video is decoded to (tier, see decodeSize)
+	decodeStable                         int  // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -124,6 +127,7 @@ func main() {
 	appPrefs = a.Preferences()
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
+	u.caps = allCaps
 	u.camZoom = 1
 	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
 		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
@@ -245,6 +249,8 @@ func (u *ui) build() {
 			}
 			u.restart()
 			go u.loadCameraState()
+			u.updateCaps()
+			u.updateCaps()
 			u.loadPoints()
 		}
 	})
@@ -343,19 +349,26 @@ func (u *ui) build() {
 	u.brightness.tip = T("Jasność reflektora")
 	u.siren.tip = T("Syrena alarmowa kamery (z potwierdzeniem)")
 	u.sound.tip = T("Dźwięk z kamery")
-	bottom := container.NewHBox(
+	// groups of controls, hidden when the selected camera doesn't have the feature (caps.go)
+	u.capPTZ = container.NewHBox(
 		ptz(theme.NavigateBackIcon(), motorLeft),
 		ptz(theme.MoveUpIcon(), motorUp),
 		ptz(theme.MoveDownIcon(), motorDown),
-		ptz(theme.NavigateNextIcon(), motorRight),
-		u.buildPoints(),
+		ptz(theme.NavigateNextIcon(), motorRight))
+	u.capPoints = u.buildPoints()
+	u.capZoom = container.NewHBox(
 		widget.NewSeparator(),
 		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }).withTip(T("Oddal – zoom kamery (−, kółko myszy)")),
 		u.zoomLabel,
 		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }).withTip(T("Przybliż – zoom kamery do 9× (+, kółko myszy)")),
-		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }).withTip(T("Zoom 1× (0)")),
+		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }).withTip(T("Zoom 1× (0)")))
+	u.capLight = container.NewHBox(u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness))
+	bottom := container.NewHBox(
+		u.capPTZ,
+		u.capPoints,
+		u.capZoom,
 		widget.NewSeparator(),
-		u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness),
+		u.capLight,
 		u.siren, u.sound,
 		widget.NewSeparator(),
 		u.status,
@@ -398,6 +411,7 @@ func (u *ui) build() {
 	}
 	zoomBox := container.NewStack(canvas.NewRectangle(overlayBg),
 		container.New(layout.NewCustomPaddedLayout(4, 4, 4, 8), u.zoomSlider))
+	u.capOverlayPTZ, u.capOverlayZoom = ptzBox, zoomBox
 	u.exitView = container.NewBorder(
 		container.New(layout.NewCustomPaddedLayout(10, 0, 0, 10),
 			container.NewHBox(layout.NewSpacer(), exitBox)), // 10 px from top and right edge
@@ -427,7 +441,7 @@ func (u *ui) build() {
 	arrows := map[fyne.KeyName]int{fyne.KeyLeft: motorLeft, fyne.KeyRight: motorRight, fyne.KeyUp: motorUp, fyne.KeyDown: motorDown}
 	if dc, ok := u.win.Canvas().(desktop.Canvas); ok {
 		dc.SetOnKeyDown(func(e *fyne.KeyEvent) {
-			if op, ok := arrows[e.Name]; ok {
+			if op, ok := arrows[e.Name]; ok && u.caps.PTZ {
 				u.mover.press(op)
 			}
 		})
@@ -461,6 +475,7 @@ func (u *ui) build() {
 		u.camera.SetSelected(names[0])
 		u.syncing = false
 		go u.loadCameraState()
+		u.updateCaps()
 		u.loadPoints()
 	}
 }
@@ -598,6 +613,9 @@ func (u *ui) changeSource(params map[string]string) {
 }
 
 func (u *ui) loadCameraState() {
+	if cameraSource(u.camera.Selected) == "" {
+		return // not a Xiaomi camera: no state to read
+	}
 	name := u.camera.Selected
 	props, err := getProps(name, propLight, propBrightness, propSiren)
 	if err != nil {
@@ -739,6 +757,9 @@ func (u *ui) hideOverlayAfter(d time.Duration) {
 // dragging right turns the camera left. The camera moves while the mouse keeps dragging
 // in that direction and stops on release (cameraDragEnd).
 func (u *ui) cameraDrag(dx, dy float32) {
+	if !u.caps.PTZ {
+		return
+	}
 	if u.viewOnly {
 		return // video-only mode has pan/tilt buttons instead
 	}
@@ -820,6 +841,7 @@ func (u *ui) languageSelect() *ptrSelect {
 			u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
 		}
 		go u.loadCameraState()
+		u.updateCaps()
 		u.loadPoints()
 	}
 	return sel
@@ -873,6 +895,9 @@ const (
 // zoomBy changes the camera zoom. Only the last value is sent after a short pause,
 // so scrolling the wheel doesn't flood the camera with commands.
 func (u *ui) zoomBy(delta float64) {
+	if !u.caps.Zoom {
+		return
+	}
 	u.setZoom(u.camZoom + delta)
 }
 
