@@ -119,11 +119,17 @@ func main() {
 	onShowRequest(func() { fyne.Do(u.show) })
 	go func() {
 		for range time.Tick(time.Second) {
-			fyne.Do(u.historyStatus)
+			fyne.Do(func() {
+				u.historyStatus()
+				u.saveGeometry()
+			})
 		}
 	}()
-	a.Lifecycle().SetOnStarted(func() { onMinimize(u.win, u.hide) }) // minimize = hide to tray
-	a.Lifecycle().SetOnStopped(u.player.stop)                        // no frames to the UI after it stopped
+	a.Lifecycle().SetOnStarted(func() {
+		onMinimize(u.win, u.hide) // minimize = hide to tray
+		u.restoreGeometry(geomFramed)
+	})
+	a.Lifecycle().SetOnStopped(u.player.stop) // no frames to the UI after it stopped
 
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
@@ -366,6 +372,7 @@ func (u *ui) setupTray() {
 
 // hide closes the window to tray and stops video, so the camera is not streaming in the background.
 func (u *ui) hide() {
+	u.saveGeometry()
 	u.visible = false
 	u.win.Hide()
 	u.player.stop()
@@ -374,6 +381,7 @@ func (u *ui) hide() {
 func (u *ui) show() {
 	u.visible = true
 	u.win.Show()
+	u.restoreGeometry(u.geometryKey()) // the WM may place a re-shown window elsewhere
 	if win := glfwWindow(u.win); win != nil && win.GetAttrib(glfw.Iconified) == glfw.True {
 		win.Restore() // it was minimized to tray
 	}
@@ -517,18 +525,21 @@ func (u *ui) setViewOnly(on bool) {
 	if on == u.viewOnly {
 		return
 	}
+	u.saveGeometry() // of the mode we are leaving
 	u.viewOnly = on
 	u.showBars(!on)
 	u.win.SetPadded(!on)
 	if on {
 		u.normalSize = u.win.Canvas().Size()
 		setDecorated(u.win, false)
-		aspect := float32(9) / 16
-		if f := u.video.frame; f != nil {
-			aspect = float32(f.Bounds().Dy()) / float32(f.Bounds().Dx())
+		if !u.restoreGeometry(geomFrameless) {
+			aspect := float32(9) / 16
+			if f := u.video.frame; f != nil {
+				aspect = float32(f.Bounds().Dy()) / float32(f.Bounds().Dx())
+			}
+			w := u.normalSize.Width
+			u.win.Resize(fyne.NewSize(w, w*aspect))
 		}
-		w := u.normalSize.Width
-		u.win.Resize(fyne.NewSize(w, w*aspect))
 		if f := u.video.frame; f != nil {
 			setAspectRatio(u.win, f.Bounds().Dx(), f.Bounds().Dy())
 		} else {
@@ -543,10 +554,10 @@ func (u *ui) setViewOnly(on bool) {
 	}
 	setDecorated(u.win, true)
 	setAspectRatio(u.win, 0, 0)
-	if !u.normalSize.IsZero() {
+	if !u.restoreGeometry(geomFramed) && !u.normalSize.IsZero() {
 		u.win.Resize(u.normalSize)
-		u.normalSize = fyne.Size{}
 	}
+	u.normalSize = fyne.Size{}
 }
 
 func (u *ui) showBars(on bool) {
