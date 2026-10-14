@@ -1,0 +1,15 @@
+Package: xiaomi-cam
+Version: @VERSION@
+Architecture: amd64
+Maintainer: genosajd <genosajd@gmail.com>
+Depends: ffmpeg, libc6, libgl1, libx11-6, libwayland-client0
+Recommends: xdg-user-dirs
+Section: video
+Priority: optional
+Homepage: https://github.com/genosajd/xiaomi-pc-view
+Installed-Size: @SIZE@
+Description: Xiaomi Mi Home camera viewer
+ Desktop app to watch and control Xiaomi Mi Home cameras (e.g. Outdoor Camera
+ CW700S) from Linux: live video up to 2.5K from any network, pan/tilt, camera
+ zoom, points, spotlight, siren, SD card history, MP4 recording, camera grid,
+ AI tasks with notifications, MCP server and local HTTP API.

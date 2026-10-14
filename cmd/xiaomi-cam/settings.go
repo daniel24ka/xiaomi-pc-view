@@ -90,7 +90,15 @@ func (u *ui) showSettings() {
 	modeHelp.Wrapping = fyne.TextWrapWord
 	modeHelp.Importance = widget.LowImportance
 
+	autostart := newCheck(T("Uruchamiaj przy logowaniu (schowana w zasobniku)"), func(on bool) {
+		if err := setAutostart(on); err != nil {
+			dialog.ShowError(err, u.win)
+		}
+	}).withTip(T("Aplikacja startuje po zalogowaniu i czeka w zasobniku – zadania AI i powiadomienia działają od razu"))
+	autostart.SetChecked(autostartEnabled())
+
 	form := widget.NewForm(
+		widget.NewFormItem(T("Start"), autostart),
 		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),

@@ -1,0 +1,7 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: xiaomi-pc-view
+Source: https://github.com/genosajd/xiaomi-pc-view
+
+Files: *
+Copyright: genosajd, Alexey Khit (go2rtc)
+License: MIT

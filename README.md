@@ -59,20 +59,42 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 
 ## Install
 
-Download `xiaomi-cam-<version>-linux-amd64.tar.gz` from [Releases](../../releases):
+From [Releases](../../releases) choose one of:
 
-```sh
-tar xzf xiaomi-cam-*-linux-amd64.tar.gz
-install -Dm755 xiaomi-cam/xiaomi-cam ~/.local/bin/xiaomi-cam
-install -Dm644 xiaomi-cam/xiaomi-cam.desktop ~/.local/share/applications/xiaomi-cam.desktop
-install -Dm644 xiaomi-cam/xiaomi-cam.svg ~/.local/share/icons/hicolor/scalable/apps/xiaomi-cam.svg
-```
+- **`xiaomi-cam_<version>_amd64.deb`** – Ubuntu/Debian package (recommended): installs the app
+  to the menu with its icon and pulls in `ffmpeg`.
+
+  ```sh
+  sudo apt install ./xiaomi-cam_*_amd64.deb
+  ```
+
+  Remove with `sudo apt remove xiaomi-cam`.
+- **`xiaomi-cam-<version>-linux-amd64`** – the plain program, run without installing
+  (needs `ffmpeg`):
+
+  ```sh
+  chmod +x xiaomi-cam-*-linux-amd64 && ./xiaomi-cam-*-linux-amd64
+  ```
+- **`xiaomi-cam-<version>-linux-amd64.tar.gz`** – the program with the icon and the desktop
+  file, for a manual install to `~/.local`:
+
+  ```sh
+  tar xzf xiaomi-cam-*-linux-amd64.tar.gz
+  install -Dm755 xiaomi-cam/xiaomi-cam ~/.local/bin/xiaomi-cam
+  install -Dm644 xiaomi-cam/xiaomi-cam.desktop ~/.local/share/applications/xiaomi-cam.desktop
+  install -Dm644 xiaomi-cam/xiaomi-cam.svg ~/.local/share/icons/hicolor/scalable/apps/xiaomi-cam.svg
+  ```
+
+To keep the app in the Ubuntu dock, right click its icon → *Add to Favorites*. To start it at
+login hidden in the tray, enable *Start at login* in Settings → General.
 
 Or build from source (Go ≥ 1.25, a C compiler, X11/GL headers):
 
 ```sh
 sudo apt install golang gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
 make install        # builds and installs to ~/.local
+make deb            # builds dist/xiaomi-cam_<version>_amd64.deb
+make release        # .deb, plain binary and .tar.gz in dist/
 ```
 
 ## First run
