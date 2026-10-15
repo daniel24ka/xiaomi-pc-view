@@ -8,6 +8,9 @@ HTTP/MJPEG, TP-Link Tapo, DVRIP/XMeye), together with Xiaomi cameras.
 One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It also has an
 **MCP server** for AI assistants and a **local HTTP API** for scripts.
 
+There is also an **Android app** (phones, Android TV / NVIDIA Shield, Android car radios):
+see [Android](#android).
+
 ## Features
 
 - Live video up to **2.5K** (2560×1440), quality 2.5K / 720p / SD.
@@ -150,6 +153,36 @@ For an IP camera choose **IP camera** in the first step, then the type (ONVIF, R
 the address, login and password. ONVIF usually has to be enabled in the camera settings
 (often with its own account). The camera settings, with the password, are stored in the same
 config file.
+
+## Android
+
+The Android app (`android/`, Kotlin + Jetpack Compose + Media3) has the same camera core as
+the desktop app (Go, built with gomobile), so it talks to the camera directly, from any
+network – no PC needed. One APK for phones, Android TV (NVIDIA Shield, with the remote) and
+Android car radios (a wide layout for 2560x720 screens). Android 8.0 or newer.
+
+From [Releases](../../releases) download **`xiaomi-cam-<version>-universal.apk`** (or the
+smaller `arm64-v8a` one for most phones and the Shield, `armeabi-v7a` for older 32-bit
+devices) and open it on the device (allow installing from this source). The APK is signed
+with a debug key: Android asks to confirm the install.
+
+- **Add cameras:** sign in to Mi Home in the app, or **Import from the PC**: pick the
+  `~/.config/xiaomi-cam-viewer/go2rtc.yaml` file of the desktop app (the Mi account and all
+  cameras, also IP cameras), or add an IP camera by its address.
+- **Live view:** quality 2.5K / 720p / SD (2.5K uses the software decoder on phones whose
+  hardware H.265 decoder stops at 1080p), pan/tilt (buttons, drag the picture, the remote's
+  arrows), zoom, points 1–3 (keys 1–3), spotlight, night mode.
+- **Grid** of all cameras; tap a tile to open it.
+- Layouts: an upright phone (picture on top, controls below), landscape (controls on the
+  picture, hidden after 5 s), car radio (picture left, big controls right).
+- The video stops when the app is in the background (the camera takes one session at a
+  time, so the PC app can connect meanwhile).
+
+Not in the Android app: the siren, SD card history, recording, AI tasks, notifications,
+the MCP server and the HTTP API.
+
+Build: `make apk VERSION=vX.Y.Z` (needs JDK 17, Android SDK + NDK and gomobile, see
+`Makefile`).
 
 ## Keyboard and mouse
 

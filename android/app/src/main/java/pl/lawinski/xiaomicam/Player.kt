@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -38,6 +41,7 @@ fun CameraPlayer(
 ) {
     val context = LocalContext.current
     val player = remember(key) { newPlayer(context) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(player) {
         val handler = Handler(Looper.getMainLooper())
         val play = {
@@ -57,12 +61,25 @@ fun CameraPlayer(
 
             override fun onPlayerError(error: PlaybackException) {
                 onStatus(VideoStatus.ERROR, error.cause?.message ?: error.errorCodeName)
-                handler.postDelayed({ play() }, 3000)
+                handler.postDelayed({ if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) play() }, 3000)
             }
         }
         player.addListener(listener)
-        play()
+        // in the background (screen off, another app) the stream stops: no battery use, and the
+        // camera session is free (the camera takes one at a time: the PC app can connect)
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> play()
+                Lifecycle.Event.ON_STOP -> {
+                    handler.removeCallbacksAndMessages(null)
+                    player.stop()
+                }
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer) // calls ON_START right away when started
         onDispose {
+            lifecycle.removeObserver(observer)
             handler.removeCallbacksAndMessages(null)
             player.removeListener(listener)
             player.release()
