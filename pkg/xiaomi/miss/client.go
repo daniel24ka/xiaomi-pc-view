@@ -88,7 +88,11 @@ func NewClient(rawURL string) (*Client, error) {
 		return nil, err
 	}
 
-	client := &Client{Conn: conn, key: key, model: model, uid: query.Get("uid")}
+	id := query.Get("did") // the recordings cache key: the camera (the app knows its did)
+	if id == "" {
+		id = query.Get("uid")
+	}
+	client := &Client{Conn: conn, key: key, model: model, uid: id}
 	client.startCommandLoop()
 	return client, nil
 }
@@ -125,7 +129,7 @@ type Client struct {
 	Conn
 	key   []byte
 	model string
-	uid   string // the camera's P2P id (the recordings cache key)
+	uid   string // the camera's did (or P2P id): the recordings cache key
 
 	reqMu     sync.Mutex
 	onCommand atomic.Pointer[func(cmd uint32, data []byte)]
@@ -521,6 +525,19 @@ func Recordings() map[string][]Recording {
 	for uid, list := range recordings.files {
 		for _, f := range list {
 			out[uid] = append(out[uid], Recording{f.start, f.duration})
+		}
+	}
+	return out
+}
+
+// RecordingsBetween returns the known files of the camera (did) that overlap from..to.
+func RecordingsBetween(did string, from, to int64) []Recording {
+	recordings.mu.Lock()
+	defer recordings.mu.Unlock()
+	var out []Recording
+	for _, f := range recordings.files[did] {
+		if f.start < to && f.start+f.duration > from {
+			out = append(out, Recording{f.start, f.duration})
 		}
 	}
 	return out

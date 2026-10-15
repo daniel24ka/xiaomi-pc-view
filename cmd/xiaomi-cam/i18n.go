@@ -328,4 +328,5 @@ Closing the window hides the app to the tray`,
 	"Siatka wszystkich kamer / jedna kamera (w siatce: kliknij kamerę, aby nią sterować; podwójne kliknięcie – pełny widok)": "Grid of all cameras / one camera (in the grid: click a camera to control it; double click – full view)",
 	"Punkt %d – zmień nazwę":               "Point %d – rename",
 	"Zmień nazwę punktu (pozycja zostaje)": "Rename the point (the position stays)",
+	"Historia: %s (%d×)":                   "History: %s (%d×)",
 }

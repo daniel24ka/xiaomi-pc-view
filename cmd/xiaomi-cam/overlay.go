@@ -71,7 +71,7 @@ func (u *ui) buildPictureControls(pad [4]fyne.CanvasObject, points, zoom fyne.Ca
 	)
 	u.bottomControls = container.New(layout.NewCustomPaddedLayout(0, 16, 16, 16), bottom)
 	u.statusChip = container.New(layout.NewCustomPaddedLayout(12, 0, 16, 16), container.NewHBox(layout.NewSpacer(), pill(statusRow)))
-	return container.NewBorder(u.statusChip, u.bottomControls, nil, nil)
+	return container.NewStack(container.NewBorder(u.statusChip, u.bottomControls, nil, nil), u.buildHistoryPreview())
 }
 
 // pictureControlsActive - the mouse moved over the picture: show the controls, hide them

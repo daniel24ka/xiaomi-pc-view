@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"fyne.io/fyne/v2/canvas"
 	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
+	"image"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,7 +26,8 @@ type history struct {
 	on     bool
 	bar    *fyne.Container
 	date   *widget.DateEntry
-	slider *ptrSlider // minutes of the day 0..1439
+	tl     *timeline // the time axis with the scale and the recordings
+	sel    time.Time // the chosen time
 	label  *widget.Label
 	speed  *ptrSelect
 	button *ptrButton // "Historia" / "Na żywo" in the top bar
@@ -44,13 +47,21 @@ func (u *ui) buildHistory() {
 		}
 	}
 
-	h.slider = newSlider(0, 24*60-1).withTip(T("Godzina odtwarzania – przeciągnij i puść"))
+	h.tl = newTimeline()
 	h.label = widget.NewLabel("")
-	h.slider.OnChanged = func(v float64) { h.label.SetText(fmt.Sprintf("%02d:%02d", int(v)/60, int(v)%60)) }
-	h.slider.OnChangeEnded = func(float64) {
-		u.win.Canvas().Unfocus()
-		u.playHistory(u.historyTime())
+	h.tl.files = func(from, to time.Time) [][2]time.Time {
+		var out [][2]time.Time
+		for _, f := range miss.RecordingsBetween(cameraDid(cameraSource(u.camera.Selected)), from.Unix(), to.Unix()) {
+			out = append(out, [2]time.Time{time.Unix(f.Start, 0), time.Unix(f.Start+f.Duration, 0)})
+		}
+		return out
 	}
+	h.tl.onPick = func(t time.Time) {
+		u.win.Canvas().Unfocus()
+		u.showHistoryPreview(time.Time{}, 0)
+		u.playHistory(t)
+	}
+	h.tl.onHover = u.showHistoryPreview
 
 	var names []string
 	for _, s := range playbackSpeeds {
@@ -65,7 +76,13 @@ func (u *ui) buildHistory() {
 	h.speed.tip = T("Prędkość odtwarzania")
 
 	step := func(d time.Duration) func() {
-		return func() { u.playHistory(u.historyTime().Add(d)) }
+		return func() {
+			from := u.historyPosition() // from what is being played
+			if from.IsZero() {
+				from = u.historyTime()
+			}
+			u.playHistory(from.Add(d))
+		}
 	}
 	h.bar = container.NewBorder(nil, nil,
 		container.NewHBox(
@@ -79,7 +96,7 @@ func (u *ui) buildHistory() {
 			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)).withTip(T("10 minut do przodu")),
 			h.speed,
 		),
-		h.slider,
+		h.tl,
 	)
 	h.bar.Hide()
 
@@ -92,22 +109,120 @@ func (u *ui) buildHistory() {
 	})
 }
 
-// historyTime - time chosen with the date entry and the slider
+// historyTime - the chosen time (the date entry moves it to another day)
 func (u *ui) historyTime() time.Time {
-	d := time.Now()
-	if u.hist.date.Date != nil {
-		d = *u.hist.date.Date
+	t := u.hist.sel
+	if t.IsZero() {
+		t = time.Now().Add(-5 * time.Minute)
 	}
-	m := int(u.hist.slider.Value)
-	return time.Date(d.Year(), d.Month(), d.Day(), m/60, m%60, 0, 0, time.Local)
+	if d := u.hist.date.Date; d != nil && (d.Year() != t.Year() || d.YearDay() != t.YearDay()) {
+		t = time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.Local)
+	}
+	return t
 }
 
 func (u *ui) setHistoryTime(t time.Time) {
+	u.hist.sel = t
 	u.hist.date.SetDate(&t)
-	m := float64(t.Hour()*60 + t.Minute())
-	u.hist.slider.Value = m
-	u.hist.slider.Refresh()
+	u.hist.tl.center = t
+	u.hist.tl.setPos(t)
 	u.hist.label.SetText(t.Format("15:04"))
+}
+
+// showHistoryPreview shows the time under the mouse over the timeline, with the
+// thumbnail of that minute if there is one (zero t: hide).
+func (u *ui) showHistoryPreview(t time.Time, x float32) {
+	p := u.histPreview
+	if p == nil {
+		return
+	}
+	if t.IsZero() {
+		p.box.Hide()
+		return
+	}
+	p.label.Text = t.Format("15:04:05")
+	p.label.Refresh()
+	path := thumbNear(cameraDid(cameraSource(u.camera.Selected)), t, 2)
+	if path != p.path {
+		p.path = path
+		if path == "" {
+			p.img.File = ""
+			p.img.Resource = nil
+			p.img.Image = nil
+			p.img.Hide()
+		} else {
+			p.img.File = path
+			p.img.Show()
+		}
+		p.img.Refresh()
+	}
+	// above the timeline, at the mouse, kept inside the picture area
+	d := fyne.CurrentApp().Driver()
+	ax := d.AbsolutePositionForObject(u.hist.tl).X + x - d.AbsolutePositionForObject(u.videoArea).X
+	size := p.box.MinSize()
+	area := u.videoArea.Size()
+	p.box.Resize(size)
+	p.box.Move(fyne.NewPos(min(max(ax-size.Width/2, 4), area.Width-size.Width-4), area.Height-size.Height-6))
+	p.box.Show()
+}
+
+// histPreview - the box over the picture shown while the mouse is on the timeline
+type histPreview struct {
+	box   *fyne.Container
+	img   *canvas.Image
+	label *canvas.Text
+	path  string
+}
+
+func (u *ui) buildHistoryPreview() fyne.CanvasObject {
+	img := canvas.NewImageFromFile("")
+	img.FillMode = canvas.ImageFillContain
+	img.SetMinSize(fyne.NewSize(thumbW, thumbH))
+	img.Hide()
+	label := canvas.NewText("", palette.text)
+	label.TextStyle.Bold = true
+	label.Alignment = fyne.TextAlignCenter
+	box := pill(container.NewVBox(img, label))
+	box.Hide()
+	u.histPreview = &histPreview{box: box, img: img, label: label}
+	return container.NewWithoutLayout(box)
+}
+
+// captureThumb keeps a thumbnail of the shown picture once a minute (live: now, history:
+// the time played) for the timeline preview.
+func (u *ui) captureThumb(img *image.RGBA) {
+	src := cameraSource(u.camera.Selected)
+	if src == "" {
+		return
+	}
+	t := time.Now()
+	if u.hist.on {
+		if t = u.historyPosition(); t.IsZero() {
+			return
+		}
+	}
+	m := t.Unix() / 60
+	if m == u.lastThumb {
+		return
+	}
+	u.lastThumb = m
+	saveThumb(cameraDid(src), m, img)
+}
+
+// historyPosition - the time being played: the start of the file with the chosen time
+// (playback starts there) plus the time played (zero: no picture yet).
+func (u *ui) historyPosition() time.Time {
+	h := &u.hist
+	if !h.on || h.firstFrame.IsZero() {
+		return time.Time{}
+	}
+	start := h.target
+	did := cameraDid(cameraSource(u.camera.Selected))
+	for _, f := range miss.RecordingsBetween(did, h.target.Unix(), h.target.Unix()+1) {
+		start = time.Unix(f.Start, 0)
+	}
+	speed := playbackSpeeds[max(h.speed.SelectedIndex(), 0)]
+	return start.Add(time.Duration(float64(time.Since(h.firstFrame)) * float64(speed)))
 }
 
 func (u *ui) openHistory() {
@@ -182,8 +297,10 @@ func (u *ui) historyStatus() {
 		return
 	}
 	speed := playbackSpeeds[max(h.speed.SelectedIndex(), 0)]
-	pos := time.Duration(float64(time.Since(h.firstFrame)) * float64(speed)).Truncate(time.Second)
-	u.status.SetText(fmt.Sprintf(T("Historia: od %s, +%s (%d×)"), h.target.Format("02.01 15:04"), pos, speed))
+	pos := u.historyPosition()
+	h.tl.setPos(pos)
+	h.label.SetText(pos.Format("15:04:05"))
+	u.status.SetText(fmt.Sprintf(T("Historia: %s (%d×)"), pos.Format("02.01 15:04:05"), speed))
 }
 
 // histDebug - timing of the history steps (devtest builds set it)

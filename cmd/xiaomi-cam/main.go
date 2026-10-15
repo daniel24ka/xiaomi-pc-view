@@ -127,6 +127,8 @@ type ui struct {
 	pictureControls, bottomControls, statusChip *fyne.Container
 	soundBox                                    *fyne.Container
 	liveDot                                     *canvas.Circle
+	histPreview                                 *histPreview
+	lastThumb                                   int64 // the unix minute of the last thumbnail
 	controlsTimer                               *time.Timer
 	// onVideoMouse shows the controls lying on the picture (they hide after a while)
 	onVideoMouse func()
@@ -321,6 +323,7 @@ func (u *ui) build() {
 			}
 			u.historyFrame()
 			u.video.setFrame(img)
+			u.captureThumb(img)
 			u.pictureShown(&u.player, gen)
 		})
 	}
