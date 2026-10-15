@@ -27,6 +27,13 @@ import (
 	"github.com/go-gl/glfw/v3.4/glfw"
 )
 
+// startDebug prints a start stage (XC_STARTDEBUG=1): finding why the app doesn't start on a PC
+func startDebug(stage string) {
+	if os.Getenv("XC_STARTDEBUG") == "1" {
+		fmt.Fprintln(os.Stderr, time.Now().Format("15:04:05.000"), "xiaomi-cam:", stage)
+	}
+}
+
 // devHook runs a self-test (devtest.go, build with -tags devtest)
 var devHook func(u *ui)
 
@@ -180,12 +187,15 @@ func main() {
 		}
 	}
 	if showRunningInstance() {
+		startDebug("another instance runs")
 		return
 	}
+	prepareOpenGL() // Windows without a GPU driver: software OpenGL (gl_windows.go)
 	if err := startBackend(); err != nil {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
 	}
+	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
@@ -268,7 +278,9 @@ func main() {
 	if path := os.Getenv("XIAOMI_CAM_SCREENSHOT"); path != "" {
 		go u.screenshotAndQuit(path) // for development: window screenshot after 15 s
 	}
+	startDebug("UI starts")
 	a.Run()
+	startDebug("UI ended")
 	saveRecordings()
 	u.player.stop()
 }

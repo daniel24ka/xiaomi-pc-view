@@ -22,6 +22,24 @@ GitHub releases: v1.0.0–v1.23.0 published; from v1.23.0 also the APKs (`make a
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
+## Windows version (from v1.24.0)
+
+`make windows VERSION=vX.Y.Z` → `dist/xiaomi-cam-X.Y.Z-windows-setup.exe` (cross build with
+llvm-mingw in `~/Windows`, go-winres icon/manifest, ffmpeg BtbN 8.1 GPL shared, Mesa
+26.1.8 in `softgl\` with a copy of the exe, `glprobe\xc-glprobe.exe`, Inno Setup 6.7.3 in the
+Wine prefix `~/Windows/wine`). Windows code: `wm_windows.go` (move/resize via
+WM_NCLBUTTONDOWN, wallpaper: Win11 24H2 = layered child of Progman below SHELLDLL_DefView;
+not shown in the VM with Mesa/GDI, untested with a GPU), `gl_windows.go` (no OpenGL 2.1 →
+start `softgl\xiaomi-cam.exe` with GALLIUM_DRIVER=softpipe; llvmpipe exits 1, copying Mesa
+at runtime failed – Defender), `autostart_windows.go` (HKCU Run), `proc_windows.go`,
+`tools.go` (ffmpeg from the app folder, no console windows). `XC_STARTDEBUG=1` prints start
+stages to stderr. Test VM: libvirt `win11` (Windows 11 24H2 PL, no GPU, user `genos`; the user
+logs in, never type the password); drive it with virsh screenshot + QMP send-key /
+input-send-event (usb tablet), files via a temporary `python3 -m http.server --bind
+192.168.122.1` + `curl` in cmd (PowerShell is blocked there). Clean up after tests (uninstall,
+`%APPDATA%\xiaomi-cam-viewer`, `%APPDATA%\fyne\pl.lawinski.xiaomi-cam`, test files) and shut
+the VM down. Release: add the setup.exe to the GitHub release.
+
 ## Self-tests with the real camera
 
 Build with `-tags devtest`; `cmd/xiaomi-cam/devtest_*.go` hooks run when env `XC_*` is set

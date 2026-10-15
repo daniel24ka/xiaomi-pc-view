@@ -1,6 +1,6 @@
-# Xiaomi Cam – Xiaomi Mi Home and IP camera viewer for Linux
+# Xiaomi Cam – Xiaomi Mi Home and IP camera viewer for Linux and Windows
 
-A desktop app for Ubuntu/Linux to watch and control **Xiaomi Mi Home** cameras, which
+A desktop app for Ubuntu/Linux and Windows to watch and control **Xiaomi Mi Home** cameras, which
 officially work only in the Mi Home phone app. Tested with the **Xiaomi Outdoor Camera
 CW700S** (`isa.camera.700sa`). It also shows **IP cameras** of other brands (ONVIF, RTSP,
 HTTP/MJPEG, TP-Link Tapo, DVRIP/XMeye), together with Xiaomi cameras.
@@ -8,7 +8,8 @@ HTTP/MJPEG, TP-Link Tapo, DVRIP/XMeye), together with Xiaomi cameras.
 One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It also has an
 **MCP server** for AI assistants and a **local HTTP API** for scripts.
 
-There is also an **Android app** (phones, Android TV / NVIDIA Shield, Android car radios):
+The **Windows** version has the same features (see [Windows](#windows)). There is also an
+**Android app** (phones, Android TV / NVIDIA Shield, Android car radios):
 see [Android](#android).
 
 ## Features
@@ -140,6 +141,22 @@ make install        # builds and installs to ~/.local
 make deb            # builds dist/xiaomi-cam_<version>_amd64.deb
 make release        # .deb, plain binary and .tar.gz in dist/
 ```
+
+### Windows
+
+Download **`xiaomi-cam-<version>-windows-setup.exe`** from [Releases](../../releases) and run
+it (Windows 10/11, 64-bit). It installs for the current user without administrator rights:
+the Start menu entry, a desktop icon, optionally start at login (in the tray), and ffmpeg
+inside the app folder – nothing else to install. Remove it in Settings → Apps. The installer
+is not signed: Windows SmartScreen may ask "Run anyway".
+
+Settings and cameras: `%APPDATA%\xiaomi-cam-viewer\go2rtc.yaml` (the same file as on Linux –
+it can be copied between them). Recordings and snapshots go to Videos and Pictures.
+
+On a PC without a graphics driver (a virtual machine, Remote Desktop) the app uses the
+software OpenGL of Mesa (installed with it) – slower, but it works. The wallpaper mode on
+Windows 11 24H2 puts the window under the desktop icons like Lively Wallpaper does; in a
+virtual machine with the software OpenGL it was not shown (not tested on a PC with a GPU).
 
 ## First run
 

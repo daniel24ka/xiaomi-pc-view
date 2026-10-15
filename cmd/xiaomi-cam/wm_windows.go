@@ -26,7 +26,21 @@ var (
 	procSetParent           = user32.NewProc("SetParent")
 	procGetWindowRect       = user32.NewProc("GetWindowRect")
 	procSetWindowPos        = user32.NewProc("SetWindowPos")
+	procGetWindowLongPtrW   = user32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtrW   = user32.NewProc("SetWindowLongPtrW")
+	procSetLayeredAttrs     = user32.NewProc("SetLayeredWindowAttributes")
 )
+
+// setChild switches the window style between a child window and a top (popup) one.
+func setChild(hwnd uintptr, on bool) {
+	st, _, _ := procGetWindowLongPtrW.Call(hwnd, gwlStyle)
+	if on {
+		st = st&^wsPopup | wsChild
+	} else {
+		st = st&^wsChild | wsPopup
+	}
+	procSetWindowLongPtrW.Call(hwnd, gwlStyle, st)
+}
 
 // moveresize directions (the same numbers as _NET_WM_MOVERESIZE of wm_linux.go)
 const (
@@ -44,8 +58,15 @@ const (
 const (
 	wmNCLButtonDown = 0x00A1
 	swpNoSize       = 0x0001
+	swpNoMove       = 0x0002
 	swpNoZOrder     = 0x0004
 	swpNoActivate   = 0x0010
+	gwlExStyle      = ^uintptr(19) // -20
+	gwlStyle        = ^uintptr(15) // -16
+	wsChild         = 0x40000000
+	wsPopup         = 0x80000000
+	wsExLayered     = 0x00080000
+	lwaAlpha        = 0x2
 )
 
 // hit-test codes of the window parts, by direction
@@ -108,33 +129,51 @@ func utf16(s string) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
-// workerW returns the window between the wallpaper and the desktop icons. Progman creates
-// it on the message 0x052C (as wallpaper engines do); Windows 11 24H2 has it as a child of
-// Progman, older ones as a top window after the one with the icons (SHELLDLL_DefView).
-func workerW() uintptr {
-	progman, _, _ := procFindWindowW.Call(utf16("Progman"), 0)
+// desktopWindows returns Progman, the window with the icons (SHELLDLL_DefView) and the
+// wallpaper window (WorkerW); Progman creates WorkerW on the message 0x052C (as wallpaper
+// engines do). Windows 11 24H2: both are children of Progman (child24H2); older: WorkerW is
+// a top window after the one with the icons.
+func desktopWindows() (progman, icons, worker uintptr, child24H2 bool) {
+	progman, _, _ = procFindWindowW.Call(utf16("Progman"), 0)
 	if progman == 0 {
-		return 0
+		return
 	}
 	var res uintptr
 	procSendMessageTimeoutW.Call(progman, 0x052C, 0xD, 0x1, 0 /* SMTO_NORMAL */, 1000, uintptr(unsafe.Pointer(&res)))
 	if w, _, _ := procFindWindowExW.Call(progman, 0, utf16("WorkerW"), 0); w != 0 {
-		return w
+		icons, _, _ = procFindWindowExW.Call(progman, 0, utf16("SHELLDLL_DefView"), 0)
+		return progman, icons, w, true
 	}
-	var found uintptr
 	cb := syscall.NewCallback(func(top, _ uintptr) uintptr {
 		if v, _, _ := procFindWindowExW.Call(top, 0, utf16("SHELLDLL_DefView"), 0); v != 0 {
-			found, _, _ = procFindWindowExW.Call(0, top, utf16("WorkerW"), 0)
+			icons = v
+			worker, _, _ = procFindWindowExW.Call(0, top, utf16("WorkerW"), 0)
 			return 0 // stop
 		}
 		return 1
 	})
 	procEnumWindows.Call(cb, 0)
-	return found
+	return progman, icons, worker, false
 }
 
-// wmSetDesktop makes the window a child of WorkerW (under the icons, not in the task bar,
-// the mouse goes to the desktop) or a top window again, at the same place on the screen.
+func setLayered(hwnd uintptr, on bool) {
+	ex, _, _ := procGetWindowLongPtrW.Call(hwnd, gwlExStyle)
+	if on {
+		ex |= wsExLayered
+	} else {
+		ex &^= wsExLayered
+	}
+	procSetWindowLongPtrW.Call(hwnd, gwlExStyle, ex)
+	if on {
+		procSetLayeredAttrs.Call(hwnd, 0, 255, lwaAlpha)
+	}
+}
+
+// wmSetDesktop puts the window between the wallpaper and the desktop icons (not in the
+// task bar, the mouse goes to the desktop) or makes it a top window again, at the same
+// place on the screen. Windows 11 24H2 like Lively Wallpaper does; in a Windows 11 24H2 VM
+// with the software OpenGL (Mesa, GDI) the window was not drawn there (not tested with a
+// GPU).
 func wmSetDesktop(w fyne.Window, on bool) bool {
 	hwnd := hwndOf(w)
 	if hwnd == 0 {
@@ -143,18 +182,31 @@ func wmSetDesktop(w fyne.Window, on bool) bool {
 	r := windowRect(hwnd)
 	if !on {
 		procSetParent.Call(hwnd, 0)
+		setChild(hwnd, false)
+		setLayered(hwnd, false)
 		procSetWindowPos.Call(hwnd, 0, uintptr(r.Left), uintptr(r.Top), 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
 		return true
 	}
-	ww := workerW()
-	if ww == 0 {
+	progman, icons, worker, child24H2 := desktopWindows()
+	if worker == 0 {
 		return false
 	}
-	procSetParent.Call(hwnd, ww)
-	// child coordinates are relative to WorkerW (it starts at the virtual screen's corner)
-	p := windowRect(ww)
+	parent := worker
+	if child24H2 {
+		// 24H2: a layered child of Progman, under the icons and above the wallpaper
+		parent = progman
+		setLayered(hwnd, true)
+	}
+	setChild(hwnd, true)
+	procSetParent.Call(hwnd, parent)
+	// child coordinates are relative to the parent (it starts at the virtual screen's corner)
+	p := windowRect(parent)
 	x, y := r.Left-p.Left, r.Top-p.Top
 	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, swpNoSize|swpNoZOrder|swpNoActivate)
+	if child24H2 && icons != 0 {
+		procSetWindowPos.Call(hwnd, icons, 0, 0, 0, 0, swpNoSize|swpNoMove|swpNoActivate)  // below the icons
+		procSetWindowPos.Call(worker, hwnd, 0, 0, 0, 0, swpNoSize|swpNoMove|swpNoActivate) // the wallpaper below it
+	}
 	return true
 }
 

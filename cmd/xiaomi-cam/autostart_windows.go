@@ -2,11 +2,7 @@
 
 package main
 
-import (
-	"os"
-
-	"golang.org/x/sys/windows/registry"
-)
+import "golang.org/x/sys/windows/registry"
 
 // Start at login hidden in the tray: the value "Xiaomi Cam" of
 // HKCU\Software\Microsoft\Windows\CurrentVersion\Run (the user's startup programs).
@@ -38,9 +34,6 @@ func setAutostart(on bool) error {
 		}
 		return nil
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	return k.SetStringValue(runValue, `"`+exe+`" --tray`)
+	// the main program, also from its softgl copy: it picks the OpenGL at every start
+	return k.SetStringValue(runValue, `"`+appExe()+`" --tray`)
 }

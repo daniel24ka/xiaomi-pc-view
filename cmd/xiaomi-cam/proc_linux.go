@@ -13,3 +13,8 @@ func hideConsole(*exec.Cmd) {}
 func detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
 
 const ffmpegMissing = "ffmpeg: %w (zainstaluj: sudo apt install ffmpeg)"
+
+// prepareOpenGL: Windows only (gl_windows.go)
+func prepareOpenGL() {}
+
+func appDir() string { return "" } // Windows only

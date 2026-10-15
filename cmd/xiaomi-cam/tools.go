@@ -13,10 +13,8 @@ import (
 func toolCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	path := name
 	if runtime.GOOS == "windows" {
-		if self, err := os.Executable(); err == nil {
-			if p := filepath.Join(filepath.Dir(self), name+".exe"); fileExists(p) {
-				path = p
-			}
+		if p := filepath.Join(appDir(), name+".exe"); fileExists(p) {
+			path = p
 		}
 	}
 	var cmd *exec.Cmd

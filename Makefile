@@ -62,10 +62,12 @@ apk: aar
 		cp $$f dist/xiaomi-cam-$(VERSION:v%=%)-$$(basename $$f .apk | sed 's/^app-//; s/-release//').apk; done
 
 # --- Windows (cross-built here): xiaomi-cam.exe with its icon and manifest (go-winres), ffmpeg
-# of BtbN (GPL, shared) next to it, the installer by Inno Setup under Wine.
+# of BtbN (GPL, shared) next to it, Mesa llvmpipe (software OpenGL for PCs without a GPU
+# driver, pal1000/mesa-dist-win 26.1.8) in mesa\, the installer by Inno Setup under Wine.
 # Toolchain in ~/Windows: llvm-mingw, ffmpeg, a Wine prefix with Inno Setup.
 WIN_CC     = $(HOME)/Windows/llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64/bin
 WIN_FFMPEG = $(HOME)/Windows/ffmpeg/ffmpeg-n8.1-latest-win64-gpl-shared-8.1
+WIN_MESA   = $(HOME)/Windows/mesa/x64
 WIN_ISCC   = WINEPREFIX=$(HOME)/Windows/wine WINEDEBUG=-all wine $(HOME)/Windows/wine/drive_c/InnoSetup/ISCC.exe
 WIN_VER    = $(shell echo $(VERSION:v%=%) | sed 's/-.*//')
 
@@ -78,7 +80,10 @@ windows:
 		CXX=x86_64-w64-mingw32-clang++ go build -trimpath \
 		-ldflags "-H windowsgui -s -w -X main.version=$(VERSION)" -o dist/windows/xiaomi-cam.exe ./cmd/xiaomi-cam; \
 		s=$$?; rm -f cmd/xiaomi-cam/rsrc_windows_amd64.syso; exit $$s
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-H windowsgui -s -w" \
+		-o dist/windows/xc-glprobe.exe ./cmd/xc-glprobe
 	cp $(WIN_FFMPEG)/bin/ffmpeg.exe $(WIN_FFMPEG)/bin/ffprobe.exe $(WIN_FFMPEG)/bin/*.dll dist/windows/ffmpeg/
 	cp $(WIN_FFMPEG)/LICENSE.txt dist/windows/ffmpeg/LICENSE-ffmpeg.txt
+	mkdir -p dist/windows/mesa && cp $(WIN_MESA)/opengl32.dll $(WIN_MESA)/libgallium_wgl.dll dist/windows/mesa/
 	cd packaging/windows && $(WIN_ISCC) /Q /DVersion=$(WIN_VER) /O"..\..\dist" xiaomi-cam.iss
 	ls -la dist/xiaomi-cam-$(WIN_VER)-windows-setup.exe

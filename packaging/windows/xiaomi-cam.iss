@@ -52,8 +52,18 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "{cm:Autostart}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
+; the app and its copy for PCs without a GPU driver next to each other: compressed once
 Source: "{#Build}\xiaomi-cam.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#Build}\xiaomi-cam.exe"; DestDir: "{app}\softgl"; Flags: ignoreversion
 Source: "{#Build}\ffmpeg\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+; software OpenGL (Mesa) for the softgl copy, used only without a GPU driver (gl_windows.go)
+Source: "{#Build}\mesa\*"; DestDir: "{app}\softgl"; Flags: ignoreversion
+Source: "{#Build}\xc-glprobe.exe"; DestDir: "{app}\glprobe"; Flags: ignoreversion
+
+[InstallDelete]
+; Mesa must never be next to the main program (it would replace the GPU driver)
+Type: files; Name: "{app}\opengl32.dll*"
+Type: files; Name: "{app}\libgallium_wgl.dll*"
 
 [Icons]
 Name: "{autoprograms}\Xiaomi Cam"; Filename: "{app}\xiaomi-cam.exe"

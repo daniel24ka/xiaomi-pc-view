@@ -56,6 +56,13 @@ func initLogger() {
 		writer, _ = os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	}
 
+	// a Windows GUI program has no stdout/stderr: only MemoryLog (no "write /dev/stdout" errors)
+	if f, ok := writer.(*os.File); ok && f != nil {
+		if _, err := f.Stat(); err != nil {
+			writer = nil
+		}
+	}
+
 	timeFormat := modules["time"]
 
 	if writer != nil {
