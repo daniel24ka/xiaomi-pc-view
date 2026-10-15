@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <!-- Android TV launcher banner (320x180 dp): the app icon and the name on graphite -->
+  <rect width="640" height="360" fill="#0E1116"/>
+  <g transform="translate(40,80) scale(0.78)">
+  <!-- Xiaomi Cam: a camera lens on graphite, with the "live" dot (the app's palette) -->
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="#151A22"/>
+  <rect x="9.5" y="9.5" width="237" height="237" rx="56.5" fill="none" stroke="#2A303C" stroke-width="3"/>
+  <circle cx="128" cy="134" r="80" fill="#F5A524"/>
+  <circle cx="128" cy="134" r="58" fill="#0E1116"/>
+  <circle cx="128" cy="134" r="36" fill="#22303F"/>
+  <circle cx="128" cy="134" r="18" fill="#0E1116"/>
+  <circle cx="112" cy="117" r="9" fill="#FFFFFF" fill-opacity="0.85"/>
+  <circle cx="194" cy="62" r="20" fill="#151A22"/>
+  <circle cx="194" cy="62" r="13" fill="#22C55E"/>
+  </g>
+  <text x="262" y="198" font-family="Geist" font-weight="600" font-size="58" fill="#E8EAEE">Xiaomi Cam</text>
+</svg>

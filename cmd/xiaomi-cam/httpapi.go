@@ -106,7 +106,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			case propNightShot.Piid:
 				if v, ok := p.Value.(float64); ok && p.Code == 0 {
 					if i := nightModeByValue(int(v)); i >= 0 {
-						state["night_mode"] = nightModes[i].id
+						state["night_mode"] = nightModes[i].ID
 					}
 				}
 			}
@@ -129,7 +129,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		// the camera moves continuously until stopped: one step = 100 ms of movement
 		var moveErr error
 		m := newMover(func() string { return name }, func(err error) { moveErr = err })
-		m.pulse(op, time.Duration(steps)*100*time.Millisecond)
+		m.Pulse(op, time.Duration(steps)*100*time.Millisecond)
 		time.Sleep(300 * time.Millisecond) // let the stop command go out
 		if moveErr != nil {
 			return nil, moveErr
@@ -179,10 +179,10 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		if err != nil {
 			return nil, err
 		}
-		if err = setProp(name, propNightShot, m.value); err != nil {
+		if err = setProp(name, propNightShot, m.Value); err != nil {
 			return nil, err
 		}
-		return map[string]any{"night_mode": m.id}, nil
+		return map[string]any{"night_mode": m.ID}, nil
 	})
 
 	handle("snapshot/save", "POST", func(r *http.Request, name string) (any, error) {
@@ -305,28 +305,6 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 
 // pointsChanged - points saved through the API (UI refresh)
 var pointsChanged func()
-
-// --- camera zoom state (the camera can be zoomed by the UI and the API)
-
-var zoomState sync.Map // camera name -> float64
-
-func currentZoom(name string) float64 {
-	if v, ok := zoomState.Load(name); ok {
-		return v.(float64)
-	}
-	return 1
-}
-
-// onZoomState - the zoom of a camera changed (UI, API, a camera point): the UI shows it.
-// Called from any goroutine.
-var onZoomState func(name string, z float64)
-
-func setZoomState(name string, z float64) {
-	zoomState.Store(name, z)
-	if onZoomState != nil {
-		onZoomState(name, z)
-	}
-}
 
 // --- snapshot
 

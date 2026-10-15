@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- UI texts are in Strings.kt (Polish and English) -->
+    <string name="app_name" translatable="false">Xiaomi Cam</string>
+</resources>

@@ -14,12 +14,10 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
-var regions = []struct{ code, name string }{
-	{"de", "Europa (Polska)"}, {"cn", "Chiny"}, {"i2", "Indie"},
-	{"ru", "Rosja"}, {"sg", "Singapur"}, {"us", "USA"},
-}
+var regions = xccore.Regions
 
 // showAddCamera: login to Mi account (via embedded go2rtc API) and add selected cameras.
 func showAddCamera(w fyne.Window, onAdded func(name string)) {
@@ -113,7 +111,7 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 	}
 	var regionNames []string
 	for _, r := range regions {
-		regionNames = append(regionNames, T(r.name))
+		regionNames = append(regionNames, T(r.Name))
 	}
 	region := newSelect(regionNames, nil)
 	region.SetSelectedIndex(0)
@@ -124,7 +122,7 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 	load := func() {
 		checks.RemoveAll()
 		found = nil
-		code := regions[region.SelectedIndex()].code
+		code := regions[region.SelectedIndex()].Code
 		b, status, err := apiCall("GET", "/api/xiaomi", url.Values{"id": {account.Selected}, "region": {code}}, nil)
 		switch {
 		case err != nil:
@@ -158,25 +156,16 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 		if !ok {
 			return
 		}
-		existing := map[string]bool{}
-		for _, n := range cameraNames() {
-			existing[n] = true
-		}
 		var first string
 		for i, s := range found {
 			if !checks.Objects[i].(*ptrCheck).Checked {
 				continue
 			}
-			name := s.Name
-			for n := 2; existing[name]; n++ {
-				name = fmt.Sprintf("%s %d", s.Name, n)
-			}
-			// p2p=server works from any network; subtype=3 - 2.5K (2560x1440)
-			if err := addCamera(name, s.URL+"&p2p=server&subtype=3"); err != nil {
+			name, err := xccore.AddXiaomiCamera(s.Name, s.URL)
+			if err != nil {
 				dialog.ShowError(err, w)
 				return
 			}
-			existing[name] = true
 			if first == "" {
 				first = name
 			}

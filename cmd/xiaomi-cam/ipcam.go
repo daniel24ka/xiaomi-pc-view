@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlexxIT/go2rtc/internal/app"
 	"github.com/AlexxIT/go2rtc/internal/streams"
 	"github.com/AlexxIT/go2rtc/pkg/onvif"
 )
@@ -22,86 +21,6 @@ import (
 // tapo://, dvrip://. The go2rtc stream has the source of the selected quality (main or
 // sub stream); the app keeps both, and the picture size, in the "xiaomi_cam" section of
 // go2rtc.yaml.
-
-type ipCamera struct {
-	Kind    string `yaml:"kind" json:"kind"` // ipKinds[].id
-	Main    string `yaml:"main" json:"main"`
-	Sub     string `yaml:"sub,omitempty" json:"sub,omitempty"`
-	Quality int    `yaml:"quality,omitempty" json:"quality,omitempty"` // 0 main, 1 sub
-	W       int    `yaml:"w,omitempty" json:"w,omitempty"`
-	H       int    `yaml:"h,omitempty" json:"h,omitempty"`
-	SubW    int    `yaml:"sub_w,omitempty" json:"sub_w,omitempty"`
-	SubH    int    `yaml:"sub_h,omitempty" json:"sub_h,omitempty"`
-	// video codecs (ffprobe names: h264, hevc, mjpeg)
-	Codec    string `yaml:"codec,omitempty" json:"codec,omitempty"`
-	SubCodec string `yaml:"sub_codec,omitempty" json:"sub_codec,omitempty"`
-}
-
-// active returns the source of the selected quality.
-func (c *ipCamera) active() string {
-	if c.Quality == 1 && c.Sub != "" {
-		return c.Sub
-	}
-	return c.Main
-}
-
-var ipCams = struct {
-	sync.Mutex
-	m map[string]*ipCamera
-}{m: map[string]*ipCamera{}}
-
-// loadIPCameras reads the IP cameras from the config (after app.Init).
-func loadIPCameras() {
-	var cfg struct {
-		X struct {
-			Cameras map[string]*ipCamera `yaml:"cameras"`
-		} `yaml:"xiaomi_cam"`
-	}
-	app.LoadConfig(&cfg)
-	ipCams.Lock()
-	defer ipCams.Unlock()
-	for name, c := range cfg.X.Cameras {
-		if c != nil && c.Main != "" {
-			ipCams.m[name] = c
-		}
-	}
-}
-
-// ipCam returns a copy of the IP camera settings (nil: no such IP camera).
-func ipCam(name string) *ipCamera {
-	ipCams.Lock()
-	defer ipCams.Unlock()
-	if c := ipCams.m[name]; c != nil {
-		cc := *c
-		return &cc
-	}
-	return nil
-}
-
-func saveIPCamera(name string, c *ipCamera) error {
-	ipCams.Lock()
-	defer ipCams.Unlock()
-	if c == nil {
-		delete(ipCams.m, name)
-	} else {
-		cc := *c
-		ipCams.m[name] = &cc
-	}
-	// all of them: the config patch can't add a key under a missing parent
-	all := map[string]any{}
-	for n, c := range ipCams.m {
-		all[n] = c
-	}
-	return app.PatchConfig([]string{"xiaomi_cam", "cameras"}, all)
-}
-
-// addIPCamera adds the camera (go2rtc stream with the selected source) and saves it.
-func addIPCamera(name string, c *ipCamera) error {
-	if err := addCamera(name, c.active()); err != nil {
-		return err
-	}
-	return saveIPCamera(name, c)
-}
 
 // ipFormOf returns the form fields of a saved IP camera (for editing).
 func ipFormOf(c *ipCamera) *ipForm {
@@ -140,54 +59,6 @@ func ipFormOf(c *ipCamera) *ipForm {
 		f.Channel, _ = strconv.Atoi(u.Query().Get("channel"))
 	}
 	return f
-}
-
-// updateIPCamera saves the edited camera (old name: the camera before the edit). The caller
-// stops its video first.
-func updateIPCamera(old, name string, c *ipCamera) error {
-	if prev := ipCam(old); prev != nil && c.Sub != "" {
-		c.Quality = prev.Quality // keep main / sub
-	}
-	if old != name {
-		if err := addIPCamera(name, c); err != nil {
-			return err
-		}
-		return removeCamera(old)
-	}
-	src := c.active()
-	streams.Get(name).SetSource(src)
-	if err := app.PatchConfig([]string{"streams", name}, []string{src}); err != nil {
-		return err
-	}
-	return saveIPCamera(name, c)
-}
-
-// setIPQuality switches the camera to its main (0) or sub (1) stream. The caller stops
-// the video first.
-func setIPQuality(name string, q int) error {
-	c := ipCam(name)
-	if c == nil {
-		return fmt.Errorf("no camera %q", name)
-	}
-	c.Quality = q
-	src := c.active()
-	streams.Get(name).SetSource(src)
-	if err := app.PatchConfig([]string{"streams", name}, []string{src}); err != nil {
-		return err
-	}
-	return saveIPCamera(name, c)
-}
-
-func cameraExists(name string) bool { return name != "" && streams.Get(name) != nil }
-
-// streamSource returns the (first) source of the camera stream.
-func streamSource(name string) string {
-	if s := streams.Get(name); s != nil {
-		if srcs := s.Sources(); len(srcs) > 0 {
-			return srcs[0]
-		}
-	}
-	return ""
 }
 
 // cameraInfo - a short description for lists: Xiaomi model or IP camera kind and host.
@@ -452,6 +323,3 @@ func probeSource(src string) (*probeResult, error) {
 	}
 	return r, nil
 }
-
-// hiddenPrefix - temporary go2rtc streams of the app, not cameras
-const hiddenPrefix = "__xc_"

@@ -32,16 +32,16 @@ func init() {
 		}
 		time.Sleep(15 * time.Second)
 		save("p0.jpg")
-		u.mover.press(motorRight) // short click
+		u.mover.Press(motorRight) // short click
 		time.Sleep(100 * time.Millisecond)
-		u.mover.release()
+		u.mover.Release()
 		time.Sleep(time.Second)
 		save("p1.jpg")
 		time.Sleep(3 * time.Second)
 		save("p2.jpg")
-		u.mover.press(motorLeft) // hold 1.5 s
+		u.mover.Press(motorLeft) // hold 1.5 s
 		time.Sleep(1500 * time.Millisecond)
-		u.mover.release()
+		u.mover.Release()
 		time.Sleep(time.Second)
 		save("p3.jpg")
 		time.Sleep(3 * time.Second)

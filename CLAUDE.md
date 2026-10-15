@@ -116,8 +116,36 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-15: v1.22.0 released (all GitHub releases v1.0.0–v1.22.0 published). Nothing
-half-done in the code. Recent work, newest first:
+State 2026-10-15 (evening): v1.22.0 released. **Android app started** (the user gave the go):
+- Toolchain installed (no sudo): `~/Android/jdk` (Temurin 17), `~/Android/sdk` (platform 35,
+  build-tools 35, NDK 27.3.13750724, emulator, images android-30 android-tv x86 + default
+  x86_64), `~/Android/gradle-8.11.1`, `~/go/bin/gomobile`. Env for builds: JAVA_HOME,
+  ANDROID_HOME, ANDROID_NDK_HOME (see Makefile `apk`).
+- Test phone on USB: Redmi Note 11 Pro 5G (veux, Android 13 / HyperOS 1.0, arm64,
+  1080x2400), adb `3f391f9ec38e`; USB install on; "USB debugging (security settings)" NOT on
+  yet, so `adb shell input` fails (asked the user to enable it).
+- Done: shared core `internal/xccore` (go2rtc start, cameras, MIoT, caps, points, night
+  modes, IP camera storage, mover, Mi login, qualities); desktop uses it via aliases in
+  `cmd/xiaomi-cam/core.go`. `mobile/` = gomobile API (JSON strings) → `android/app/libs/
+  xccore.aar` (`gomobile bind -target=android/arm,arm64,386,amd64 -androidapi 26 -javapkg
+  pl.lawinski.xiaomicam.core`, Java class `pl.lawinski.xiaomicam.core.mobile.Mobile`).
+- `android/` (Gradle 8.11.1 wrapper, AGP 8.7.3, Kotlin 2.0.21, Compose, Media3 1.5.1): Core.kt
+  (JSON wrappers), Player.kt (RTSP over TCP `?video` – Media3 can't read go2rtc's Opus track;
+  decoder fallback: the phone's HW H.265 stops at 1920x1088, 2.5K plays on c2.android.hevc ~30%
+  CPU), Live.kt (layouts: portrait = video on top + panel; landscape = overlay, zoom upright at
+  the right; wide (≥360 dp beside 16:9) = car radio panel), Grid.kt, Setup.kt (Mi login,
+  devices, IP camera, import go2rtc.yaml), Strings.kt (PL/EN), MainActivity.kt (menu and camera
+  list are overlays over LIVE/GRID so the video keeps playing). No siren on Android (the
+  user doesn't want it). Build: `make aar` + `cd android && ./gradlew assembleDebug`;
+  test on the phone: `adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`
+  (HyperOS asks to confirm each USB install on the phone), config via `run-as
+  pl.lawinski.xiaomicam` (files/go2rtc.yaml, shared_prefs/xiaomi-cam.xml).
+- go2rtc fixes for Media3: H.265 RTP without aggregation packets (pkg/h265/rtp.go),
+  `reqTrackID` finds trackID= in the path even with a query (pkg/rtsp/server.go).
+- Not done yet: release signing key, `make apk`, GitHub release with APKs, TV/car emulator
+  tests, wide car layout check, prefer the SW decoder directly when HW can't (saves ~0.5 s).
+- Car radio: 14.9", 2560x720 (32:9): wide layout = 16:9 video left + touch controls right;
+  emulator AVD "xc_car" 2560x720. TV AVD "xc_tv" (1080p).
 - v1.22.0 history timeline (scale, zoom, recordings, playback marker) + thumbnail preview.
   **Open question to the user** (no answer yet): add a "Wczytaj miniatury" button that plays
   every Nth file of the shown range to take thumbnails (~2.5 s each, the one camera session is

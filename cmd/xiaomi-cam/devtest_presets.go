@@ -36,9 +36,9 @@ func init() {
 		err := savePresetSlot(cam, 1, "test zażółć")
 		fmt.Println("saved point 1:", err)
 		fyne.Do(u.loadPoints)
-		u.mover.press(motorLeft)
+		u.mover.Press(motorLeft)
 		time.Sleep(2 * time.Second)
-		u.mover.release()
+		u.mover.Release()
 		time.Sleep(2 * time.Second)
 		save("s1.jpg")
 		fyne.Do(func() {

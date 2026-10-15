@@ -220,6 +220,18 @@ func (c *Conn) Accept() error {
 }
 
 func reqTrackID(req *tcp.Request) int {
+	// "trackID=N" in the path or the query: Android Media3 appends it to the path and keeps
+	// the query (rtsp://host/stream/trackID=0?video)
+	full := req.URL.Path + "?" + req.URL.RawQuery
+	if i := strings.LastIndex(full, "trackID="); i >= 0 {
+		end := i + len("trackID=")
+		for end < len(full) && full[end] >= '0' && full[end] <= '9' {
+			end++
+		}
+		if n, err := strconv.Atoi(full[i+len("trackID=") : end]); err == nil {
+			return n
+		}
+	}
 	var s string
 	if req.URL.RawQuery != "" {
 		s = req.URL.RawQuery

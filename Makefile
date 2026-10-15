@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 PREFIX  ?= $(HOME)/.local
 BIN     := xiaomi-cam
 
-.PHONY: build install uninstall clean release deb
+.PHONY: build install uninstall clean release deb aar apk
 
 build:
 	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN) ./cmd/xiaomi-cam
@@ -43,3 +43,20 @@ deb: build
 
 clean:
 	rm -rf $(BIN) dist
+
+# --- Android app (android/): the Go core as an .aar (gomobile), then the APKs (Gradle).
+# Toolchain in ~/Android (JDK 17, SDK, NDK), gomobile in ~/go/bin.
+ANDROID_ENV = PATH=$(HOME)/go/bin:$(HOME)/Android/jdk/bin:$(PATH) JAVA_HOME=$(HOME)/Android/jdk \
+	ANDROID_HOME=$(HOME)/Android/sdk ANDROID_NDK_HOME=$(HOME)/Android/sdk/ndk/27.3.13750724
+
+aar:
+	$(ANDROID_ENV) gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 \
+		-androidapi 26 -javapkg pl.lawinski.xiaomicam.core -ldflags "-s -w" \
+		-o android/app/libs/xccore.aar ./mobile
+
+# release APKs (per ABI + universal) in dist/
+apk: aar
+	cd android && $(ANDROID_ENV) ./gradlew -q assembleRelease -PappVersion=$(VERSION)
+	mkdir -p dist
+	for f in android/app/build/outputs/apk/release/*.apk; do \
+		cp $$f dist/xiaomi-cam-$(VERSION:v%=%)-$$(basename $$f .apk | sed 's/^app-//; s/-release//').apk; done

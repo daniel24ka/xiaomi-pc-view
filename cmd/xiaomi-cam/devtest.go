@@ -42,12 +42,12 @@ func init() {
 		})
 
 		if os.Getenv("XC_TEST_PTZ") != "" {
-			u.mover.press(motorLeft)
+			u.mover.Press(motorLeft)
 			time.Sleep(2 * time.Second)
-			u.mover.release()
-			u.mover.press(motorRight)
+			u.mover.Release()
+			u.mover.Press(motorRight)
 			time.Sleep(2 * time.Second)
-			u.mover.release()
+			u.mover.Release()
 		}
 
 		step(time.Second, func() { u.setViewOnly(true); u.zoomSlider.SetValue(3) })

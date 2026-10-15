@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 	"image"
 	"image/jpeg"
 	"os"
@@ -32,14 +33,7 @@ var devHook func(u *ui)
 // version is set at build time: -ldflags "-X main.version=v1.0.0"
 var version = "dev"
 
-var qualities = []struct {
-	name, subtype string
-	w, h          int
-}{
-	{"2.5K", "3", 2560, 1440},
-	{"720p", "", 1280, 720},
-	{"SD", "sd", 1280, 720},
-}
+var qualities = xccore.XiaomiQualities
 
 // quality - a picture quality of a camera: name in the list and picture size
 type quality struct {
@@ -69,16 +63,11 @@ func cameraQualities(name string) ([]quality, int) {
 		}
 		return qs, min(max(c.Quality, 0), len(qs)-1)
 	}
-	src := cameraSource(name)
-	qi := 1
 	var qs []quality
-	for i, q := range qualities {
-		qs = append(qs, quality{q.name, q.w, q.h})
-		if q.subtype == sourceParam(src, "subtype") {
-			qi = i
-		}
+	for _, q := range qualities {
+		qs = append(qs, quality{q.Name, q.W, q.H})
 	}
-	return qs, qi
+	return qs, xccore.XiaomiQuality(name)
 }
 
 // currentQuality returns the selected quality of the camera.
@@ -212,7 +201,7 @@ func main() {
 		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
 	})
 	u.build()
-	onZoomState = func(name string, z float64) {
+	xccore.OnZoomState = func(name string, z float64) {
 		fyne.Do(func() {
 			if name == u.camera.Selected && z != u.camZoom {
 				u.camZoom = z
@@ -363,7 +352,7 @@ func (u *ui) build() {
 		if i := u.quality.SelectedIndex(); ipCam(u.camera.Selected) != nil {
 			u.changeIPQuality(i)
 		} else {
-			u.changeSource(map[string]string{"subtype": qualities[i].subtype})
+			u.changeSource(map[string]string{"subtype": qualities[i].Subtype})
 		}
 	})
 	u.connection = newSelect(cNames, func(string) {
@@ -407,8 +396,8 @@ func (u *ui) build() {
 	ptz := func(icon fyne.Resource, op int) *holdButton {
 		b := newHoldButton(icon, func() {
 			u.pictureControlsActive()
-			u.mover.press(op)
-		}, u.mover.release).withTip(ptzTip(op))
+			u.mover.Press(op)
+		}, u.mover.Release).withTip(ptzTip(op))
 		b.Importance = widget.LowImportance // on the pill's background
 		return b
 	}
@@ -447,12 +436,12 @@ func (u *ui) build() {
 	})
 	var nightNames []string
 	for _, m := range nightModes {
-		nightNames = append(nightNames, T(m.name))
+		nightNames = append(nightNames, T(m.Name))
 	}
 	u.night = newSelect(nightNames, func(string) {
 		u.win.Canvas().Unfocus()
 		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 {
-			u.setProp(propNightShot, nightModes[i].value, u.night)
+			u.setProp(propNightShot, nightModes[i].Value, u.night)
 		}
 	})
 	u.night.PlaceHolder = T("Tryb nocny")
@@ -506,8 +495,8 @@ func (u *ui) build() {
 	overlayPTZ := func(icon fyne.Resource, op int) *holdButton {
 		b := newHoldButton(icon, func() {
 			u.showExitButton()
-			u.mover.press(op)
-		}, u.mover.release)
+			u.mover.Press(op)
+		}, u.mover.Release)
 		b.Importance = widget.LowImportance // no button background, only the light overlay one
 		return b.withTip(ptzTip(op))
 	}
@@ -561,12 +550,12 @@ func (u *ui) build() {
 	if dc, ok := u.win.Canvas().(desktop.Canvas); ok {
 		dc.SetOnKeyDown(func(e *fyne.KeyEvent) {
 			if op, ok := arrows[e.Name]; ok && u.caps.PTZ {
-				u.mover.press(op)
+				u.mover.Press(op)
 			}
 		})
 		dc.SetOnKeyUp(func(e *fyne.KeyEvent) {
 			if _, ok := arrows[e.Name]; ok {
-				u.mover.release()
+				u.mover.Release()
 			}
 		})
 	}
@@ -946,13 +935,13 @@ func (u *ui) cameraDrag(dx, dy float32) {
 		op = motorDown
 	}
 	if op != 0 {
-		u.mover.press(op)
+		u.mover.Press(op)
 	}
 }
 
 func (u *ui) cameraDragEnd() {
 	u.dragX, u.dragY = 0, 0
-	u.mover.release()
+	u.mover.Release()
 }
 
 func abs32(v float32) float32 {

@@ -20,3 +20,10 @@ go2rtc_win*
 /xiaomi-cam
 /dist/
 /cmd/xiaomi-cam/xiaomi-cam
+# android
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/libs/
+/android/local.properties
+/android/.kotlin/

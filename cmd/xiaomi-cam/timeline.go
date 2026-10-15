@@ -23,8 +23,8 @@ type timeline struct {
 	hover  time.Time     // the time under the mouse (zero: none)
 
 	files    func(from, to time.Time) [][2]time.Time // known recordings in the range
-	onPick   func(t time.Time)                     // a time chosen (click, drag released)
-	onHover  func(t time.Time, x float32)          // the mouse over the axis (zero t: left)
+	onPick   func(t time.Time)                       // a time chosen (click, drag released)
+	onHover  func(t time.Time, x float32)            // the mouse over the axis (zero t: left)
 	dragging bool
 }
 

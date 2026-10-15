@@ -119,7 +119,9 @@ func RTPPay(mtu uint16, handler core.HandlerFunc) core.HandlerFunc {
 		mtu = 1472
 	}
 
-	payloader := &Payloader{}
+	// no aggregation packets (RFC 7798 4.4.2): Android Media3 can't read them ("need to
+	// implement processAggregationPacket"); single NAL packets work with every client
+	payloader := &Payloader{SkipAggregation: true}
 	sequencer := rtp.NewRandomSequencer()
 	mtu -= 12 // rtp.Header size
 
