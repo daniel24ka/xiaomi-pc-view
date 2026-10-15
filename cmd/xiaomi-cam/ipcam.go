@@ -153,7 +153,7 @@ type ipKind struct {
 var ipKinds = []ipKind{
 	{"onvif", "ONVIF", 80},
 	{"rtsp", "RTSP", 554},
-	{"http", "HTTP (MJPEG)", 80},
+	{"http", "HTTP (MJPEG, HLS)", 80},
 	{"tapo", "TP-Link Tapo", 0},
 	{"dvrip", "DVRIP (XMeye)", 34569},
 }

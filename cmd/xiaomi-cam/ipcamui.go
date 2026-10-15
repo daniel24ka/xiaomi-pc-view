@@ -112,9 +112,9 @@ func showAddIPCamera(w fyne.Window, onAdded func(name string), prefill *ipForm) 
 				widget.NewFormItem(T("Strumień podglądu"), subPath))
 			hint.SetText(T("Ścieżki strumieni są w instrukcji kamery. Można też wpisać w polu Adres cały adres rtsp://…"))
 		case "http":
-			mainPath.SetPlaceHolder("/video.mjpg")
+			mainPath.SetPlaceHolder("/video.mjpg, /stream.m3u8")
 			items = append(items, widget.NewFormItem(T("Ścieżka"), mainPath))
-			hint.SetText(T("Strumień MJPEG lub H.264 przez HTTP. Można też wpisać w polu Adres cały adres http://…"))
+			hint.SetText(T("Strumień MJPEG, HLS (.m3u8) lub H.264 przez HTTP. Można też wpisać w polu Adres cały adres http(s)://…"))
 		case "tapo":
 			hint.SetText(T("Hasło: konto kamery z aplikacji Tapo (Kamera > Ustawienia > Ustawienia zaawansowane > Konto kamery) lub hasło konta TP-Link."))
 		case "dvrip":

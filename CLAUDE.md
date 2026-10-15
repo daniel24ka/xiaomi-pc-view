@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.18.0`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.18.1`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.18.0 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.18.1 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -26,7 +26,7 @@ notes must list the changes since the previous tag (English) and the 3 downloads
 
 Build with `-tags devtest`; `cmd/xiaomi-cam/devtest_*.go` hooks run when env `XC_*` is set
 (e.g. `XC_TEST`, `XC_PTZTEST`, `XC_GRIDTEST`, `XC_AITEST`, `XC_SEAMLESSTEST`, `XC_BUSYTEST`,
-`XC_NIGHTTEST`, `XC_WALLTEST` + `XC_WALLPOS`/`XC_WALLSECS`/`XC_LOWERMS`, `XC_IPTEST` + `XC_SIMHOST`, `XC_IPUITEST`). XTest mouse input doesn't reach the window (GNOME Wayland,
+`XC_NIGHTTEST`, `XC_WALLTEST` + `XC_WALLPOS`/`XC_WALLSECS`/`XC_LOWERMS`, `XC_IPTEST` + `XC_SIMHOST`, `XC_IPUITEST`, `XC_ADDCAM="name|url;…"` adds IP cameras to the real config). XTest mouse input doesn't reach the window (GNOME Wayland,
 XWayland), so click behaviour is tested with the Fyne test driver (`tooltip_test.go`). Real screenshots
 (whole desktop, no prompt): xdg-desktop-portal Screenshot with interactive=false via python gi. Real mouse clicks on
 the desktop: a virtual absolute pointer via /dev/uinput (python evdev, the user has an ACL) –
@@ -88,6 +88,8 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 - IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
   spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
   IP camera to test yet.
+- The user has two public webcams added for testing (WhatsUpCams HLS, Croatia): "Pula (Chorwacja)",
+  "Dubrownik – Stradun (Chorwacja)". US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.
 - Real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
   Claude provider (no keys); a second real camera for the grid.
 - History has no recordings list (RDT channel not implemented).

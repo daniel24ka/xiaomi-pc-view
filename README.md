@@ -17,7 +17,7 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   - **RTSP** – address, login, password and the stream paths; ready paths for Hikvision /
     Annke / Ezviz, Dahua / Amcrest / Imou, Reolink, Tapo / VIGI, Uniview, Axis, Foscam, or a
     whole `rtsp://…` address.
-  - **HTTP** (MJPEG or H.264 over HTTP), **TP-Link Tapo** (own protocol, camera account
+  - **HTTP** (MJPEG, HLS `.m3u8` or H.264 over HTTP), **TP-Link Tapo** (own protocol, camera account
     password) and **DVRIP** (XMeye / Sofia cameras and recorders).
   - **Test** checks the connection and the picture size before adding. Quality: **main** or
     **sub stream** (when the camera has two). Picture, sound, snapshots, MP4 recording
