@@ -82,16 +82,7 @@ func (u *ui) remap(desktop bool, before, after func()) {
 					u.video.img.Refresh()
 				})
 			})
-			// the WM reports the re-map as minimize and restore, sometimes late: it is
-			// not a hide to tray
-			time.AfterFunc(2*time.Second, func() {
-				fyne.Do(func() {
-					u.remapping = false
-					if win.GetAttrib(glfw.Iconified) == glfw.True {
-						win.Restore()
-					}
-				})
-			})
+			u.notMinimized()
 		})
 	})
 }
@@ -109,6 +100,26 @@ func (u *ui) keepBelow(on bool) {
 		u.wallStop = make(chan struct{})
 		wmKeepLowered(u.win, lowerInterval, u.wallStop)
 	}
+}
+
+// notMinimized: the window is re-mapped (window type, frame on/off); the WM reports it as
+// minimize and restore, sometimes late. For 2 s that is not a hide to tray, and the window
+// is restored if it ended up minimized. UI thread.
+func (u *ui) notMinimized() {
+	u.remapping = true
+	u.remapSeq++
+	seq := u.remapSeq
+	time.AfterFunc(2*time.Second, func() {
+		fyne.Do(func() {
+			if u.remapSeq != seq {
+				return // a later re-map is guarded
+			}
+			u.remapping = false
+			if win := glfwWindow(u.win); win != nil && win.GetAttrib(glfw.Iconified) == glfw.True {
+				win.Restore()
+			}
+		})
+	})
 }
 
 func (u *ui) updateWallpaperItem() {

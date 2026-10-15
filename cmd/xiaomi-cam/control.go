@@ -162,9 +162,18 @@ func onMinimize(w fyne.Window, f func()) {
 	if win := glfwWindow(w); win != nil {
 		win.SetIconifyCallback(func(_ *glfw.Window, iconified bool) {
 			// switching to another workspace also reports "iconified" - not a minimize
-			if iconified && wmOnCurrentDesktop(w) {
-				f()
+			if !iconified || !wmOnCurrentDesktop(w) {
+				return
 			}
+			// the WM also reports a short minimize when it re-maps the window (frame on/off,
+			// moving a window without frame): only a window still minimized is hidden
+			time.AfterFunc(700*time.Millisecond, func() {
+				fyne.Do(func() {
+					if win.GetAttrib(glfw.Iconified) == glfw.True {
+						f()
+					}
+				})
+			})
 		})
 	}
 }

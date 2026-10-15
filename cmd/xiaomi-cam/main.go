@@ -105,7 +105,8 @@ type ui struct {
 	// wallpaper mode (wallpaper.go)
 	wallpaper     bool
 	wallStop      chan struct{} // keepBelow running
-	remapping     bool          // the window is being re-mapped with another window type
+	remapping     bool          // the window is being re-mapped (window type, frame): not a minimize
+	remapSeq      int
 	wallpaperItem *fyne.MenuItem
 	trayMenu      *fyne.Menu
 	capNight      fyne.CanvasObject
@@ -821,6 +822,7 @@ func (u *ui) setViewOnly(on bool) {
 		return
 	}
 	u.saveGeometry() // of the mode we are leaving
+	u.notMinimized() // the frame on/off re-maps the window
 	u.viewOnly = on
 	u.showBars(!on)
 	u.win.SetPadded(!on)

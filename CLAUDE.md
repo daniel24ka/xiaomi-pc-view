@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.19.0`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.19.1`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.19.0 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.19.1 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -61,6 +61,10 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   takes 2-level paths). `cameraSource()` is Xiaomi only (""), use `cameraExists()` /
   `streamSource()`; `cameraQualities()` gives the quality list of any camera. Probing: a
   hidden `__xc_probe*` stream + ffprobe. `getProps`/`setProp`/`motor` return `errNotXiaomi`
+- The WM reports a short minimize when it re-maps the window (frame on/off, wallpaper mode):
+  `onMinimize` hides to tray only if still minimized after 0.7 s, and `notMinimized()` guards
+  2 s (`remapping`). Hooks `XC_VIEWTEST` (video only on/off, minimize) and `XC_MOVETEST`
+  (uinput drag of the move handle; the injected drag doesn't start a WM move here)
 - `bars.go` ☰ menu (video only, full screen, cameras, language, help) and the light panel
   (spotlight, siren, night mode) – keep the bars narrow (window min ~660 px, `XC_LAYOUTTEST`
   prints the min sizes); grid tiles have a small video min size (`videoView.small`)
