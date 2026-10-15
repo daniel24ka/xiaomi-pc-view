@@ -116,8 +116,27 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-Nothing in progress. (v1.20.0: UI redesign variant A of the mockup
-https://claude.ai/artifact/B1ccjwrZwjCkYLtYvDsnEK is released.)
+State 2026-10-15: v1.22.0 released (all GitHub releases v1.0.0–v1.22.0 published). Nothing
+half-done in the code. Recent work, newest first:
+- v1.22.0 history timeline (scale, zoom, recordings, playback marker) + thumbnail preview.
+  **Open question to the user** (no answer yet): add a "Wczytaj miniatury" button that plays
+  every Nth file of the shown range to take thumbnails (~2.5 s each, the one camera session is
+  busy meanwhile).
+- v1.21.0 SD history ~5x faster (predicted file starts, cache, key frame kept, ffmpeg 30 s).
+  The user's idea of a temp cache of watched video: explained (helps only re-watching; no
+  prefetch possible), not done; the user didn't insist.
+- v1.20.x camera points: rename (✎, position stays), name under the number (10 px).
+- v1.20.0 new look (variant A of the mockup https://claude.ai/artifact/B1ccjwrZwjCkYLtYvDsnEK),
+  new app icon, zoom follows camera points.
+- **Android app (APK) – postponed by the user ("android później")**: see Open ideas below for
+  the agreed plan (native Kotlin + Media3 + Go core via gomobile, same repo). Before starting:
+  ask to install JDK/SDK/NDK (~8–10 GB in ~/Android, no sudo); no Shield access for tests yet.
+Notes for testing: the user's app usually runs as `xiaomi-cam --tray` (autostart) – stop it
+with the anchored pkill (with `( --tray)?`), relaunch with `--tray`. The test window takes
+the focus: hooks disable keyboard shortcuts. Never take full-screen screenshots where the
+user's windows are (a password manager was captured once); crop to the test window only.
+Point 1 of the camera is named "Home" by the user. Public test cameras (WhatsUpCams HLS):
+Pula, Dubrownik – Stradun, Pag – plaża Gajac, Bale – Istria.
 
 ## Open ideas / not done
 
