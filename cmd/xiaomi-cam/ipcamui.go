@@ -24,7 +24,13 @@ func showChooseCamera(w fyne.Window, onAdded func(name string)) {
 	})
 	ipBtn := newButton(T("Kamera IP – ONVIF, RTSP, HTTP, Tapo, DVRIP"), theme.ComputerIcon(), func() {
 		d.Hide()
-		showAddIPCamera(w, onAdded, nil)
+		showAddIPCamera(w, nil, "", func(name string, c *ipCamera) error {
+			if err := addIPCamera(name, c); err != nil {
+				return err
+			}
+			onAdded(name)
+			return nil
+		})
 	})
 	xiaomiBtn.Alignment, ipBtn.Alignment = widget.ButtonAlignLeading, widget.ButtonAlignLeading
 	d = dialog.NewCustom(T("Dodaj kamerę"), T("Anuluj"), container.NewVBox(xiaomiBtn, ipBtn), w)
@@ -32,8 +38,9 @@ func showChooseCamera(w fyne.Window, onAdded func(name string)) {
 	d.Show()
 }
 
-// showAddIPCamera - the form of an IP camera; prefill: e.g. a camera found in the network.
-func showAddIPCamera(w fyne.Window, onAdded func(name string), prefill *ipForm) {
+// showAddIPCamera - the form of an IP camera: a new one, or edit (the camera edit with the
+// form prefill). save is called on the UI thread when the camera answered.
+func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name string, c *ipCamera) error) {
 	name := widget.NewEntry()
 	name.SetPlaceHolder(T("np. Garaż"))
 	host := widget.NewEntry()
@@ -205,13 +212,17 @@ func showAddIPCamera(w fyne.Window, onAdded func(name string), prefill *ipForm) 
 		}()
 	}).withTip(T("Łączy się z kamerą i sprawdza obraz"))
 
-	add = newButton(T("Dodaj"), theme.ContentAddIcon(), func() {
+	addText, addIcon := T("Dodaj"), theme.ContentAddIcon()
+	if edit != "" {
+		addText, addIcon = T("Zapisz"), theme.DocumentSaveIcon()
+	}
+	add = newButton(addText, addIcon, func() {
 		n := strings.TrimSpace(name.Text)
 		if n == "" {
 			status.SetText(T("Podaj nazwę kamery"))
 			return
 		}
-		if cameraExists(n) || strings.HasPrefix(n, hiddenPrefix) {
+		if (n != edit && cameraExists(n)) || strings.HasPrefix(n, hiddenPrefix) {
 			status.SetText(fmt.Sprintf(T("Kamera „%s” już istnieje"), n))
 			return
 		}
@@ -219,17 +230,16 @@ func showAddIPCamera(w fyne.Window, onAdded func(name string), prefill *ipForm) 
 		setBusy(true, T("Łączenie z kamerą…"))
 		go func() {
 			c, err := check(f)
-			if err == nil {
-				err = addIPCamera(n, c)
-			}
 			fyne.Do(func() {
 				setBusy(false, "")
+				if err == nil {
+					err = save(n, c)
+				}
 				if err != nil {
 					status.SetText(T("Błąd: ") + err.Error())
 					return
 				}
 				d.Hide()
-				onAdded(n)
 			})
 		}()
 	})
@@ -282,12 +292,28 @@ func showAddIPCamera(w fyne.Window, onAdded func(name string), prefill *ipForm) 
 	brand.SetSelectedIndex(len(brandNames) - 1)
 	mainPath.SetText("")
 	subPath.SetText("")
+	title := T("Dodaj kamerę IP")
+	if prefill != nil && edit != "" {
+		title = T("Edytuj kamerę")
+		name.SetText(edit)
+		user.SetText(prefill.User)
+		pass.SetText(prefill.Pass)
+		mainPath.SetText(prefill.MainPath)
+		subPath.SetText(prefill.SubPath)
+		channel.SetText(strconv.Itoa(prefill.Channel))
+		for _, b := range rtspBrands {
+			if b.main == prefill.MainPath && b.sub == prefill.SubPath {
+				brand.Selected = b.name // without OnChanged: the paths are set
+				brand.Refresh()
+			}
+		}
+	}
 
 	content := container.NewBorder(nil,
 		container.NewVBox(hint, container.NewBorder(nil, nil, spin, nil, status),
 			container.NewHBox(test, layout.NewSpacer(), cancel, add)),
 		nil, nil, form)
-	d = dialog.NewCustomWithoutButtons(T("Dodaj kamerę IP"), content, w)
+	d = dialog.NewCustomWithoutButtons(title, content, w)
 	d.Show()
 	d.Resize(fyne.NewSize(600, d.MinSize().Height))
 }

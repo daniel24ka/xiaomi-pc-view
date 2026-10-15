@@ -318,4 +318,8 @@ Closing the window hides the app to the tray`,
 	"Łączy się z kamerą i sprawdza obraz": "Connects to the camera and checks the picture",
 	"Ścieżka":                             "Path",
 	"Ścieżki strumieni są w instrukcji kamery. Można też wpisać w polu Adres cały adres rtsp://…": "The stream paths are in the camera manual. You can also type the whole rtsp://… address in the Address field",
+	"Menu: tylko obraz, pełny ekran, kamery, język, skróty klawiaturowe i wersja":                 "Menu: video only, full screen, cameras, language, keyboard shortcuts and version",
+	"Reflektor, jasność, syrena i tryb nocny kamery":                                              "Camera spotlight, brightness, siren and night mode",
+	"Edytuj kamerę": "Edit camera",
+	"Edytuj kamerę: nazwa, adres, login, hasło": "Edit camera: name, address, login, password",
 }

@@ -32,3 +32,20 @@ func TestIPFormSources(t *testing.T) {
 		t.Error("no address: want an error")
 	}
 }
+
+// A saved camera opened for editing gives the same sources again.
+func TestIPFormOfRoundTrip(t *testing.T) {
+	for _, c := range []*ipCamera{
+		{Kind: "rtsp", Main: "rtsp://admin:p%40ss@192.168.1.50/Streaming/Channels/101", Sub: "rtsp://admin:p%40ss@192.168.1.50/Streaming/Channels/102"},
+		{Kind: "rtsp", Main: "rtsp://u:p@10.0.0.2:8554/cam/realmonitor?channel=1&subtype=0", Sub: "rtsp://u:p@10.0.0.2:8554/cam/realmonitor?channel=1&subtype=1"},
+		{Kind: "http", Main: "https://cdn-004.whatsupcams.com/hls/hr_pula01.m3u8"},
+		{Kind: "tapo", Main: "tapo://cloudpass@10.0.0.4", Sub: "tapo://cloudpass@10.0.0.4?subtype=1"},
+		{Kind: "dvrip", Main: "dvrip://admin:x@10.0.0.5?channel=2&subtype=0", Sub: "dvrip://admin:x@10.0.0.5?channel=2&subtype=1"},
+	} {
+		f := ipFormOf(c)
+		main, sub, err := f.sources()
+		if err != nil || main != c.Main || sub != c.Sub {
+			t.Errorf("%s:\n got %q %q %v\nwant %q %q (form %+v)", c.Kind, main, sub, err, c.Main, c.Sub, f)
+		}
+	}
+}

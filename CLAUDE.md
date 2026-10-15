@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.18.1`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.19.0`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.18.1 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.19.0 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -61,6 +61,9 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   takes 2-level paths). `cameraSource()` is Xiaomi only (""), use `cameraExists()` /
   `streamSource()`; `cameraQualities()` gives the quality list of any camera. Probing: a
   hidden `__xc_probe*` stream + ffprobe. `getProps`/`setProp`/`motor` return `errNotXiaomi`
+- `bars.go` ☰ menu (video only, full screen, cameras, language, help) and the light panel
+  (spotlight, siren, night mode) – keep the bars narrow (window min ~660 px, `XC_LAYOUTTEST`
+  prints the min sizes); grid tiles have a small video min size (`videoView.small`)
 - `grid.go` multi-camera grid, `caps.go` hide unsupported features, `pointsui.go`/`presets.go`
   points 1–3, `history.go` SD playback, `recorder.go` MP4 (selected/each/grid),
   `ai.go`/`aiui.go` AI tasks (Claude SDK, OpenAI, own LM Studio/Ollama server, cron),
@@ -88,8 +91,9 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 - IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
   spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
   IP camera to test yet.
-- The user has two public webcams added for testing (WhatsUpCams HLS, Croatia): "Pula (Chorwacja)",
-  "Dubrownik – Stradun (Chorwacja)". US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.
+- The user has four public webcams added for testing (WhatsUpCams HLS, Croatia): "Pula (Chorwacja)",
+  "Dubrownik – Stradun (Chorwacja)", "Pag – plaża Gajac (Chorwacja)", "Bale – Istria (Chorwacja)"
+  (5 cameras with the Xiaomi one: grid 3 columns works). US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.
 - Real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
   Claude provider (no keys); a second real camera for the grid.
 - History has no recordings list (RDT channel not implemented).

@@ -103,5 +103,6 @@ func (u *ui) applyCaps() {
 	show(c.Light, u.capLight)
 	show(c.Siren, u.siren)
 	show(c.NightMode, u.capNight)
+	show(c.Light || c.Siren || c.NightMode, u.camControls)
 	show(c.History, u.hist.button)
 }

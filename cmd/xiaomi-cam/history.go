@@ -65,7 +65,6 @@ func (u *ui) buildHistory() {
 	}
 	h.bar = container.NewBorder(nil, nil,
 		container.NewHBox(
-			widget.NewLabel(T("Historia:")),
 			container.NewGridWrap(fyne.NewSize(150, 36), h.date),
 			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)).withTip(T("10 minut wstecz")),
 			newButton("", theme.MediaSkipPreviousIcon(), step(-time.Minute)).withTip(T("1 minuta wstecz")),
@@ -74,7 +73,7 @@ func (u *ui) buildHistory() {
 			h.label,
 			newButton("", theme.MediaSkipNextIcon(), step(time.Minute)).withTip(T("1 minuta do przodu")),
 			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)).withTip(T("10 minut do przodu")),
-			widget.NewLabel(T("Prędkość:")), h.speed,
+			h.speed,
 		),
 		h.slider,
 	)

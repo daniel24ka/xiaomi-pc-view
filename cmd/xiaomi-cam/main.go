@@ -115,16 +115,18 @@ type ui struct {
 	camera     *ptrSelect
 	quality    *ptrSelect
 	connection *ptrSelect
-	connLabel  *widget.Label
-	light      *ptrCheck
-	brightness *ptrSlider
-	siren      *ptrCheck
-	sound      *ptrCheck
-	bars       []fyne.CanvasObject
-	exitView   *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
-	viewOnly   bool
-	hideTimer  *time.Timer
-	normalSize fyne.Size // window size before video-only mode
+	connBox    fyne.CanvasObject // the connection list (Xiaomi only)
+	// light, siren, night mode: in a panel opened by this button (bottom bar)
+	camControls *ptrButton
+	light       *ptrCheck
+	brightness  *ptrSlider
+	siren       *ptrCheck
+	sound       *ptrCheck
+	bars        []fyne.CanvasObject
+	exitView    *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
+	viewOnly    bool
+	hideTimer   *time.Timer
+	normalSize  fyne.Size // window size before video-only mode
 
 	hist                                 history // SD card playback
 	recButton                            *ptrButton
@@ -297,6 +299,9 @@ func (u *ui) build() {
 	}
 	u.player.onStatus = func(s string) {
 		fyne.Do(func() {
+			if u.grid {
+				return // a late status of the stopped single view (the grid has its own)
+			}
 			u.video.setStatus(s)
 			u.status.SetText(s)
 		})
@@ -331,7 +336,6 @@ func (u *ui) build() {
 			u.changeSource(map[string]string{"subtype": qualities[i].subtype})
 		}
 	})
-	u.connLabel = widget.NewLabel(T("Połączenie:"))
 	u.connection = newSelect(cNames, func(string) {
 		if !u.syncing {
 			u.changeSource(map[string]string{"p2p": connections[u.connection.SelectedIndex()].p2p})
@@ -349,24 +353,25 @@ func (u *ui) build() {
 	u.gridButton.tip = T("Siatka wszystkich kamer / jedna kamera")
 	u.recButton.tip = T("Nagrywanie do MP4 – start/stop (tryb i kamery w Ustawieniach)")
 	u.hist.button.tip = T("Historia nagrań z karty SD / powrót na żywo")
+	// lists of a fixed width (the window can be narrow); the labels are in the tooltips
+	fixed := func(w float32, o fyne.CanvasObject) fyne.CanvasObject {
+		return container.NewGridWrap(fyne.NewSize(w, o.MinSize().Height), o)
+	}
+	u.connBox = fixed(110, u.connection)
 	top := container.NewHBox(
-		widget.NewLabel(T("Kamera:")), u.camera,
-		widget.NewLabel(T("Jakość:")), u.quality,
-		u.connLabel, u.connection,
+		fixed(170, u.camera),
+		fixed(120, u.quality),
+		u.connBox,
 		layout.NewSpacer(),
 		// view: grid, history, snapshot, video only, full screen
 		u.gridButton,
 		u.hist.button,
 		u.recButton,
 		u.snapButton,
-		newButton("", theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }).withTip(T("Tylko obraz – ukrywa panele i ramkę okna (H, powrót: Esc)")),
-		newButton("", theme.ViewFullScreenIcon(), u.toggleFullScreen).withTip(T("Pełny ekran (F, F11, podwójne kliknięcie)")),
 		widget.NewSeparator(),
-		// app: cameras, language, help
-		newButton("", cameraIcon, u.showCameras).withTip(T("Kamery – dodawanie, zmiana nazwy, usuwanie")),
+		// app: settings; cameras, language, help in the menu
 		newButton("", theme.SettingsIcon(), u.showSettings).withTip(T("Ustawienia: nagrywanie, foldery, zadania AI, powiadomienia")),
-		u.languageSelect(),
-		newButton("", theme.HelpIcon(), u.showShortcuts).withTip(T("Skróty klawiaturowe i wersja")),
+		u.appMenuButton(),
 	)
 
 	ptz := func(icon fyne.Resource, op int) *holdButton {
@@ -417,8 +422,8 @@ func (u *ui) build() {
 	})
 	u.night.PlaceHolder = T("Tryb nocny")
 	u.night.tip = T("Tryb nocny: podczerwień (czarno-biały obraz) lub kolor z reflektorem; auto przełącza o zmroku")
-	u.capNight = container.NewHBox(widget.NewIcon(moonIcon), container.NewGridWrap(fyne.NewSize(230, u.night.MinSize().Height), u.night))
-	u.sound = newCheck(T("Dźwięk"), func(bool) {
+	u.capNight = container.NewBorder(nil, nil, widget.NewIcon(moonIcon), nil, container.NewGridWrap(fyne.NewSize(230, u.night.MinSize().Height), u.night))
+	u.sound = newCheck("", func(bool) {
 		u.win.Canvas().Unfocus()
 		if !u.syncing {
 			p := &u.player
@@ -447,17 +452,14 @@ func (u *ui) build() {
 		u.zoomLabel,
 		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }).withTip(T("Przybliż – zoom kamery do 9× (+, kółko myszy)")),
 		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }).withTip(T("Zoom 1× (0)")))
-	u.capLight = container.NewHBox(u.light, container.NewGridWrap(fyne.NewSize(120, 36), u.brightness))
-	bottom := container.NewHBox(
-		u.capPTZ,
-		u.capPoints,
-		u.capZoom,
-		widget.NewSeparator(),
-		u.capLight,
-		u.siren, u.capNight, u.sound,
-		widget.NewSeparator(),
-		u.activity,
-		u.status,
+	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
+	u.camControls = u.cameraControlsButton()
+	u.status.Truncation = fyne.TextTruncateEllipsis
+	bottom := container.NewBorder(nil, nil,
+		container.NewHBox(u.capPTZ, u.capPoints, u.capZoom),
+		container.NewHBox(u.camControls, widget.NewSeparator(),
+			container.NewHBox(widget.NewIcon(theme.VolumeUpIcon()), u.sound)),
+		container.NewBorder(nil, nil, u.activity, nil, u.status),
 	)
 	bottomBox := container.NewVBox(u.hist.bar, bottom)
 	u.bars = []fyne.CanvasObject{top, bottomBox}
@@ -665,12 +667,10 @@ func (u *ui) syncControls(name string) quality {
 	u.quality.SetSelectedIndex(qi)
 	// connection: only Xiaomi cameras (servers / LAN)
 	if src == "" {
-		u.connLabel.Hide()
-		u.connection.Hide()
+		u.connBox.Hide()
 		return qs[qi]
 	}
-	u.connLabel.Show()
-	u.connection.Show()
+	u.connBox.Show()
 	ci := 1
 	for i, c := range connections {
 		if c.p2p == sourceParam(src, "p2p") {
@@ -924,19 +924,9 @@ func abs32(v float32) float32 {
 	return v
 }
 
-func (u *ui) languageSelect() *ptrSelect {
-	var names []string
-	for _, l := range languages {
-		names = append(names, l.name)
-	}
-	sel := newSelect(names, nil).withTip(T("Język aplikacji"))
-	for i, l := range languages {
-		if l.code == lang {
-			sel.SetSelectedIndex(i)
-		}
-	}
-	sel.OnChanged = func(string) {
-		code := languages[sel.SelectedIndex()].code
+// setLanguage switches the app language (menu).
+func (u *ui) setLanguage(code string) {
+	{
 		if code == lang {
 			return
 		}
@@ -974,7 +964,6 @@ func (u *ui) languageSelect() *ptrSelect {
 		u.updateCaps()
 		u.loadPoints()
 	}
-	return sel
 }
 
 func (u *ui) showShortcuts() {

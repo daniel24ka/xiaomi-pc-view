@@ -192,6 +192,7 @@ type videoView struct {
 	spinner *spinner
 
 	frame *image.RGBA
+	small bool // a grid tile: smaller minimum size
 
 	onDoubleTap     func()
 	onTap           func() // click: select the tile in the grid
@@ -413,9 +414,14 @@ func (r *videoRenderer) Layout(size fyne.Size) {
 	r.v.spinner.Move(fyne.NewPos((size.Width-sp)/2, size.Height/2-20-sp))
 }
 
-func (r *videoRenderer) MinSize() fyne.Size { return fyne.NewSize(480, 270) }
-func (r *videoRenderer) Refresh()           { canvas.Refresh(r.v) }
-func (r *videoRenderer) Destroy()           {}
+func (r *videoRenderer) MinSize() fyne.Size {
+	if r.v.small {
+		return fyne.NewSize(192, 108) // a grid tile
+	}
+	return fyne.NewSize(480, 270)
+}
+func (r *videoRenderer) Refresh() { canvas.Refresh(r.v) }
+func (r *videoRenderer) Destroy() {}
 func (r *videoRenderer) Objects() []fyne.CanvasObject {
 	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.spinner, r.v.status}
 }

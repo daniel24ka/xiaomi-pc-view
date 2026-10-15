@@ -47,8 +47,8 @@ func (u *ui) loadPoints() {
 				}
 				if p := u.points[i]; p != nil {
 					label := p.Label()
-					if r := []rune(label); len(r) > 10 {
-						label = string(r[:10]) + "…"
+					if r := []rune(label); len(r) > 6 {
+						label = string(r[:6]) + "…"
 					}
 					b.SetText(fmt.Sprintf("%d %s", i+1, label))
 					b.Importance = widget.MediumImportance

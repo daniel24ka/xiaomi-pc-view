@@ -42,7 +42,7 @@ func init() {
 		shot("choose.jpg")
 		closeAll()
 		for i, k := range ipKinds {
-			fyne.Do(func() { showAddIPCamera(u.win, func(string) {}, &ipForm{Kind: k.id}) })
+			fyne.Do(func() { showAddIPCamera(u.win, &ipForm{Kind: k.id}, "", func(string, *ipCamera) error { return nil }) })
 			time.Sleep(time.Second)
 			shot(fmt.Sprintf("form_%s.jpg", k.id))
 			closeAll()

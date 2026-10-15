@@ -32,7 +32,7 @@ func (u *ui) showCameras() {
 			info.Importance = widget.LowImportance
 			list.Add(container.NewBorder(nil, nil, nil,
 				container.NewHBox(
-					newButton("", theme.DocumentCreateIcon(), func() { u.renameCamera(name, refresh) }).withTip(T("Zmień nazwę kamery")),
+					newButton("", theme.DocumentCreateIcon(), func() { u.editCamera(name, d, refresh) }).withTip(T("Edytuj kamerę: nazwa, adres, login, hasło")),
 					newButton("", theme.DeleteIcon(), func() { u.deleteCamera(name, refresh) }).withTip(T("Usuń kamerę z aplikacji")),
 				),
 				container.NewHBox(title, info),
@@ -52,6 +52,34 @@ func (u *ui) showCameras() {
 	d = dialog.NewCustom(T("Kamery"), T("Zamknij"), content, u.win)
 	d.Resize(fyne.NewSize(520, 320))
 	d.Show()
+}
+
+// editCamera: an IP camera - its form; a Xiaomi camera - its name (the rest is in the bars).
+func (u *ui) editCamera(name string, list *dialog.CustomDialog, done func()) {
+	c := ipCam(name)
+	if c == nil {
+		u.renameCamera(name, done)
+		return
+	}
+	list.Hide()
+	showAddIPCamera(u.win, ipFormOf(c), name, func(newName string, nc *ipCamera) error {
+		selected := u.camera.Selected == name
+		if selected {
+			u.player.stop()
+		}
+		if t := u.tileOf(name); t != nil {
+			t.player.stop()
+		}
+		if err := updateIPCamera(name, newName, nc); err != nil {
+			return err
+		}
+		u.camerasChanged()
+		if selected {
+			u.camera.Selected = "" // restarts the video even with the same name
+			u.camera.SetSelected(newName)
+		}
+		return nil
+	})
 }
 
 func (u *ui) renameCamera(name string, done func()) {

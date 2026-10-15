@@ -103,6 +103,65 @@ func addIPCamera(name string, c *ipCamera) error {
 	return saveIPCamera(name, c)
 }
 
+// ipFormOf returns the form fields of a saved IP camera (for editing).
+func ipFormOf(c *ipCamera) *ipForm {
+	f := &ipForm{Kind: c.Kind}
+	u, err := url.Parse(c.Main)
+	if err != nil {
+		return f
+	}
+	f.Host = u.Hostname()
+	f.Port, _ = strconv.Atoi(u.Port())
+	if u.User != nil {
+		f.User = u.User.Username()
+		f.Pass, _ = u.User.Password()
+	}
+	pathOf := func(u *url.URL) string {
+		p := u.EscapedPath()
+		if u.RawQuery != "" {
+			p += "?" + u.RawQuery
+		}
+		return p
+	}
+	switch c.Kind {
+	case "rtsp", "http":
+		// the whole address (keeps https://, the port and the path), login and password apart
+		full := *u
+		full.User = nil
+		f.Host, f.Port = full.String(), 0
+		if s, err := url.Parse(c.Sub); err == nil && c.Sub != "" {
+			f.SubPath = pathOf(s)
+		}
+	case "tapo":
+		if _, ok := u.User.Password(); !ok && u.User != nil {
+			f.User, f.Pass = "", u.User.Username() // tapo://password@host
+		}
+	case "dvrip":
+		f.Channel, _ = strconv.Atoi(u.Query().Get("channel"))
+	}
+	return f
+}
+
+// updateIPCamera saves the edited camera (old name: the camera before the edit). The caller
+// stops its video first.
+func updateIPCamera(old, name string, c *ipCamera) error {
+	if prev := ipCam(old); prev != nil && c.Sub != "" {
+		c.Quality = prev.Quality // keep main / sub
+	}
+	if old != name {
+		if err := addIPCamera(name, c); err != nil {
+			return err
+		}
+		return removeCamera(old)
+	}
+	src := c.active()
+	streams.Get(name).SetSource(src)
+	if err := app.PatchConfig([]string{"streams", name}, []string{src}); err != nil {
+		return err
+	}
+	return saveIPCamera(name, c)
+}
+
 // setIPQuality switches the camera to its main (0) or sub (1) stream. The caller stops
 // the video first.
 func setIPQuality(name string, q int) error {

@@ -29,6 +29,7 @@ var selectedColor = color.NRGBA{R: 0xff, G: 0x67, B: 0x00, A: 0xff}
 
 func newTile(u *ui, name string) *tile {
 	t := &tile{name: name, view: newVideoView()}
+	t.view.small = true
 	t.border = canvas.NewRectangle(color.Transparent)
 	t.border.StrokeWidth = 3
 	label := canvas.NewText(" "+name+" ", color.White)

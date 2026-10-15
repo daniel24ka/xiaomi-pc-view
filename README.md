@@ -19,6 +19,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
     whole `rtsp://…` address.
   - **HTTP** (MJPEG, HLS `.m3u8` or H.264 over HTTP), **TP-Link Tapo** (own protocol, camera account
     password) and **DVRIP** (XMeye / Sofia cameras and recorders).
+  - **Edit** (✎ in the camera list) opens the same form with the saved settings: name, type,
+    address, login, password, stream paths.
   - **Test** checks the connection and the picture size before adding. Quality: **main** or
     **sub stream** (when the camera has two). Picture, sound, snapshots, MP4 recording
     (H.264/H.265 copied, MJPEG encoded to H.264), the grid, AI tasks, notifications, HTTP API
@@ -34,7 +36,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
 - **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
-- **Spotlight** with brightness, and **siren**.
+- **Spotlight** with brightness, and **siren** (light bulb button in the bottom bar, together
+  with the night mode).
 - **Night mode** (infrared): auto infrared, auto / smart full color (with the spotlight),
   always infrared, always full color, or off.
 - **Local recording to MP4**: H.265 video copied as it comes from the camera (no
@@ -55,6 +58,9 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   (pan/tilt, zoom, points, spotlight, quality, snapshot, recording, sound) work on the
   selected one; double click opens it alone.
 - Full screen mode.
+- **Compact bars**: the window can be made narrow (about 660 px). Video only, full screen,
+  cameras, language and the keyboard shortcuts are in the ☰ menu; spotlight, siren and night
+  mode in the light bulb panel.
 - **System tray**: closing or minimizing the window hides the app and stops streaming.
 - Window size and position are remembered, separately with and without the frame.
 - Only one instance runs; starting the app again shows the window that is already open.
