@@ -196,6 +196,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	loadRecordings() // SD card files found before (history.go)
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
 	a.Settings().SetTheme(appTheme{})
@@ -277,6 +278,7 @@ func main() {
 		go u.screenshotAndQuit(path) // for development: window screenshot after 15 s
 	}
 	a.Run()
+	saveRecordings()
 	u.player.stop()
 }
 

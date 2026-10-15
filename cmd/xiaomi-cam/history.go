@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
+	"os"
+	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -135,7 +139,9 @@ func (u *ui) playHistory(t time.Time) {
 	h.target, h.firstFrame = t, time.Time{}
 	speed := playbackSpeeds[max(h.speed.SelectedIndex(), 0)]
 
+	ts := time.Now()
 	u.player.stop() // one camera session: the live/previous playback must end first
+	histDebug("player stopped in %v", time.Since(ts))
 	if err := setPlayback(u.camera.Selected, t.Unix(), speed); err != nil {
 		u.status.SetText(err.Error())
 		return
@@ -150,6 +156,7 @@ func (u *ui) goLive() {
 		return
 	}
 	h.on = false
+	go saveRecordings()
 	h.bar.Hide()
 	h.button.SetIcon(theme.HistoryIcon())
 	h.button.Importance = widget.MediumImportance
@@ -177,4 +184,48 @@ func (u *ui) historyStatus() {
 	speed := playbackSpeeds[max(h.speed.SelectedIndex(), 0)]
 	pos := time.Duration(float64(time.Since(h.firstFrame)) * float64(speed)).Truncate(time.Second)
 	u.status.SetText(fmt.Sprintf(T("Historia: od %s, +%s (%d×)"), h.target.Format("02.01 15:04"), pos, speed))
+}
+
+// histDebug - timing of the history steps (devtest builds set it)
+var histDebugf func(format string, args ...any)
+
+func histDebug(format string, args ...any) {
+	if histDebugf != nil {
+		histDebugf(format, args...)
+	}
+}
+
+// The SD card files found while browsing the history are kept between runs: going back to
+// a time seen before needs one request to the camera (miss.Recordings).
+
+func recordingsFile() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "xiaomi-cam", "recordings.json")
+}
+
+func loadRecordings() {
+	b, err := os.ReadFile(recordingsFile())
+	if err != nil {
+		return
+	}
+	var all map[string][]miss.Recording
+	if json.Unmarshal(b, &all) == nil {
+		miss.AddRecordings(all)
+	}
+}
+
+func saveRecordings() {
+	path := recordingsFile()
+	if path == "" {
+		return
+	}
+	b, err := json.Marshal(miss.Recordings())
+	if err != nil || len(b) < 3 {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0o700)
+	_ = os.WriteFile(path, b, 0o600)
 }

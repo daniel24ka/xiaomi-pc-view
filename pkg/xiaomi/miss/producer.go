@@ -15,14 +15,18 @@ import (
 
 type Producer struct {
 	core.Connection
-	client *Client
+	client  *Client
+	pending []*Packet // read while probing, sent first
 }
 
 func Dial(rawURL string) (core.Producer, error) {
+	t0 := time.Now()
 	client, err := NewClient(rawURL)
 	if err != nil {
+		debugf("dial: %v (%v)", err, time.Since(t0))
 		return nil, err
 	}
+	debugf("dial: connected in %v", time.Since(t0))
 
 	u, _ := url.Parse(rawURL)
 	query := u.Query()
@@ -33,12 +37,15 @@ func Dial(rawURL string) (core.Producer, error) {
 	} else {
 		err = client.StartMedia(query.Get("channel"), query.Get("subtype"), query.Get("audio"))
 	}
+	debugf("start: %v after dial (err %v)", time.Since(t0), err)
 	if err != nil {
 		_ = client.Close()
 		return nil, err
 	}
 
-	medias, err := probe(client, query.Get("audio") != "0")
+	tp := time.Now()
+	medias, pending, err := probe(client, query.Get("audio") != "0")
+	debugf("probe: %v (err %v)", time.Since(tp), err)
 	if err != nil {
 		_ = client.Close()
 		return nil, err
@@ -54,11 +61,15 @@ func Dial(rawURL string) (core.Producer, error) {
 			Medias:     medias,
 			Transport:  client,
 		},
-		client: client,
+		client:  client,
+		pending: pending,
 	}, nil
 }
 
-func probe(client *Client, audio bool) ([]*core.Media, error) {
+// probe reads packets until the codecs are known; pending - the packets from the first
+// video key frame on, sent first when the producer starts (else the picture would wait
+// for the next key frame, seconds later).
+func probe(client *Client, audio bool) (medias []*core.Media, pending []*Packet, err error) {
 	_ = client.SetDeadline(time.Now().Add(15 * time.Second))
 
 	var vcodec, acodec *core.Codec
@@ -71,11 +82,15 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 			} else if acodec != nil {
 				err = fmt.Errorf("no video")
 			}
-			return nil, fmt.Errorf("xiaomi: probe: %w", err)
+			return nil, nil, fmt.Errorf("xiaomi: probe: %w", err)
 		}
 
 		if debugCommands {
 			fmt.Fprintf(os.Stderr, "miss: probe packet codec 0x%x size %d\n", pkt.CodecID, len(pkt.Payload))
+		}
+
+		if vcodec != nil {
+			pending = append(pending, pkt)
 		}
 
 		switch pkt.CodecID {
@@ -84,6 +99,7 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 				buf := annexb.EncodeToAVCC(pkt.Payload)
 				if h264.NALUType(buf) == h264.NALUTypeSPS {
 					vcodec = h264.AVCCToCodec(buf)
+					pending = append(pending, pkt)
 				}
 			}
 		case codecH265:
@@ -91,6 +107,7 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 				buf := annexb.EncodeToAVCC(pkt.Payload)
 				if h265.NALUType(buf) == h265.NALUTypeVPS {
 					vcodec = h265.AVCCToCodec(buf)
+					pending = append(pending, pkt)
 				}
 			}
 		case codecPCMA:
@@ -110,7 +127,7 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 
 	_ = client.SetDeadline(time.Time{})
 
-	medias := []*core.Media{
+	medias = []*core.Media{
 		{
 			Kind:      core.KindVideo,
 			Direction: core.DirectionRecvonly,
@@ -132,19 +149,33 @@ func probe(client *Client, audio bool) ([]*core.Media, error) {
 		})
 	}
 
-	return medias, nil
+	return medias, pending, nil
 }
+
+const pendingDelay = 800 * time.Millisecond
 
 const timestamp40ms = 48000 * 0.040
 
 func (p *Producer) Start() error {
 	var audioTS uint32
 
+	if len(p.pending) > 0 {
+		// the producer starts when a consumer is added (RTSP DESCRIBE), but an RTSP consumer
+		// drops packets until its SETUP: give it a moment, so the key frame read while
+		// probing reaches it (else the picture waits for the next key frame, ~3 s)
+		time.Sleep(pendingDelay)
+	}
+
 	for {
-		_ = p.client.SetDeadline(time.Now().Add(10 * time.Second))
-		pkt, err := p.client.ReadPacket()
-		if err != nil {
-			return err
+		var pkt *Packet
+		if len(p.pending) > 0 { // read while probing
+			pkt, p.pending = p.pending[0], p.pending[1:]
+		} else {
+			_ = p.client.SetDeadline(time.Now().Add(10 * time.Second))
+			var err error
+			if pkt, err = p.client.ReadPacket(); err != nil {
+				return err
+			}
 		}
 
 		p.Recv += len(pkt.Payload)

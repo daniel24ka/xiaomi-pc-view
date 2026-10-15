@@ -37,6 +37,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
 - **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
+  A step takes about 2.5 s: the app remembers where the recorded files are (also between
+  runs), so going to a time usually needs one request to the camera.
 - **Spotlight** with brightness, and **siren** (light bulb button on the picture, together
   with the night mode).
 - **Night mode** (infrared): auto infrared, auto / smart full color (with the spotlight),

@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.20.2`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.21.0`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.20.2 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.21.0 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -65,7 +65,7 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   `onMinimize` hides to tray only if still minimized after 0.7 s, and `notMinimized()` guards
   2 s (`remapping`). Hooks `XC_VIEWTEST` (video only on/off, minimize) and `XC_MOVETEST`
   (uinput drag of the move handle; the injected drag doesn't start a WM move here)
-- Look (v1.20.2): `apptheme.go` palette/sizes/fonts/icons in one place (Geist in `fonts/`,
+- Look (v1.21.0): `apptheme.go` palette/sizes/fonts/icons in one place (Geist in `fonts/`,
   Lucide in `icons/` made by `tools/icons.sh`: strokes → fills, Fyne recolors only fills;
   add an icon: run the script with its Lucide name, map it in `themeIcons` or `lucide(name)`).
   `overlay.go` controls on the picture (pills, hide after `controlsIdle`, not under the mouse;
@@ -89,6 +89,16 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 - Remote video: CS2 servers 34.34.47.37 / 34.90.51.72 / 34.147.123.47:32100 (EU), the camera
   never answers LAN search. One camera session at a time.
+- SD playback (0x10D/0x10E): the answer is `{"id","status":"filefound|filenotfound","starttime",
+  "duration"}`; files are ~60 s (60–62, sometimes shorter), one after another; the camera
+  answers requests one after another (~0.2–0.3 s each, remote). `miss.StartPlayback` tries
+  the starts predicted from known files first (cache `miss.Recordings`, saved by the app to
+  `~/.cache/xiaomi-cam/recordings.json`), then the 70 s window in batches of 4. The producer
+  keeps the packets read while probing (from the key frame) and sends them 800 ms after start
+  (an RTSP consumer drops packets before its SETUP): the picture ~3 s sooner (live and SD).
+  ffmpeg `-analyzeduration 0.5 s`, `-timeout 30 s`. `XC_HISTTIME=1` times the history
+  steps (`miss.Debugf`, `histDebugf`). Idea not done: a temp cache of watched minutes (the
+  user asked; one camera session at a time means no prefetch).
 - MISS: motor 0x112 `{"operation":1-4}` starts continuous move (repeat every 200 ms while
   held), stop `{"operation":-1001}`; zoom 530 `{"value":zoom*10}` (1–9×); playback 0x10D needs
   the exact ~61 s file start (search second by second, offset 0).

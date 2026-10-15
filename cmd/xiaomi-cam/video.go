@@ -139,7 +139,10 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		"-fflags", "nobuffer", "-flags", "low_delay",
 		"-threads", "2", // decoder threads: default is one per CPU core, each with own frame buffers
 		"-filter_threads", "1",
-		"-rtsp_transport", "tcp", "-timeout", "15000000", "-i", url,
+		// a short stream analysis: the picture ~1-2 s sooner (the codecs are in the RTSP SDP);
+		// 30 s timeout: finding an SD card recording can take a while
+		"-analyzeduration", "500000", "-probesize", "500000",
+		"-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url,
 		// the picture is fitted in w x h (IP cameras: the size may not be known yet)
 		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h),
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
@@ -154,6 +157,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 	}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
+	started := time.Now()
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf(T("ffmpeg: %w (zainstaluj: sudo apt install ffmpeg)"), err)
 	}
@@ -165,9 +169,14 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		frames[i] = image.NewRGBA(image.Rect(0, 0, w, h))
 	}
 	r := stdout // frames are read whole with io.ReadFull, no extra buffer
+	first := true
 	for i := 0; ; i = (i + 1) % n {
 		if _, err = io.ReadFull(r, frames[i].Pix); err != nil {
 			break
+		}
+		if first {
+			first = false
+			histDebug("ffmpeg: first frame %v after start", time.Since(started))
 		}
 		p.frame(pb, frames[i])
 	}
