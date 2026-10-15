@@ -305,6 +305,10 @@ func apiAuth(w http.ResponseWriter, r *http.Request) {
 	case username != "" || password != "":
 		auth = xiaomi.NewCloud(AppXiaomiHome)
 		err = auth.Login(username, password)
+	case (captcha != "" || verify != "") && auth == nil:
+		// the login was started by another process (the app was restarted meanwhile)
+		http.Error(w, "the login expired, sign in again", http.StatusBadRequest)
+		return
 	case captcha != "":
 		err = auth.LoginWithCaptcha(captcha)
 	case verify != "":

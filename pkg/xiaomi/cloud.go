@@ -150,7 +150,7 @@ func (c *Cloud) LoginWithVerify(ticket string) error {
 	req := Request{
 		Method:     "POST",
 		URL:        "https://account.xiaomi.com/identity/auth/verify" + c.verifyName(),
-		RawParams:  "_flag" + c.auth["flag"] + "&ticket=" + ticket + "&trust=false&_json=true",
+		RawParams:  "_flag=" + c.auth["flag"] + "&ticket=" + ticket + "&trust=false&_json=true",
 		RawCookies: "identity_session=" + c.auth["identity_session"],
 	}.Encode()
 
