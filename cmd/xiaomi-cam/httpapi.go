@@ -49,7 +49,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 					name = names[0]
 				}
 			}
-			if cameraSource(name) == "" {
+			if !cameraExists(name) {
 				http.Error(w, fmt.Sprintf("no camera %q", name), http.StatusNotFound)
 				return
 			}
@@ -75,7 +75,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		}
 		cams := []camera{}
 		for _, n := range cameraNames() {
-			cams = append(cams, camera{n, sourceParam(cameraSource(n), "model")})
+			cams = append(cams, camera{n, cameraInfo(n)})
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(cams)
@@ -87,6 +87,9 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	})
 
 	handle("state", "GET", func(r *http.Request, name string) (any, error) {
+		if c := ipCam(name); c != nil {
+			return map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}, nil
+		}
 		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 		if err != nil {
 			return nil, err
@@ -202,7 +205,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		var cams []string // nil - cameras from the settings
 		if c := r.URL.Query().Get("cameras"); c != "" {
 			for _, n := range strings.Split(c, ",") {
-				if n = strings.TrimSpace(n); cameraSource(n) != "" {
+				if n = strings.TrimSpace(n); cameraExists(n) {
 					cams = append(cams, n)
 				} else if n != "" {
 					return nil, fmt.Errorf("no camera %q", n)

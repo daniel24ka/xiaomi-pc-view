@@ -30,8 +30,8 @@ func (u *ui) buildPoints() fyne.CanvasObject {
 // loadPoints reads the points of the selected camera (in the background) and updates the buttons.
 func (u *ui) loadPoints() {
 	name := u.camera.Selected
-	if name == "" {
-		return
+	if cameraSource(name) == "" {
+		return // no camera, or not a Xiaomi camera
 	}
 	go func() {
 		list, err := getPresets(name)

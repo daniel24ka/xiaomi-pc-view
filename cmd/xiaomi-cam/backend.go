@@ -16,8 +16,12 @@ import (
 
 	"github.com/AlexxIT/go2rtc/internal/api"
 	"github.com/AlexxIT/go2rtc/internal/app"
+	"github.com/AlexxIT/go2rtc/internal/dvrip"
+	gohttp "github.com/AlexxIT/go2rtc/internal/http"
+	"github.com/AlexxIT/go2rtc/internal/onvif"
 	"github.com/AlexxIT/go2rtc/internal/rtsp"
 	"github.com/AlexxIT/go2rtc/internal/streams"
+	"github.com/AlexxIT/go2rtc/internal/tapo"
 	"github.com/AlexxIT/go2rtc/internal/xiaomi"
 )
 
@@ -46,7 +50,8 @@ func showRunningInstance() bool {
 	return res.StatusCode == http.StatusOK
 }
 
-// startBackend runs embedded go2rtc (API, RTSP server and Xiaomi source) on localhost only.
+// startBackend runs embedded go2rtc on localhost only: API, RTSP server, Xiaomi source and
+// the sources of IP cameras (RTSP client, HTTP/MJPEG, ONVIF, Tapo, DVRIP).
 func startBackend() error {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -70,6 +75,11 @@ func startBackend() error {
 	streams.Init()
 	rtsp.Init()
 	xiaomi.Init()
+	gohttp.Init()
+	onvif.Init()
+	tapo.Init()
+	dvrip.Init()
+	loadIPCameras()
 	return nil
 }
 
@@ -110,10 +120,15 @@ func apiCall(method, path string, query url.Values, form url.Values) ([]byte, in
 	return b, res.StatusCode, err
 }
 
-// --- cameras (streams with xiaomi:// source)
+// --- cameras: streams with xiaomi:// source, and IP cameras (ipcam.go)
 
 func cameraNames() []string {
-	names := streams.GetAllNames()
+	var names []string
+	for _, n := range streams.GetAllNames() {
+		if !strings.HasPrefix(n, hiddenPrefix) {
+			names = append(names, n)
+		}
+	}
 	sort.Strings(names)
 	return names
 }
@@ -198,6 +213,11 @@ func addCamera(name, src string) error {
 
 func removeCamera(name string) error {
 	streams.Delete(name)
+	if ipCam(name) != nil {
+		if err := saveIPCamera(name, nil); err != nil {
+			return err
+		}
+	}
 	return app.PatchConfig([]string{"streams", name}, nil)
 }
 
@@ -214,13 +234,22 @@ const (
 	motorDown  = 4
 )
 
+// errNotXiaomi - camera controls of IP cameras are not supported (yet)
+var errNotXiaomi = errors.New("this camera has no such control (only Xiaomi cameras)")
+
 func motor(name string, op int) error {
+	if cameraSource(name) == "" {
+		return errNotXiaomi
+	}
 	return xiaomi.Motor(name, op)
 }
 
 // cameraZoom sets the optical/sensor zoom of the camera (1.0-9.0), like the Mi Home plugin:
 // MISS command 530 {"value": zoom*10}; older firmware uses MIoT property 6.23 instead.
 func cameraZoom(name string, zoom float64) error {
+	if cameraSource(name) == "" {
+		return errNotXiaomi
+	}
 	value := int(zoom*10 + 0.5)
 	if err := xiaomi.Command(name, cmdZoomSet, fmt.Sprintf(`{"value":%d}`, value)); err != nil {
 		return setProp(name, propZoom, value)
@@ -251,6 +280,9 @@ func cameraDid(src string) string {
 
 func getProps(name string, props ...miotProp) ([]miotProp, error) {
 	src := cameraSource(name)
+	if src == "" {
+		return nil, errNotXiaomi
+	}
 	var params []map[string]any
 	for _, p := range props {
 		params = append(params, map[string]any{"did": cameraDid(src), "siid": p.Siid, "piid": p.Piid})
@@ -269,6 +301,9 @@ func getProps(name string, props ...miotProp) ([]miotProp, error) {
 
 func setProp(name string, p miotProp, value any) error {
 	src := cameraSource(name)
+	if src == "" {
+		return errNotXiaomi
+	}
 	b, _ := json.Marshal(map[string]any{"params": []map[string]any{
 		{"did": cameraDid(src), "siid": p.Siid, "piid": p.Piid, "value": value},
 	}})

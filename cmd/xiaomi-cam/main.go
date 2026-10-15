@@ -42,6 +42,48 @@ var qualities = []struct {
 	{"SD", "sd", 1280, 720},
 }
 
+// quality - a picture quality of a camera: name in the list and picture size
+type quality struct {
+	name string
+	w, h int
+}
+
+// cameraQualities returns the qualities of the camera and the index of the selected one:
+// Xiaomi 2.5K/720p/SD, IP camera main/sub stream.
+func cameraQualities(name string) ([]quality, int) {
+	if c := ipCam(name); c != nil {
+		size := func(w, h int) (int, int) {
+			if w <= 0 || h <= 0 {
+				return 1920, 1080 // not known (yet): the picture is fitted in
+			}
+			return w, h
+		}
+		w, h := size(c.W, c.H)
+		qs := []quality{{fmt.Sprintf(T("Główny (%dp)"), h), w, h}}
+		if c.Sub != "" {
+			w, h = size(c.SubW, c.SubH)
+			qs = append(qs, quality{fmt.Sprintf(T("Podgląd (%dp)"), h), w, h})
+		}
+		return qs, min(max(c.Quality, 0), len(qs)-1)
+	}
+	src := cameraSource(name)
+	qi := 1
+	var qs []quality
+	for i, q := range qualities {
+		qs = append(qs, quality{q.name, q.w, q.h})
+		if q.subtype == sourceParam(src, "subtype") {
+			qi = i
+		}
+	}
+	return qs, qi
+}
+
+// currentQuality returns the selected quality of the camera.
+func currentQuality(name string) quality {
+	qs, i := cameraQualities(name)
+	return qs[i]
+}
+
 var connections = []struct{ name, p2p string }{
 	{"Zdalne", "server"},
 	{"Lokalne (LAN)", ""},
@@ -73,6 +115,7 @@ type ui struct {
 	camera     *ptrSelect
 	quality    *ptrSelect
 	connection *ptrSelect
+	connLabel  *widget.Label
 	light      *ptrCheck
 	brightness *ptrSlider
 	siren      *ptrCheck
@@ -200,7 +243,7 @@ func main() {
 		u.setGrid(true)
 	}
 	if len(cameraNames()) == 0 && !startHidden {
-		showAddCamera(u.win, u.selectCamera)
+		showChooseCamera(u.win, u.selectCamera)
 	}
 	if devHook != nil {
 		go devHook(u) // only in builds with -tags devtest
@@ -271,22 +314,24 @@ func (u *ui) build() {
 			u.restart()
 			go u.loadCameraState()
 			u.updateCaps()
-			u.updateCaps()
 			u.loadPoints()
 		}
 	})
-	var qNames, cNames []string
-	for _, q := range qualities {
-		qNames = append(qNames, q.name)
-	}
+	var cNames []string
 	for _, c := range connections {
 		cNames = append(cNames, T(c.name))
 	}
-	u.quality = newSelect(qNames, func(string) {
-		if !u.syncing {
-			u.changeSource(map[string]string{"subtype": qualities[u.quality.SelectedIndex()].subtype})
+	u.quality = newSelect(nil, func(string) {
+		if u.syncing {
+			return
+		}
+		if i := u.quality.SelectedIndex(); ipCam(u.camera.Selected) != nil {
+			u.changeIPQuality(i)
+		} else {
+			u.changeSource(map[string]string{"subtype": qualities[i].subtype})
 		}
 	})
+	u.connLabel = widget.NewLabel(T("Połączenie:"))
 	u.connection = newSelect(cNames, func(string) {
 		if !u.syncing {
 			u.changeSource(map[string]string{"p2p": connections[u.connection.SelectedIndex()].p2p})
@@ -299,7 +344,7 @@ func (u *ui) build() {
 	u.snapButton = newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)"))
 	// tooltips of the named controls
 	u.camera.tip = T("Wybór kamery")
-	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD")
+	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD (kamera IP: strumień główny lub podgląd)")
 	u.connection.tip = T("Połączenie: zdalne przez serwery Xiaomi (z każdej sieci) lub lokalne w sieci LAN")
 	u.gridButton.tip = T("Siatka wszystkich kamer / jedna kamera")
 	u.recButton.tip = T("Nagrywanie do MP4 – start/stop (tryb i kamery w Ustawieniach)")
@@ -307,7 +352,7 @@ func (u *ui) build() {
 	top := container.NewHBox(
 		widget.NewLabel(T("Kamera:")), u.camera,
 		widget.NewLabel(T("Jakość:")), u.quality,
-		widget.NewLabel(T("Połączenie:")), u.connection,
+		u.connLabel, u.connection,
 		layout.NewSpacer(),
 		// view: grid, history, snapshot, video only, full screen
 		u.gridButton,
@@ -595,7 +640,7 @@ func (u *ui) restart() {
 		u.video.clear(T("Brak kamery – kliknij „Dodaj”"), false)
 		return
 	}
-	q := qualities[u.syncControls(name)]
+	q := u.syncControls(name)
 	u.gotFrame = false
 	u.status.SetText(T("Łączenie z kamerą…"))
 	u.video.clear(T("Łączenie z kamerą…"), true)
@@ -605,19 +650,27 @@ func (u *ui) restart() {
 }
 
 // syncControls sets the quality and connection lists from the camera source;
-// returns the quality index.
-func (u *ui) syncControls(name string) int {
+// returns the selected quality.
+func (u *ui) syncControls(name string) quality {
 	u.current.Store(name)
 	src := cameraSource(name)
 	u.syncing = true
 	defer func() { u.syncing = false }()
-	qi := 1
-	for i, q := range qualities {
-		if q.subtype == sourceParam(src, "subtype") {
-			qi = i
-		}
+	qs, qi := cameraQualities(name)
+	var names []string
+	for _, q := range qs {
+		names = append(names, q.name)
 	}
+	u.quality.Options = names
 	u.quality.SetSelectedIndex(qi)
+	// connection: only Xiaomi cameras (servers / LAN)
+	if src == "" {
+		u.connLabel.Hide()
+		u.connection.Hide()
+		return qs[qi]
+	}
+	u.connLabel.Show()
+	u.connection.Show()
 	ci := 1
 	for i, c := range connections {
 		if c.p2p == sourceParam(src, "p2p") {
@@ -625,7 +678,7 @@ func (u *ui) syncControls(name string) int {
 		}
 	}
 	u.connection.SetSelectedIndex(ci)
-	return qi
+	return qs[qi]
 }
 
 // refresh restarts the decoder with the current settings (sound, decode size) without
@@ -643,7 +696,7 @@ func (u *ui) refresh() {
 		u.restart()
 		return
 	}
-	q := qualities[max(u.quality.SelectedIndex(), 0)]
+	q := currentQuality(name)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
 	go u.player.switchTo(rtspURL(name), w, h, u.sound.Checked)
@@ -660,6 +713,19 @@ func (u *ui) changeSource(params map[string]string) {
 	}
 	time.Sleep(300 * time.Millisecond)
 	if err := setSourceParams(name, params); err != nil {
+		dialog.ShowError(err, u.win)
+	}
+	u.restart()
+}
+
+// changeIPQuality switches an IP camera to its main (0) or sub (1) stream.
+func (u *ui) changeIPQuality(q int) {
+	name := u.camera.Selected
+	u.player.stop()
+	if t := u.tileOf(name); t != nil {
+		t.player.stop()
+	}
+	if err := setIPQuality(name, q); err != nil {
 		dialog.ShowError(err, u.win)
 	}
 	u.restart()
@@ -1029,7 +1095,7 @@ func (u *ui) checkDecodeSize() {
 	if !u.visible || u.hist.on || u.decodeW == 0 || u.camera.Selected == "" {
 		return
 	}
-	q := qualities[max(u.quality.SelectedIndex(), 0)]
+	q := currentQuality(u.camera.Selected)
 	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW {
 		u.decodeStable++
 		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished

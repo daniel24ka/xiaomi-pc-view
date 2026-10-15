@@ -89,6 +89,25 @@ func fileName(camera, ext string) string {
 }
 
 // startRecording starts recording the camera; limit > 0 stops it automatically.
+// recordVideoArgs - the video is saved as it comes (H.265 of Xiaomi cameras, H.264 / H.265
+// of IP cameras); other codecs (MJPEG) are encoded to H.264.
+func recordVideoArgs(camera string) []string {
+	codec := "hevc"
+	if c := ipCam(camera); c != nil {
+		codec = c.Codec
+		if c.Quality == 1 && c.Sub != "" {
+			codec = c.SubCodec
+		}
+	}
+	switch codec {
+	case "hevc":
+		return []string{"-c:v", "copy", "-tag:v", "hvc1"} // hvc1 tag for players (QuickTime, browsers)
+	case "h264", "": // "": not known, IP cameras send H.264 mostly
+		return []string{"-c:v", "copy"}
+	}
+	return []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p"}
+}
+
 func startRecording(camera string, limit time.Duration) (*recording, error) {
 	recMu.Lock()
 	defer recMu.Unlock()
@@ -102,9 +121,9 @@ func startRecording(camera string, limit time.Duration) (*recording, error) {
 	path := filepath.Join(dir, fileName(camera, "mp4"))
 	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-i", rtspURL(camera),
-		"-map", "0:v:0", "-map", "0:a:0?",
-		"-c:v", "copy", "-tag:v", "hvc1", // H.265 as is; hvc1 tag for players (QuickTime, browsers)
-		"-c:a", "aac", "-b:a", "64k",
+		"-map", "0:v:0", "-map", "0:a:0?")
+	cmd.Args = append(cmd.Args, recordVideoArgs(camera)...)
+	cmd.Args = append(cmd.Args, "-c:a", "aac", "-b:a", "64k",
 		"-movflags", "+frag_keyframe+empty_moov+default_base_moof",
 		"-y", path)
 	stdin, err := cmd.StdinPipe()

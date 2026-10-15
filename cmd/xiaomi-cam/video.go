@@ -140,7 +140,8 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		"-threads", "2", // decoder threads: default is one per CPU core, each with own frame buffers
 		"-filter_threads", "1",
 		"-rtsp_transport", "tcp", "-timeout", "15000000", "-i", url,
-		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d", w, h),
+		// the picture is fitted in w x h (IP cameras: the size may not be known yet)
+		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h),
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
 	}
 	if audio {

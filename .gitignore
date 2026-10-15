@@ -19,3 +19,4 @@ go2rtc_win*
 # xiaomi-cam
 /xiaomi-cam
 /dist/
+/cmd/xiaomi-cam/xiaomi-cam

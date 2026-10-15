@@ -58,13 +58,7 @@ func newTile(u *ui, name string) *tile {
 
 // start plays the tile's camera; seamless keeps the current session (sound change).
 func (u *ui) startTile(t *tile, seamless bool) {
-	src := cameraSource(t.name)
-	q := qualities[1]
-	for _, qq := range qualities {
-		if qq.subtype == sourceParam(src, "subtype") {
-			q = qq
-		}
-	}
+	q := currentQuality(t.name)
 	// tiles are small: decode to 640 px (1280 px when there is one column)
 	w := 640
 	if len(u.tiles) <= 1 {

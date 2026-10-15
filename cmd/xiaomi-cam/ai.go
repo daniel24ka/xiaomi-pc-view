@@ -389,7 +389,7 @@ func (e *aiEngine) runActions(t *aiTask, cfg aiConfig, answer string, img []byte
 }
 
 func taskCamera(t *aiTask) string {
-	if t.Camera != "" && cameraSource(t.Camera) != "" {
+	if cameraExists(t.Camera) {
 		return t.Camera
 	}
 	if names := cameraNames(); len(names) > 0 {

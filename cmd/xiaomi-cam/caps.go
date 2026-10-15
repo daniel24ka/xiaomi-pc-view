@@ -34,12 +34,12 @@ func cameraCaps(name string) camCaps {
 	}
 	var c camCaps
 	src := cameraSource(name)
+	if src == "" {
+		return c // not a Xiaomi camera: no controls
+	}
 	c.Zoom = zoomModels[sourceParam(src, "model")]
 	props, err := getProps(name, propLight, propSiren, propMotorLocation, propPresets, propSDStatus, propZoom, propNightShot)
 	if err != nil {
-		if src == "" {
-			return c // not a Xiaomi camera: no controls
-		}
 		return allCaps // the cloud didn't answer: don't hide anything, try again next time
 	}
 	for _, p := range props {

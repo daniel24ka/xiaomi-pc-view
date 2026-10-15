@@ -26,7 +26,7 @@ func (u *ui) showCameras() {
 		}
 		for _, name := range names {
 			name := name
-			model := sourceParam(cameraSource(name), "model")
+			model := cameraInfo(name)
 			title := widget.NewLabelWithStyle(name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 			info := widget.NewLabel(model)
 			info.Importance = widget.LowImportance
@@ -43,7 +43,7 @@ func (u *ui) showCameras() {
 
 	add := newButton(T("Dodaj kamerę"), theme.ContentAddIcon(), func() {
 		d.Hide()
-		showAddCamera(u.win, u.selectCamera)
+		showChooseCamera(u.win, u.selectCamera)
 	})
 	add.Importance = widget.HighImportance
 
@@ -73,8 +73,12 @@ func (u *ui) renameCamera(name string, done func()) {
 			if selected {
 				u.player.stop()
 			}
-			src := cameraSource(name)
-			if err := addCamera(newName, src); err != nil {
+			if c := ipCam(name); c != nil {
+				if err := addIPCamera(newName, c); err != nil {
+					dialog.ShowError(err, u.win)
+					return
+				}
+			} else if err := addCamera(newName, streamSource(name)); err != nil {
 				dialog.ShowError(err, u.win)
 				return
 			}

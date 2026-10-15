@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.17.2`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.18.0`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.17.2 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.18.0 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -26,11 +26,15 @@ notes must list the changes since the previous tag (English) and the 3 downloads
 
 Build with `-tags devtest`; `cmd/xiaomi-cam/devtest_*.go` hooks run when env `XC_*` is set
 (e.g. `XC_TEST`, `XC_PTZTEST`, `XC_GRIDTEST`, `XC_AITEST`, `XC_SEAMLESSTEST`, `XC_BUSYTEST`,
-`XC_NIGHTTEST`, `XC_WALLTEST` + `XC_WALLPOS`/`XC_WALLSECS`/`XC_LOWERMS`). XTest mouse input doesn't reach the window (GNOME Wayland,
+`XC_NIGHTTEST`, `XC_WALLTEST` + `XC_WALLPOS`/`XC_WALLSECS`/`XC_LOWERMS`, `XC_IPTEST` + `XC_SIMHOST`, `XC_IPUITEST`). XTest mouse input doesn't reach the window (GNOME Wayland,
 XWayland), so click behaviour is tested with the Fyne test driver (`tooltip_test.go`). Real screenshots
 (whole desktop, no prompt): xdg-desktop-portal Screenshot with interactive=false via python gi. Real mouse clicks on
 the desktop: a virtual absolute pointer via /dev/uinput (python evdev, the user has an ACL) –
-only on a monitor area without the user's windows. The app is
+only on a monitor area without the user's windows. IP cameras without a real one: `cmd/xc-camsim` (go2rtc with ffmpeg testsrc: RTSP with a
+login, ONVIF, MJPEG); run it as `xc-camsim -rtsp :28554 -http 10.0.3.1:21984` (its API runs
+commands: never on the LAN; RTSP needs a login only from non-loopback, so test via
+10.0.3.1) and the test with `XC_SIMHOST=10.0.3.1 XC_IPTEST=<dir>`; back up and restore
+`~/.config/xiaomi-cam-viewer/go2rtc.yaml` around it. The app is
 single-instance (ports 127.0.0.1:11984 API, :18554 RTSP), so stop the user's running copy
 first with an **anchored** pattern (unanchored pkill kills your own shell):
 `pkill -f "^/home/genosajd/(.local/bin|xiaomi-pc-view)/xiaomi-cam$"`. Back up and restore
@@ -51,6 +55,12 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   every window map and every click on the desktop, and the icons blinked), `busy.go` spinners on buttons /
   status / video, `nightmode.go`. Tooltips are a canvas overlay that forwards clicks to the
   owner (a widget.PopUp swallowed the first click); never use PopUp for passive overlays
+- `ipcam.go`/`ipcamui.go` IP cameras (not Xiaomi): any go2rtc source (onvif://, rtsp://,
+  http://, tapo://, dvrip://); the stream has the active source (main/sub), the app keeps
+  main, sub, sizes and codecs under `xiaomi_cam: cameras:` in go2rtc.yaml (yaml.Patch only
+  takes 2-level paths). `cameraSource()` is Xiaomi only (""), use `cameraExists()` /
+  `streamSource()`; `cameraQualities()` gives the quality list of any camera. Probing: a
+  hidden `__xc_probe*` stream + ffprobe. `getProps`/`setProp`/`motor` return `errNotXiaomi`
 - `grid.go` multi-camera grid, `caps.go` hide unsupported features, `pointsui.go`/`presets.go`
   points 1–3, `history.go` SD playback, `recorder.go` MP4 (selected/each/grid),
   `ai.go`/`aiui.go` AI tasks (Claude SDK, OpenAI, own LM Studio/Ollama server, cron),
@@ -75,6 +85,9 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## Open ideas / not done
 
+- IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
+  spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
+  IP camera to test yet.
 - Real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
   Claude provider (no keys); a second real camera for the grid.
 - History has no recordings list (RDT channel not implemented).

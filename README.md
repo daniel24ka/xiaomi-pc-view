@@ -1,8 +1,9 @@
-# Xiaomi Cam – Xiaomi Mi Home camera viewer for Linux
+# Xiaomi Cam – Xiaomi Mi Home and IP camera viewer for Linux
 
 A desktop app for Ubuntu/Linux to watch and control **Xiaomi Mi Home** cameras, which
 officially work only in the Mi Home phone app. Tested with the **Xiaomi Outdoor Camera
-CW700S** (`isa.camera.700sa`).
+CW700S** (`isa.camera.700sa`). It also shows **IP cameras** of other brands (ONVIF, RTSP,
+HTTP/MJPEG, TP-Link Tapo, DVRIP/XMeye), together with Xiaomi cameras.
 
 One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It also has an
 **MCP server** for AI assistants and a **local HTTP API** for scripts.
@@ -10,6 +11,19 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 ## Features
 
 - Live video up to **2.5K** (2560×1440), quality 2.5K / 720p / SD.
+- **IP cameras** (Cameras → Add camera → IP camera):
+  - **ONVIF** – the camera gives its stream addresses itself; **Search network** finds ONVIF
+    cameras in the local network (WS-Discovery).
+  - **RTSP** – address, login, password and the stream paths; ready paths for Hikvision /
+    Annke / Ezviz, Dahua / Amcrest / Imou, Reolink, Tapo / VIGI, Uniview, Axis, Foscam, or a
+    whole `rtsp://…` address.
+  - **HTTP** (MJPEG or H.264 over HTTP), **TP-Link Tapo** (own protocol, camera account
+    password) and **DVRIP** (XMeye / Sofia cameras and recorders).
+  - **Test** checks the connection and the picture size before adding. Quality: **main** or
+    **sub stream** (when the camera has two). Picture, sound, snapshots, MP4 recording
+    (H.264/H.265 copied, MJPEG encoded to H.264), the grid, AI tasks, notifications, HTTP API
+    and MCP work with IP cameras too. Pan/tilt, zoom, spotlight, siren, night mode and SD
+    history are Xiaomi only for now (hidden for IP cameras).
 - **Remote connection from any network**, like Mi Home, without port forwarding or VPN.
   There is also a local (LAN) mode.
 - **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.
@@ -114,6 +128,11 @@ make release        # .deb, plain binary and .tar.gz in dist/
    Xiaomi servers. Only a token is stored, in `~/.config/xiaomi-cam-viewer/go2rtc.yaml`
    (mode 600).
 3. Choose the region of your account (e.g. **Europe**) and the cameras.
+
+For an IP camera choose **IP camera** in the first step, then the type (ONVIF, RTSP, …),
+the address, login and password. ONVIF usually has to be enabled in the camera settings
+(often with its own account). The camera settings, with the password, are stored in the same
+config file.
 
 ## Keyboard and mouse
 
@@ -303,6 +322,8 @@ chosen time.
 - Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
   siren and zoom follow the `isa.camera.700sa` specification.
 - History has no list of recordings (timeline marks) yet.
+- IP cameras: only the picture and sound for now – no pan/tilt (ONVIF PTZ), night mode,
+  spotlight, siren or SD card history.
 
 ## License and credits
 
