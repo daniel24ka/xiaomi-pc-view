@@ -105,6 +105,18 @@ https://claude.ai/artifact/B1ccjwrZwjCkYLtYvDsnEK is released.)
 
 ## Open ideas / not done
 
+- **Android app (planned, on hold – the user said "wait", 2026-10-15)** for an NVIDIA Shield (TV)
+  and an Android car head unit (not Android Auto: video apps are not allowed there). Plan
+  agreed in principle: same repo, `android/` (Kotlin, Jetpack Compose, Media3/ExoPlayer with
+  hardware H.265/H.264 decoding of the local RTSP stream, D-pad/remote navigation, Leanback
+  launcher entry, look of variant A) + a Go `mobile/` package built with gomobile into an .aar
+  (embedded go2rtc with the Xiaomi CS2/MISS changes, login, PTZ, zoom, points, MIoT, IP
+  cameras). First version: login or importing cameras from the PC (file/QR), live view,
+  quality, grid, PTZ, zoom, points, light/siren/night mode; no tray, wallpaper, frameless
+  window, MCP, AI tasks or recording. Needs (not installed yet, ask before): JDK 17, Android
+  SDK + NDK, gomobile, Android TV emulator image (~8–10 GB in ~/Android, no sudo). No Shield
+  access for tests yet (would need network ADB debugging and its IP).
+
 - IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
   spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
   IP camera to test yet.
