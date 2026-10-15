@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/color"
 	"io"
-	"os/exec"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -150,7 +149,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 	if audio {
 		args = append(args, "-map", "0:a:0?", "-f", "pulse", "-name", "Xiaomi Cam", "default")
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd := toolCommand(ctx, "ffmpeg", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -159,7 +158,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 	cmd.Stderr = &stderr
 	started := time.Now()
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf(T("ffmpeg: %w (zainstaluj: sudo apt install ffmpeg)"), err)
+		return fmt.Errorf(T(ffmpegMissing), err)
 	}
 
 	// ring of buffers, so the frame being drawn is not overwritten

@@ -27,3 +27,4 @@ go2rtc_win*
 /android/app/libs/
 /android/local.properties
 /android/.kotlin/
+/cmd/xiaomi-cam/rsrc_windows_*.syso

@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 /*
@@ -219,3 +221,10 @@ func wmKeepLowered(w fyne.Window, interval time.Duration, stop chan struct{}) {
 		}
 	}()
 }
+
+// wallpaperSupported - the wallpaper mode works with X11 (also XWayland), not with Wayland.
+func wallpaperSupported(w fyne.Window) bool {
+	return glfwWindow(w) != nil && glfw.GetPlatform() == glfw.PlatformX11
+}
+
+const wallpaperUnsupported = "Tryb tapety działa tylko w X11 / XWayland."

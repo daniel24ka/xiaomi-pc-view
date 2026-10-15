@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 PREFIX  ?= $(HOME)/.local
 BIN     := xiaomi-cam
 
-.PHONY: build install uninstall clean release deb aar apk
+.PHONY: build install uninstall clean release deb aar apk windows
 
 build:
 	go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $(BIN) ./cmd/xiaomi-cam
@@ -60,3 +60,25 @@ apk: aar
 	mkdir -p dist
 	for f in android/app/build/outputs/apk/release/*.apk; do \
 		cp $$f dist/xiaomi-cam-$(VERSION:v%=%)-$$(basename $$f .apk | sed 's/^app-//; s/-release//').apk; done
+
+# --- Windows (cross-built here): xiaomi-cam.exe with its icon and manifest (go-winres), ffmpeg
+# of BtbN (GPL, shared) next to it, the installer by Inno Setup under Wine.
+# Toolchain in ~/Windows: llvm-mingw, ffmpeg, a Wine prefix with Inno Setup.
+WIN_CC     = $(HOME)/Windows/llvm-mingw-20240619-ucrt-ubuntu-20.04-x86_64/bin
+WIN_FFMPEG = $(HOME)/Windows/ffmpeg/ffmpeg-n8.1-latest-win64-gpl-shared-8.1
+WIN_ISCC   = WINEPREFIX=$(HOME)/Windows/wine WINEDEBUG=-all wine $(HOME)/Windows/wine/drive_c/InnoSetup/ISCC.exe
+WIN_VER    = $(shell echo $(VERSION:v%=%) | sed 's/-.*//')
+
+windows:
+	rm -rf dist/windows && mkdir -p dist/windows/ffmpeg
+	cd cmd/xiaomi-cam && go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --manifest gui \
+		--icon ../../packaging/windows/icon256.png --product-name "Xiaomi Cam" --file-description "Xiaomi Cam" \
+		--product-version $(WIN_VER).0 --file-version $(WIN_VER).0 --original-filename xiaomi-cam.exe --out rsrc
+	PATH=$(WIN_CC):$(PATH) GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-clang \
+		CXX=x86_64-w64-mingw32-clang++ go build -trimpath \
+		-ldflags "-H windowsgui -s -w -X main.version=$(VERSION)" -o dist/windows/xiaomi-cam.exe ./cmd/xiaomi-cam; \
+		s=$$?; rm -f cmd/xiaomi-cam/rsrc_windows_amd64.syso; exit $$s
+	cp $(WIN_FFMPEG)/bin/ffmpeg.exe $(WIN_FFMPEG)/bin/ffprobe.exe $(WIN_FFMPEG)/bin/*.dll dist/windows/ffmpeg/
+	cp $(WIN_FFMPEG)/LICENSE.txt dist/windows/ffmpeg/LICENSE-ffmpeg.txt
+	cd packaging/windows && $(WIN_ISCC) /Q /DVersion=$(WIN_VER) /O"..\..\dist" xiaomi-cam.iss
+	ls -la dist/xiaomi-cam-$(WIN_VER)-windows-setup.exe

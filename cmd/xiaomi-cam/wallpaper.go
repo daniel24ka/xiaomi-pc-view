@@ -26,8 +26,8 @@ func (u *ui) setWallpaper(on bool) {
 		return
 	}
 	win := glfwWindow(u.win)
-	if win == nil || glfw.GetPlatform() != glfw.PlatformX11 {
-		dialog.ShowInformation(T("Tryb tapety"), T("Tryb tapety działa tylko w X11 / XWayland."), u.win)
+	if !wallpaperSupported(u.win) {
+		dialog.ShowInformation(T("Tryb tapety"), T(wallpaperUnsupported), u.win)
 		return
 	}
 	if on && !u.visible {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -282,7 +281,7 @@ func probeSource(src string) (*probeResult, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ffprobe", "-hide_banner", "-loglevel", "error",
+	cmd := toolCommand(ctx, "ffprobe", "-hide_banner", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-timeout", "15000000",
 		"-show_entries", "stream=codec_type,codec_name,width,height", "-of", "json", rtspURL(name))
 	var out, stderr bytes.Buffer

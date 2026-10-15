@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -317,7 +316,7 @@ func snapshotJPEG(name string, width int) ([]byte, error) {
 	if width > 0 {
 		vf = fmt.Sprintf("scale=%d:-2", width)
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+	cmd := toolCommand(ctx, "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
 		"-rtsp_transport", "tcp", "-i", rtspURL(name),
 		"-map", "0:v:0", "-frames:v", "1", "-vf", vf, "-q:v", "3", "-f", "image2", "-c:v", "mjpeg", "pipe:1")
 	var out, stderr bytes.Buffer
@@ -362,7 +361,7 @@ func ensureSession(name string) error {
 	}
 	if k == nil {
 		ctx, cancel := context.WithCancel(context.Background())
-		cmd := exec.CommandContext(ctx, "ffmpeg", "-hide_banner", "-loglevel", "quiet", "-nostdin",
+		cmd := toolCommand(ctx, "ffmpeg", "-hide_banner", "-loglevel", "quiet", "-nostdin",
 			"-rtsp_transport", "tcp", "-i", rtspURL(name), "-map", "0:v:0", "-c", "copy", "-f", "null", "-")
 		if err := cmd.Start(); err != nil {
 			cancel()

@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -225,7 +224,7 @@ func ensureAppRunning() error {
 		return err
 	}
 	cmd := exec.Command(exe, "--tray")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // keep running after the MCP client exits
+	detach(cmd) // keep running after the MCP client exits
 	if err = cmd.Start(); err != nil {
 		return err
 	}

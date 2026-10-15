@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -46,8 +47,17 @@ const (
 	prefSnapshotsDir  = "dir.snapshots"
 )
 
-// xdgDir returns a user folder (VIDEOS, PICTURES) in any language, or $HOME.
+// xdgDir returns a user folder (VIDEOS, PICTURES) in any language, or $HOME. Windows:
+// %USERPROFILE%\Videos, \Pictures (the names on disk are English in every language).
 func xdgDir(kind string) string {
+	if runtime.GOOS == "windows" {
+		home, _ := os.UserHomeDir()
+		name := map[string]string{"VIDEOS": "Videos", "PICTURES": "Pictures"}[kind]
+		if d := filepath.Join(home, name); name != "" && fileExists(d) {
+			return d
+		}
+		return home
+	}
 	if out, err := exec.Command("xdg-user-dir", kind).Output(); err == nil {
 		if d := strings.TrimSpace(string(out)); d != "" {
 			if _, err = os.Stat(d); err == nil {
@@ -119,7 +129,7 @@ func startRecording(camera string, limit time.Duration) (*recording, error) {
 		return nil, err
 	}
 	path := filepath.Join(dir, fileName(camera, "mp4"))
-	cmd := exec.Command("ffmpeg", "-hide_banner", "-loglevel", "error",
+	cmd := toolCommand(nil, "ffmpeg", "-hide_banner", "-loglevel", "error",
 		"-rtsp_transport", "tcp", "-i", rtspURL(camera),
 		"-map", "0:v:0", "-map", "0:a:0?")
 	cmd.Args = append(cmd.Args, recordVideoArgs(camera)...)
@@ -350,7 +360,7 @@ func startGridRecording(cameras []string, selected string, limit time.Duration) 
 		"-movflags", "+frag_keyframe+empty_moov+default_base_moof",
 		"-y", path)
 
-	cmd := exec.Command("ffmpeg", args...)
+	cmd := toolCommand(nil, "ffmpeg", args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
