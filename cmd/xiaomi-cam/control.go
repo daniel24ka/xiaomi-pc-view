@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/go-gl/glfw/v3.4/glfw"
 )
@@ -229,7 +228,7 @@ func (h *moveHandle) Dragged(e *fyne.DragEvent) {
 
 func (*moveHandle) DragEnd() {}
 
-var moveIcon = theme.NewThemedResource(fyne.NewStaticResource("move.svg", []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2l3.5 3.5h-2.5v5.5h5.5v-2.5l3.5 3.5-3.5 3.5v-2.5h-5.5v5.5h2.5l-3.5 3.5-3.5-3.5h2.5v-5.5h-5.5v2.5l-3.5-3.5 3.5-3.5v2.5h5.5v-5.5h-2.5z"/></svg>`)))
+var moveIcon = lucide("move")
 
 // Clickable widgets with the pointer (hand) cursor on hover; Fyne uses the default arrow.
 

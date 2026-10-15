@@ -165,6 +165,7 @@ func (u *ui) updateRecordButton() {
 	if len(active) == 0 {
 		if u.recButton.Importance != widget.MediumImportance {
 			u.recButton.setIdleIcon(recordIcon)
+			u.recButton.SetText(T("Nagraj"))
 			u.recButton.Importance = widget.MediumImportance
 			u.recButton.Refresh()
 		}
@@ -172,6 +173,7 @@ func (u *ui) updateRecordButton() {
 	}
 	if u.recButton.Importance != widget.DangerImportance {
 		u.recButton.setIdleIcon(theme.MediaStopIcon())
+		u.recButton.SetText(T("Stop"))
 		u.recButton.Importance = widget.DangerImportance
 		u.recButton.Refresh()
 	}

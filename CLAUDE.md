@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.19.1`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.20.0`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.19.1 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.20.0 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -37,7 +37,7 @@ commands: never on the LAN; RTSP needs a login only from non-loopback, so test v
 `~/.config/xiaomi-cam-viewer/go2rtc.yaml` around it. The app is
 single-instance (ports 127.0.0.1:11984 API, :18554 RTSP), so stop the user's running copy
 first with an **anchored** pattern (unanchored pkill kills your own shell):
-`pkill -f "^/home/genosajd/(.local/bin|xiaomi-pc-view)/xiaomi-cam$"`. Back up and restore
+`pkill -f "^/home/genosajd/(.local/bin|xiaomi-pc-view)/xiaomi-cam( --tray)?$"`. Back up and restore
 `~/.config/fyne/pl.lawinski.xiaomi-cam/preferences.json` around tests (window geometry,
 language, layout). Relaunch the user's app afterwards. Clean up test files in ~/Videos,
 ~/Pictures and test camera points.
@@ -65,6 +65,14 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   `onMinimize` hides to tray only if still minimized after 0.7 s, and `notMinimized()` guards
   2 s (`remapping`). Hooks `XC_VIEWTEST` (video only on/off, minimize) and `XC_MOVETEST`
   (uinput drag of the move handle; the injected drag doesn't start a WM move here)
+- Look (v1.20.0): `apptheme.go` palette/sizes/fonts/icons in one place (Geist in `fonts/`,
+  Lucide in `icons/` made by `tools/icons.sh`: strokes → fills, Fyne recolors only fills;
+  add an icon: run the script with its Lucide name, map it in `themeIcons` or `lucide(name)`).
+  `overlay.go` controls on the picture (pills, hide after `controlsIdle`, not under the mouse;
+  status chip `statusLabel`/`statusLayout`, `chipLayout` for truncated name chips),
+  `segmented.go` quality control. App icon `packaging/xiaomi-cam.svg` → png via inkscape
+  (also `cmd/xiaomi-cam/icon.png`). `XC_SHOTS=<dir>` screenshots main/light/menu/dialogs/grid
+  (disables shortcuts: the test window can take the focus while the user types).
 - `bars.go` ☰ menu (video only, full screen, cameras, language, help) and the light panel
   (spotlight, siren, night mode) – keep the bars narrow (window min ~660 px, `XC_LAYOUTTEST`
   prints the min sizes); grid tiles have a small video min size (`videoView.small`)
@@ -89,6 +97,11 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   base64 names) / 9.2 (go to idx), SD status 4.1; missing property → code -704040003.
 - Mi Home RN plugin for the camera: cloud `/v2/plugin/fetch_plugin` (api_version ≥ 10100),
   dev tool `cmd/xmtool` calls any cloud API with the app's token.
+
+## In progress (update after each step; for the next session)
+
+Nothing in progress. (v1.20.0: UI redesign variant A of the mockup
+https://claude.ai/artifact/B1ccjwrZwjCkYLtYvDsnEK is released.)
 
 ## Open ideas / not done
 

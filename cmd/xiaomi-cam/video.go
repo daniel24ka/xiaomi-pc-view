@@ -416,7 +416,7 @@ func (r *videoRenderer) Layout(size fyne.Size) {
 
 func (r *videoRenderer) MinSize() fyne.Size {
 	if r.v.small {
-		return fyne.NewSize(192, 108) // a grid tile
+		return fyne.NewSize(160, 90) // a grid tile
 	}
 	return fyne.NewSize(480, 270)
 }

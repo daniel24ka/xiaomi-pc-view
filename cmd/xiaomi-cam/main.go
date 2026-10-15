@@ -8,7 +8,6 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/jpeg"
 	"os"
 	"runtime/debug"
@@ -59,10 +58,14 @@ func cameraQualities(name string) ([]quality, int) {
 			return w, h
 		}
 		w, h := size(c.W, c.H)
-		qs := []quality{{fmt.Sprintf(T("Główny (%dp)"), h), w, h}}
+		// names: the picture height; "main" / "sub" only when both are the same
+		qs := []quality{{fmt.Sprintf("%dp", h), w, h}}
 		if c.Sub != "" {
-			w, h = size(c.SubW, c.SubH)
-			qs = append(qs, quality{fmt.Sprintf(T("Podgląd (%dp)"), h), w, h})
+			sw, sh := size(c.SubW, c.SubH)
+			qs = append(qs, quality{fmt.Sprintf("%dp", sh), sw, sh})
+			if sh == h {
+				qs[0].name, qs[1].name = T("Główny"), T("Podgląd")
+			}
 		}
 		return qs, min(max(c.Quality, 0), len(qs)-1)
 	}
@@ -95,7 +98,7 @@ type ui struct {
 
 	video  *videoView
 	player player
-	status *widget.Label
+	status *statusLabel
 
 	activity   *spinner // spinner next to the status line: an action in progress
 	busyCount  int      // actions in progress (busy.go)
@@ -114,20 +117,28 @@ type ui struct {
 	aiRunButtons []*ptrButton
 
 	camera     *ptrSelect
-	quality    *ptrSelect
+	quality    *segmented
 	connection *ptrSelect
 	connBox    fyne.CanvasObject // the connection list (Xiaomi only)
 	// light, siren, night mode: in a panel opened by this button (bottom bar)
 	camControls *ptrButton
-	light       *ptrCheck
-	brightness  *ptrSlider
-	siren       *ptrCheck
-	sound       *ptrCheck
-	bars        []fyne.CanvasObject
-	exitView    *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
-	viewOnly    bool
-	hideTimer   *time.Timer
-	normalSize  fyne.Size // window size before video-only mode
+	menuButton  *ptrButton
+	// controls on the picture (overlay.go)
+	pictureControls, bottomControls, statusChip *fyne.Container
+	soundBox                                    *fyne.Container
+	liveDot                                     *canvas.Circle
+	controlsTimer                               *time.Timer
+	// onVideoMouse shows the controls lying on the picture (they hide after a while)
+	onVideoMouse func()
+	light        *ptrCheck
+	brightness   *ptrSlider
+	siren        *ptrCheck
+	sound        *ptrCheck
+	bars         []fyne.CanvasObject
+	exitView     *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
+	viewOnly     bool
+	hideTimer    *time.Timer
+	normalSize   fyne.Size // window size before video-only mode
 
 	hist                                 history // SD card playback
 	recButton                            *ptrButton
@@ -185,6 +196,7 @@ func main() {
 
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
+	a.Settings().SetTheme(appTheme{})
 	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
 	appPrefs = a.Preferences()
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
@@ -195,6 +207,14 @@ func main() {
 		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
 	})
 	u.build()
+	onZoomState = func(name string, z float64) {
+		fyne.Do(func() {
+			if name == u.camera.Selected && z != u.camZoom {
+				u.camZoom = z
+				u.showZoom(z)
+			}
+		})
+	}
 	u.setupTray()
 	onShowRequest(func() { fyne.Do(u.show) })
 	go func() {
@@ -266,7 +286,8 @@ func (u *ui) build() {
 			u.setViewOnly(false)
 		}
 	}
-	u.video.onMouseMove = u.showExitButton
+	u.video.onMouseMove = u.pictureControlsActive
+	u.onVideoMouse = u.pictureControlsActive
 	u.video.onCameraDrag = u.cameraDrag
 	u.video.onCameraDragEnd = u.cameraDragEnd
 	u.video.onScroll = func(up bool) {
@@ -280,7 +301,7 @@ func (u *ui) build() {
 	u.video.canResize = func() bool { return u.viewOnly && !u.win.FullScreen() }
 	u.video.onResize = u.resizeKeepAspect
 	u.video.onEdgePress = func(dir int) bool { return wmMoveResize(u.win, dir) }
-	u.status = widget.NewLabel("")
+	u.status = newStatusLabel()
 	u.activity = newSpinner(spinnerFrames)
 	u.player.onFrame = func(img *image.RGBA, gen int64) {
 		fyne.Do(func() {
@@ -289,6 +310,7 @@ func (u *ui) build() {
 			}
 			if !u.gotFrame {
 				u.gotFrame = true
+				u.setLive(!u.hist.on)
 				if !u.hist.on {
 					u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
 				}
@@ -327,7 +349,7 @@ func (u *ui) build() {
 	for _, c := range connections {
 		cNames = append(cNames, T(c.name))
 	}
-	u.quality = newSelect(nil, func(string) {
+	u.quality = newSegmented(func(string) {
 		if u.syncing {
 			return
 		}
@@ -345,23 +367,24 @@ func (u *ui) build() {
 
 	u.buildHistory()
 	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
-	u.recButton = newButton("", recordIcon, u.toggleRecording)
+	u.recButton = newButton(T("Nagraj"), recordIcon, u.toggleRecording)
 	u.snapButton = newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)"))
 	// tooltips of the named controls
 	u.camera.tip = T("Wybór kamery")
 	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD (kamera IP: strumień główny lub podgląd)")
 	u.connection.tip = T("Połączenie: zdalne przez serwery Xiaomi (z każdej sieci) lub lokalne w sieci LAN")
-	u.gridButton.tip = T("Siatka wszystkich kamer / jedna kamera")
+	u.gridButton.tip = T("Siatka wszystkich kamer / jedna kamera (w siatce: kliknij kamerę, aby nią sterować; podwójne kliknięcie – pełny widok)")
 	u.recButton.tip = T("Nagrywanie do MP4 – start/stop (tryb i kamery w Ustawieniach)")
 	u.hist.button.tip = T("Historia nagrań z karty SD / powrót na żywo")
 	// lists of a fixed width (the window can be narrow); the labels are in the tooltips
 	fixed := func(w float32, o fyne.CanvasObject) fyne.CanvasObject {
 		return container.NewGridWrap(fyne.NewSize(w, o.MinSize().Height), o)
 	}
-	u.connBox = fixed(110, u.connection)
+	u.connBox = fixed(100, u.connection)
+	u.menuButton = u.appMenuButton()
 	top := container.NewHBox(
-		fixed(170, u.camera),
-		fixed(120, u.quality),
+		fixed(140, u.camera),
+		u.quality,
 		u.connBox,
 		layout.NewSpacer(),
 		// view: grid, history, snapshot, video only, full screen
@@ -369,14 +392,18 @@ func (u *ui) build() {
 		u.hist.button,
 		u.recButton,
 		u.snapButton,
-		widget.NewSeparator(),
 		// app: settings; cameras, language, help in the menu
 		newButton("", theme.SettingsIcon(), u.showSettings).withTip(T("Ustawienia: nagrywanie, foldery, zadania AI, powiadomienia")),
-		u.appMenuButton(),
+		u.menuButton,
 	)
 
 	ptz := func(icon fyne.Resource, op int) *holdButton {
-		return newHoldButton(icon, func() { u.mover.press(op) }, u.mover.release).withTip(ptzTip(op))
+		b := newHoldButton(icon, func() {
+			u.pictureControlsActive()
+			u.mover.press(op)
+		}, u.mover.release).withTip(ptzTip(op))
+		b.Importance = widget.LowImportance // on the pill's background
+		return b
 	}
 	u.light = newCheck(T("Reflektor"), func(on bool) {
 		u.win.Canvas().Unfocus()
@@ -440,29 +467,25 @@ func (u *ui) build() {
 	u.brightness.tip = T("Jasność reflektora")
 	u.siren.tip = T("Syrena alarmowa kamery (z potwierdzeniem)")
 	u.sound.tip = T("Dźwięk z kamery")
-	// groups of controls, hidden when the selected camera doesn't have the feature (caps.go)
-	u.capPTZ = container.NewHBox(
+	// groups of controls on the picture (overlay.go), hidden when the selected camera doesn't
+	// have the feature (caps.go)
+	pad := [4]fyne.CanvasObject{
 		ptz(theme.NavigateBackIcon(), motorLeft),
 		ptz(theme.MoveUpIcon(), motorUp),
 		ptz(theme.MoveDownIcon(), motorDown),
-		ptz(theme.NavigateNextIcon(), motorRight))
-	u.capPoints = u.buildPoints()
-	u.capZoom = container.NewHBox(
-		widget.NewSeparator(),
-		newButton("", theme.ZoomOutIcon(), func() { u.zoomBy(-zoomStep) }).withTip(T("Oddal – zoom kamery (−, kółko myszy)")),
+		ptz(theme.NavigateNextIcon(), motorRight),
+	}
+	zoom := container.NewHBox(
+		overlayButton(theme.ZoomOutIcon(), T("Oddal – zoom kamery (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
 		u.zoomLabel,
-		newButton("", theme.ZoomInIcon(), func() { u.zoomBy(zoomStep) }).withTip(T("Przybliż – zoom kamery do 9× (+, kółko myszy)")),
-		newButton("", theme.ZoomFitIcon(), func() { u.zoomBy(-maxZoom) }).withTip(T("Zoom 1× (0)")))
+		overlayButton(theme.ZoomInIcon(), T("Przybliż – zoom kamery do 9× (+, kółko myszy)"), func() { u.zoomBy(zoomStep) }),
+		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), func() { u.zoomBy(-maxZoom) }))
 	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
 	u.camControls = u.cameraControlsButton()
-	u.status.Truncation = fyne.TextTruncateEllipsis
-	bottom := container.NewBorder(nil, nil,
-		container.NewHBox(u.capPTZ, u.capPoints, u.capZoom),
-		container.NewHBox(u.camControls, widget.NewSeparator(),
-			container.NewHBox(widget.NewIcon(theme.VolumeUpIcon()), u.sound)),
-		container.NewBorder(nil, nil, u.activity, nil, u.status),
-	)
-	bottomBox := container.NewVBox(u.hist.bar, bottom)
+	u.camControls.Importance = widget.LowImportance
+	u.soundBox = container.NewHBox(widget.NewIcon(theme.VolumeUpIcon()), u.sound)
+	u.pictureControls = u.buildPictureControls(pad, u.buildPoints(), zoom)
+	bottomBox := container.NewVBox(u.hist.bar)
 	u.bars = []fyne.CanvasObject{top, bottomBox}
 	exitBtn := newButton(T("Pokaż panele"), theme.VisibilityIcon(), func() { u.setViewOnly(false) }).withTip(T("Wróć do widoku z panelami i ramką okna (Esc, prawy przycisk myszy)"))
 	exitBtn.Importance = widget.LowImportance
@@ -510,7 +533,7 @@ func (u *ui) build() {
 		container.New(layout.NewCustomPaddedLayout(0, 0, 0, 10), // 10 px from right edge, centered
 			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
-	u.videoArea = container.NewStack(u.video, u.exitView)
+	u.videoArea = container.NewStack(u.video, u.pictureControls, u.exitView)
 	u.updateGridButton()
 	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, u.videoArea))
 
@@ -645,6 +668,7 @@ func (u *ui) restart() {
 	}
 	q := u.syncControls(name)
 	u.gotFrame = false
+	u.setLive(false)
 	u.status.SetText(T("Łączenie z kamerą…"))
 	u.video.clear(T("Łączenie z kamerą…"), true)
 	w, h := u.decodeSize(q.w, q.h)
@@ -825,6 +849,11 @@ func (u *ui) setViewOnly(on bool) {
 	u.notMinimized() // the frame on/off re-maps the window
 	u.viewOnly = on
 	u.showBars(!on)
+	if on {
+		u.pictureControls.Hide()
+	} else {
+		u.pictureControls.Show()
+	}
 	u.win.SetPadded(!on)
 	if on {
 		u.normalSize = u.win.Canvas().Size()
@@ -1051,9 +1080,6 @@ func (u *ui) showZoom(z float64) {
 		u.zoomSlider.SetValue(z)
 	}
 }
-
-// overlayBg - very light background of the buttons over the picture (video-only mode)
-var overlayBg = color.NRGBA{A: 50}
 
 // decodeTiers - widths the video is decoded to. Decoding to the size shown on the screen
 // instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done by the

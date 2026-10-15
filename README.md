@@ -36,7 +36,7 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
 - **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
-- **Spotlight** with brightness, and **siren** (light bulb button in the bottom bar, together
+- **Spotlight** with brightness, and **siren** (light bulb button on the picture, together
   with the night mode).
 - **Night mode** (infrared): auto infrared, auto / smart full color (with the spotlight),
   always infrared, always full color, or off.
@@ -58,9 +58,13 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
   (pan/tilt, zoom, points, spotlight, quality, snapshot, recording, sound) work on the
   selected one; double click opens it alone.
 - Full screen mode.
-- **Compact bars**: the window can be made narrow (about 660 px). Video only, full screen,
-  cameras, language and the keyboard shortcuts are in the ☰ menu; spotlight, siren and night
-  mode in the light bulb panel.
+- **Modern dark look**: graphite theme with one amber accent, the Geist font and Lucide icons.
+  The picture fills the window. Pan/tilt, camera points, zoom, light and sound lie on the
+  picture in translucent "pills" that show when you move the mouse and hide after 3 s. The
+  status ("Live", recording, messages) is a small chip in the top right corner. The top bar has
+  the camera list, quality (2.5K | 720p | SD), connection, grid, history, **Record**, snapshot,
+  settings and the ☰ menu (video only, full screen, cameras, language, shortcuts). The grid
+  shows cameras as rounded cards with their names. The window can be about 680 px narrow.
 - **System tray**: closing or minimizing the window hides the app and stops streaming.
 - Window size and position are remembered, separately with and without the frame.
 - Only one instance runs; starting the app again shows the window that is already open.

@@ -25,16 +25,24 @@ type tile struct {
 	obj    fyne.CanvasObject
 }
 
-var selectedColor = color.NRGBA{R: 0xff, G: 0x67, B: 0x00, A: 0xff}
+var selectedColor = palette.accent
 
 func newTile(u *ui, name string) *tile {
 	t := &tile{name: name, view: newVideoView()}
 	t.view.small = true
+	t.view.bg.FillColor = palette.surface // the card's color around the picture
+	t.view.bg.CornerRadius = 12
 	t.border = canvas.NewRectangle(color.Transparent)
-	t.border.StrokeWidth = 3
-	label := canvas.NewText(" "+name+" ", color.White)
-	label.TextSize = 12
-	labelBg := canvas.NewRectangle(color.NRGBA{A: 120})
+	t.border.StrokeWidth = 2
+	t.border.CornerRadius = 12
+	// the name on the picture, in a chip with the live dot
+	label := widget.NewLabelWithStyle(name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	label.Truncation = fyne.TextTruncateEllipsis // a narrow tile: the name is shortened
+	label.SizeName = theme.SizeNameCaptionText
+	dot := canvas.NewCircle(palette.live)
+	nameChip := pill(container.NewBorder(nil, nil,
+		container.NewCenter(container.NewGridWrap(fyne.NewSize(7, 7), dot)), nil, label))
+	nameRow := container.New(&chipLayout{label: label}, nameChip)
 	t.view.onTap = func() { u.selectTile(name) }
 	t.view.onDoubleTap = func() {
 		u.selectTile(name)
@@ -52,8 +60,8 @@ func newTile(u *ui, name string) *tile {
 		})
 	}
 	t.player.onStatus = func(s string) { fyne.Do(func() { t.view.setStatus(s) }) }
-	t.obj = container.NewStack(t.view, t.border,
-		container.NewVBox(container.NewHBox(container.NewStack(labelBg, label))))
+	t.obj = container.New(&insetLayout{4}, container.NewStack(t.view, t.border,
+		container.New(&insetLayout{8}, container.NewVBox(nameRow))))
 	return t
 }
 
@@ -107,7 +115,7 @@ func (u *ui) setGrid(on bool) {
 	if !on {
 		u.stopTiles()
 		u.tiles = nil
-		u.videoArea.Objects = []fyne.CanvasObject{u.video, u.exitView}
+		u.videoArea.Objects = []fyne.CanvasObject{u.video, u.pictureControls, u.exitView}
 		u.videoArea.Refresh()
 		u.restart()
 		return
@@ -121,7 +129,8 @@ func (u *ui) setGrid(on bool) {
 		objs = append(objs, t.obj)
 	}
 	cols := int(math.Ceil(math.Sqrt(float64(len(u.tiles)))))
-	u.videoArea.Objects = []fyne.CanvasObject{container.NewGridWithColumns(cols, objs...), u.exitView}
+	grid := container.New(&insetLayout{4}, container.NewGridWithColumns(cols, objs...))
+	u.videoArea.Objects = []fyne.CanvasObject{grid, u.pictureControls, u.exitView}
 	u.videoArea.Refresh()
 	u.highlightTile()
 	if u.visible {
@@ -129,7 +138,8 @@ func (u *ui) setGrid(on bool) {
 			u.startTile(t, false)
 		}
 	}
-	u.status.SetText(T("Siatka kamer – kliknij kamerę, aby nią sterować; podwójne kliknięcie – pełny widok"))
+	u.status.SetText("") // the chip would cover a tile; the hint is the grid button's tooltip
+	u.setLive(true)
 }
 
 // selectTile makes the camera the selected one (controls, sound).

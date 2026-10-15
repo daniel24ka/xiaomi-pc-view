@@ -89,6 +89,14 @@ func gotoPreset(camera string, idx int) error {
 	return setProp(camera, propPresetActive, idx)
 }
 
+// pointReached: the camera turned to the point p, and zoomed to its zoom (scale = zoom*10):
+// the zoom shown in the app follows.
+func pointReached(camera string, p preset) {
+	if p.Scale >= 10 {
+		setZoomState(camera, float64(p.Scale)/10)
+	}
+}
+
 // gotoPresetAndWait turns to a position and waits until the camera stops (the motor
 // position doesn't change), max 15 s.
 func gotoPresetAndWait(camera string, idx int) error {

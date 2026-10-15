@@ -278,7 +278,8 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		if err = gotoPresetAndWait(name, p.Idx); err != nil {
 			return nil, err
 		}
-		return map[string]any{"point": p.Idx, "name": p.Label()}, nil
+		pointReached(name, p)
+		return map[string]any{"point": p.Idx, "name": p.Label(), "zoom": currentZoom(name)}, nil
 	})
 
 	handle("points/save", "POST", func(r *http.Request, name string) (any, error) {
@@ -316,7 +317,16 @@ func currentZoom(name string) float64 {
 	return 1
 }
 
-func setZoomState(name string, z float64) { zoomState.Store(name, z) }
+// onZoomState - the zoom of a camera changed (UI, API, a camera point): the UI shows it.
+// Called from any goroutine.
+var onZoomState func(name string, z float64)
+
+func setZoomState(name string, z float64) {
+	zoomState.Store(name, z)
+	if onZoomState != nil {
+		onZoomState(name, z)
+	}
+}
 
 // --- snapshot
 

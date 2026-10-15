@@ -74,10 +74,13 @@ func (u *ui) pointPressed(slot int) {
 	}
 	if p := u.points[slot-1]; p != nil {
 		u.status.SetText(fmt.Sprintf(T("Obracam do punktu %d (%s)…"), slot, p.Label()))
-		idx := p.Idx
+		pt := *p
 		done := u.busy(b)
 		go func() {
-			err := gotoPreset(name, idx)
+			err := gotoPreset(name, pt.Idx)
+			if err == nil {
+				pointReached(name, pt)
+			}
 			fyne.Do(func() {
 				done()
 				if err != nil {

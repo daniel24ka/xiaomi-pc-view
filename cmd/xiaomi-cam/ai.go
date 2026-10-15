@@ -431,6 +431,7 @@ func (e *aiEngine) check(t *aiTask, cfg aiConfig) (bool, string, []byte, error) 
 		if err = gotoPresetAndWait(camera, p.Idx); err != nil {
 			return false, "", nil, err
 		}
+		pointReached(camera, p)
 	}
 	// keep the camera session open between frequent checks (closed a minute after the last one),
 	// otherwise every check connects to the camera again (2-4 s)
