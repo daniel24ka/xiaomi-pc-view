@@ -3,7 +3,7 @@
 Desktop viewer/controller for Xiaomi Mi Home cameras on Linux (user's camera: Xiaomi Outdoor
 Camera CW700S, model `isa.camera.700sa`). Repo = fork of go2rtc v1.9.14 + app in
 `cmd/xiaomi-cam`. GitHub: `git@github.com:genosajd/xiaomi-pc-view.git` (branch `main`, tags
-`v1.0.0`…`v1.20.1`). User talks Polish; README/release notes in English.
+`v1.0.0`…`v1.20.2`). User talks Polish; README/release notes in English.
 
 ## Build, install, release
 
@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.20.1 published (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.20.2 published (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -65,7 +65,7 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   `onMinimize` hides to tray only if still minimized after 0.7 s, and `notMinimized()` guards
   2 s (`remapping`). Hooks `XC_VIEWTEST` (video only on/off, minimize) and `XC_MOVETEST`
   (uinput drag of the move handle; the injected drag doesn't start a WM move here)
-- Look (v1.20.1): `apptheme.go` palette/sizes/fonts/icons in one place (Geist in `fonts/`,
+- Look (v1.20.2): `apptheme.go` palette/sizes/fonts/icons in one place (Geist in `fonts/`,
   Lucide in `icons/` made by `tools/icons.sh`: strokes → fills, Fyne recolors only fills;
   add an icon: run the script with its Lucide name, map it in `themeIcons` or `lucide(name)`).
   `overlay.go` controls on the picture (pills, hide after `controlsIdle`, not under the mouse;

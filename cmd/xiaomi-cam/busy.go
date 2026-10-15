@@ -92,6 +92,9 @@ func (b *ptrButton) setBusy(on bool) {
 	if on == (b.busyStop != nil) {
 		return
 	}
+	if b.busyChanged != nil {
+		b.busyChanged(on)
+	}
 	if !on {
 		close(b.busyStop)
 		b.busyStop = nil

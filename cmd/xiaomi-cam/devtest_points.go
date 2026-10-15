@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
+	"image/png"
 	"os"
 	"strconv"
 	"time"
@@ -35,6 +36,21 @@ func init() {
 		fmt.Printf("presets: %+v err=%v\n", list, err)
 		props, err := getProps(name, propMotorLocation)
 		fmt.Printf("motor: %+v err=%v\n", props, err)
+		if mode == "shot" {
+			for i, nm := range []string{"Brama wjazdowa", "Auto", "1"} {
+				err := renamePresetSlot(name, 1, nm)
+				fyne.Do(u.loadPoints)
+				time.Sleep(4 * time.Second)
+				fyne.DoAndWait(func() {
+					u.pictureControlsActive()
+					img := u.win.Canvas().Capture()
+					f, _ := os.Create(fmt.Sprintf("%s/point%d.png", os.Getenv("XC_POINTDIR"), i))
+					_ = png.Encode(f, img)
+					_ = f.Close()
+					fmt.Printf("point name %q err=%v shown=%q\n", nm, err, u.pointNames[0].Text)
+				})
+			}
+		}
 		if mode == "rename2" {
 			for _, nm := range []string{"test", "1"} {
 				fyne.DoAndWait(func() { u.pointNameDialog(1, true) })
@@ -47,7 +63,9 @@ func init() {
 				})
 				time.Sleep(6 * time.Second)
 				l, _ := getPresets(name)
-				fyne.DoAndWait(func() { fmt.Printf("renamed to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointButtons[0].Text, u.status.Text) })
+				fyne.DoAndWait(func() {
+					fmt.Printf("renamed to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointNames[0].Text, u.status.Text)
+				})
 			}
 		}
 		if mode == "dialog" {
@@ -74,7 +92,7 @@ func init() {
 				time.Sleep(6 * time.Second)
 				l, _ := getPresets(name)
 				fyne.DoAndWait(func() {
-					fmt.Printf("dialog rename to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointButtons[0].Text, u.status.Text)
+					fmt.Printf("dialog rename to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointNames[0].Text, u.status.Text)
 				})
 			}
 		}
@@ -85,7 +103,7 @@ func init() {
 				time.Sleep(4 * time.Second)
 				l, _ := getPresets(name)
 				fyne.DoAndWait(func() {
-					fmt.Printf("ui rename to %q: err=%v camera=%+v button=%q\n", nm, err, l, u.pointButtons[0].Text)
+					fmt.Printf("ui rename to %q: err=%v camera=%+v button=%q\n", nm, err, l, u.pointNames[0].Text)
 				})
 			}
 		}

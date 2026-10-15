@@ -152,6 +152,8 @@ type ui struct {
 	capPTZ, capPoints, capZoom, capLight fyne.CanvasObject
 	capOverlayPTZ, capOverlayZoom        fyne.CanvasObject
 	pointButtons                         [presetSlots]*ptrButton
+	pointNames                           [presetSlots]*canvas.Text // the names under the numbers
+	pointWraps                           [presetSlots]*fyne.Container
 	gotFrame                             bool // first frame of the current playback arrived
 	decodeW                              int  // width the video is decoded to (tier, see decodeSize)
 	decodeStable                         int  // seconds the window has needed another decode size

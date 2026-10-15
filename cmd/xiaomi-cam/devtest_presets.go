@@ -42,7 +42,7 @@ func init() {
 		time.Sleep(2 * time.Second)
 		save("s1.jpg")
 		fyne.Do(func() {
-			fmt.Println("button 1:", u.pointButtons[0].Text)
+			fmt.Println("button 1:", u.pointNames[0].Text)
 			u.pointPressed(1)
 		})
 		time.Sleep(6 * time.Second)

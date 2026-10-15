@@ -238,6 +238,8 @@ type ptrButton struct {
 
 	busyStop chan struct{} // action in progress (busy.go)
 	busyIcon fyne.Resource // icon shown again when the action ends
+	// busyChanged - called when the busy state changes (e.g. hide texts drawn over the button)
+	busyChanged func(busy bool)
 }
 
 func newButton(label string, icon fyne.Resource, tapped func()) *ptrButton {

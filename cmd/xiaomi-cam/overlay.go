@@ -244,3 +244,29 @@ func (l *chipLayout) MinSize(objs []fyne.CanvasObject) fyne.Size {
 	}
 	return s
 }
+
+// tightVBox - objects stacked with no gap (a number and a small name under it)
+type tightVBox struct{}
+
+func (tightVBox) Layout(objs []fyne.CanvasObject, size fyne.Size) {
+	y := float32(0)
+	for _, o := range objs {
+		m := o.MinSize()
+		o.Move(fyne.NewPos(0, y))
+		o.Resize(fyne.NewSize(size.Width, m.Height))
+		y += m.Height
+	}
+}
+
+func (tightVBox) MinSize(objs []fyne.CanvasObject) fyne.Size {
+	var s fyne.Size
+	for _, o := range objs {
+		m := o.MinSize()
+		if t, ok := o.(*canvas.Text); ok && t.Text == "" {
+			continue // no name: the number alone is centred
+		}
+		s.Width = max(s.Width, m.Width)
+		s.Height += m.Height
+	}
+	return s
+}

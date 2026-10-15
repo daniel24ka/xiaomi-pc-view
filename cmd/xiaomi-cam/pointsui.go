@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -14,14 +16,34 @@ import (
 // Camera points 1-3 (preset positions stored in the camera): buttons in the bottom bar,
 // keys 1-3, and a dialog to save the current position / rename / remove.
 
+// pointNameSize - the point name under its number (small, the button stays compact)
+const pointNameSize = 10
+
 func (u *ui) buildPoints() fyne.CanvasObject {
 	box := container.NewHBox()
 	for i := 0; i < presetSlots; i++ {
 		slot := i + 1
-		b := newButton(fmt.Sprint(slot), nil, func() { u.pointPressed(slot) })
+		b := newButton("", nil, func() { u.pointPressed(slot) })
 		b.tip = fmt.Sprintf(T("Punkt %d – kliknij, aby obrócić kamerę; pusty: zapisz bieżącą pozycję (klawisz %d)"), slot, slot)
 		u.pointButtons[i] = b
-		box.Add(b)
+		// the number with the name under it, on the button
+		num := canvas.NewText(fmt.Sprint(slot), palette.text)
+		num.TextStyle.Bold = true
+		num.Alignment = fyne.TextAlignCenter
+		name := canvas.NewText("", palette.muted)
+		name.TextSize = pointNameSize
+		name.Alignment = fyne.TextAlignCenter
+		u.pointNames[i] = name
+		texts := container.NewCenter(container.New(&tightVBox{}, num, name))
+		b.busyChanged = func(busy bool) { // the spinner is shown instead of the texts
+			if busy {
+				texts.Hide()
+			} else {
+				texts.Show()
+			}
+		}
+		u.pointWraps[i] = container.NewGridWrap(fyne.NewSize(44, 40), b)
+		box.Add(container.NewStack(u.pointWraps[i], texts))
 	}
 	box.Add(newButton("", theme.SettingsIcon(), u.showPoints).withTip(T("Punkty kamery – zapisz bieżącą pozycję, usuń")))
 	return box
@@ -45,17 +67,26 @@ func (u *ui) loadPoints() {
 				if b == nil {
 					continue
 				}
+				name := u.pointNames[i]
 				if p := u.points[i]; p != nil {
 					label := p.Label()
-					if r := []rune(label); len(r) > 6 {
-						label = string(r[:6]) + "…"
+					if r := []rune(label); len(r) > 10 {
+						label = string(r[:9]) + "…"
 					}
-					b.SetText(fmt.Sprintf("%d %s", i+1, label))
+					if label == fmt.Sprint(i+1) {
+						label = "" // no name (the number only)
+					}
+					name.Text = label
 					b.Importance = widget.MediumImportance
 				} else {
-					b.SetText(fmt.Sprint(i + 1))
+					name.Text = ""
 					b.Importance = widget.LowImportance
 				}
+				// a name wider than the button widens it
+				w := max(fyne.MeasureText(name.Text, pointNameSize, name.TextStyle).Width+14, 44)
+				u.pointWraps[i].Layout = layout.NewGridWrapLayout(fyne.NewSize(w, 40))
+				u.pointWraps[i].Refresh()
+				name.Refresh()
 				b.Refresh()
 			}
 		})
