@@ -94,12 +94,22 @@ func (u *ui) pointPressed(slot int) {
 }
 
 func (u *ui) savePointDialog(slot int) {
+	u.pointNameDialog(slot, false)
+}
+
+// pointNameDialog asks for the name of point slot: rename only (the position stays) or save
+// the current position with the name.
+func (u *ui) pointNameDialog(slot int, rename bool) {
 	entry := widget.NewEntry()
 	if p := u.points[slot-1]; p != nil {
 		entry.SetText(p.Label())
 	}
 	entry.SetPlaceHolder(T("np. auto, podjazd, brama"))
-	dialog.ShowForm(fmt.Sprintf(T("Punkt %d – zapisz bieżącą pozycję"), slot), T("Zapisz"), T("Anuluj"),
+	title := fmt.Sprintf(T("Punkt %d – zapisz bieżącą pozycję"), slot)
+	if rename {
+		title = fmt.Sprintf(T("Punkt %d – zmień nazwę"), slot)
+	}
+	d := dialog.NewForm(title, T("Zapisz"), T("Anuluj"),
 		[]*widget.FormItem{widget.NewFormItem(T("Nazwa"), entry)}, func(ok bool) {
 			if !ok {
 				return
@@ -108,7 +118,12 @@ func (u *ui) savePointDialog(slot int) {
 			u.status.SetText(fmt.Sprintf(T("Zapisuję punkt %d…"), slot))
 			done := u.busy(u.pointButtons[slot-1])
 			go func() {
-				err := savePresetSlot(name, slot, label)
+				var err error
+				if rename {
+					err = renamePresetSlot(name, slot, label)
+				} else {
+					err = savePresetSlot(name, slot, label)
+				}
 				fyne.Do(func() {
 					done()
 					if err != nil {
@@ -120,6 +135,10 @@ func (u *ui) savePointDialog(slot int) {
 				})
 			}()
 		}, u.win)
+	entry.OnSubmitted = func(string) { d.Submit() }
+	d.Resize(fyne.NewSize(420, 0))
+	d.Show()
+	u.win.Canvas().Focus(entry) // typing goes to the name, not to the keyboard shortcuts
 }
 
 // showPoints - manage points 1-3: save the current position, remove.
@@ -152,12 +171,18 @@ func (u *ui) showPoints() {
 				})
 			}()
 		})
+		ren := newButton("", theme.DocumentCreateIcon(), func() {
+			d.Hide()
+			u.pointNameDialog(slot, true)
+		}).withTip(T("Zmień nazwę punktu (pozycja zostaje)"))
 		if u.points[i] == nil {
 			del.Disable()
+			ren.Disable()
 		}
 		rows.Add(container.NewBorder(nil, nil,
 			widget.NewLabelWithStyle(fmt.Sprintf(T("Punkt %d"), slot), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			container.NewHBox(
+				ren,
 				newButton(T("Zapisz bieżącą pozycję"), theme.DocumentSaveIcon(), func() {
 					d.Hide()
 					u.savePointDialog(slot)

@@ -3,7 +3,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"os"
 	"strconv"
 	"time"
@@ -32,6 +35,74 @@ func init() {
 		fmt.Printf("presets: %+v err=%v\n", list, err)
 		props, err := getProps(name, propMotorLocation)
 		fmt.Printf("motor: %+v err=%v\n", props, err)
+		if mode == "rename2" {
+			for _, nm := range []string{"test", "1"} {
+				fyne.DoAndWait(func() { u.pointNameDialog(1, true) })
+				time.Sleep(time.Second)
+				fyne.DoAndWait(func() {
+					e := findEntry(u.win.Canvas())
+					fmt.Printf("entry focused=%v text=%q\n", u.win.Canvas().Focused() == e, e.Text)
+					e.SetText(nm)
+					tapButton(u.win.Canvas(), T("Zapisz"))
+				})
+				time.Sleep(6 * time.Second)
+				l, _ := getPresets(name)
+				fyne.DoAndWait(func() { fmt.Printf("renamed to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointButtons[0].Text, u.status.Text) })
+			}
+		}
+		if mode == "dialog" {
+			for _, nm := range []string{"test", "1"} {
+				fyne.DoAndWait(u.showPoints)
+				time.Sleep(time.Second)
+				fyne.DoAndWait(func() {
+					tapButton(u.win.Canvas(), T("Zapisz bieżącą pozycję")) // the first one: point 1
+				})
+				time.Sleep(time.Second)
+				fyne.DoAndWait(func() {
+					e := findEntry(u.win.Canvas())
+					fmt.Printf("entry found=%v text=%q\n", e != nil, func() string {
+						if e != nil {
+							return e.Text
+						}
+						return ""
+					}())
+					if e != nil {
+						e.SetText(nm)
+					}
+					tapButton(u.win.Canvas(), T("Zapisz"))
+				})
+				time.Sleep(6 * time.Second)
+				l, _ := getPresets(name)
+				fyne.DoAndWait(func() {
+					fmt.Printf("dialog rename to %q: camera=%+v button=%q status=%q\n", nm, l, u.pointButtons[0].Text, u.status.Text)
+				})
+			}
+		}
+		if mode == "uirename" {
+			for _, nm := range []string{"test", "1"} {
+				err := savePresetSlot(name, 1, nm)
+				fyne.Do(u.loadPoints)
+				time.Sleep(4 * time.Second)
+				l, _ := getPresets(name)
+				fyne.DoAndWait(func() {
+					fmt.Printf("ui rename to %q: err=%v camera=%+v button=%q\n", nm, err, l, u.pointButtons[0].Text)
+				})
+			}
+		}
+		if mode == "rename" {
+			for _, nm := range []string{"test", "1"} {
+				l, _ := getPresets(name)
+				for i := range l {
+					if l[i].Idx == 1 {
+						l[i].Name = base64.StdEncoding.EncodeToString([]byte(nm))
+					}
+				}
+				err := putPresets(name, l)
+				time.Sleep(2 * time.Second)
+				l2, err2 := getPresets(name)
+				fmt.Printf("rename to %q: put err=%v; read %+v err=%v\n", nm, err, l2, err2)
+			}
+		}
 		if n, err := strconv.Atoi(mode); err == nil {
 			fyne.DoAndWait(func() { u.setZoom(2) })
 			time.Sleep(5 * time.Second)
@@ -44,4 +115,54 @@ func init() {
 		}
 		fyne.Do(u.app.Quit)
 	}
+}
+
+func walkObjects(o fyne.CanvasObject, f func(fyne.CanvasObject) bool) bool {
+	if f(o) {
+		return true
+	}
+	switch v := o.(type) {
+	case *fyne.Container:
+		for _, c := range v.Objects {
+			if walkObjects(c, f) {
+				return true
+			}
+		}
+	case fyne.Widget:
+		r := test.WidgetRenderer(v)
+		for _, c := range r.Objects() {
+			if walkObjects(c, f) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// tapButton taps the first button with the text in the top overlay (dialog).
+func tapButton(c fyne.Canvas, text string) {
+	ov := c.Overlays().Top()
+	walkObjects(ov, func(o fyne.CanvasObject) bool {
+		if b, ok := o.(*widget.Button); ok && b.Text == text {
+			test.Tap(b)
+			return true
+		}
+		if b, ok := o.(*ptrButton); ok && b.Text == text {
+			test.Tap(b)
+			return true
+		}
+		return false
+	})
+}
+
+func findEntry(c fyne.Canvas) *widget.Entry {
+	var e *widget.Entry
+	walkObjects(c.Overlays().Top(), func(o fyne.CanvasObject) bool {
+		if v, ok := o.(*widget.Entry); ok {
+			e = v
+			return true
+		}
+		return false
+	})
+	return e
 }

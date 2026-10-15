@@ -31,7 +31,8 @@ One binary file with an embedded [go2rtc](https://github.com/AlexxIT/go2rtc). It
 - **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.
 - **Camera points 1–3**: save the current direction and zoom as a point (e.g. 1 = car,
   2 = driveway) and turn the camera back to it with one click or key 1–3. Points are stored
-  in the camera, so Mi Home sees them too.
+  in the camera, so Mi Home sees them too. Rename a point (✎ in the points window) without
+  changing its position.
 - **Native camera zoom up to 9×**: the camera zooms itself, so details stay sharp and the
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.

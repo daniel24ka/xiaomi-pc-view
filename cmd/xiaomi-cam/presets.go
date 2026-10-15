@@ -161,6 +161,24 @@ func savePresetSlot(camera string, slot int, name string) error {
 	return putPresets(camera, out)
 }
 
+// renamePresetSlot changes the name of point slot (1-3); its position stays.
+func renamePresetSlot(camera string, slot int, name string) error {
+	list, err := getPresets(camera)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(name) == "" {
+		name = fmt.Sprintf("%d", slot)
+	}
+	for i := range list {
+		if list[i].Idx == slot {
+			list[i].Name = base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(name)))
+			return putPresets(camera, list)
+		}
+	}
+	return fmt.Errorf("no point %d", slot)
+}
+
 // presetSlotsOf returns points 1-3 (nil - not defined).
 func presetSlotsOf(list []preset) [presetSlots]*preset {
 	var slots [presetSlots]*preset
