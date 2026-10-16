@@ -1,5 +1,6 @@
 // xmtool - developer tool: call Mi Home cloud API with the account of the app.
 // Usage: xmtool <api path> <json params>
+// A path "camera:/common/app/get/eventlist" calls the GET API of the camera host.
 package main
 
 import (
@@ -7,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/AlexxIT/go2rtc/internal/app"
 	"github.com/AlexxIT/go2rtc/internal/xiaomi"
@@ -25,7 +27,12 @@ func main() {
 	os.Args = os.Args[:3]
 	app.Init()
 	xiaomi.Init()
-	res, err := xiaomi.CloudRequest(string(src), apiPath, params)
+	var res []byte
+	if path, ok := strings.CutPrefix(apiPath, "camera:"); ok { // GET API of the camera host
+		res, err = xiaomi.CloudGet(string(src), path, params)
+	} else {
+		res, err = xiaomi.CloudRequest(string(src), apiPath, params)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

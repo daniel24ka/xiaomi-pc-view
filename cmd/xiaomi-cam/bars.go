@@ -10,8 +10,8 @@ import (
 // Compact bars: less used controls are in a menu (top bar) and a panel (bottom bar), so the
 // window can be narrow.
 
-// appMenuButton - the ☰ menu of the top bar: view modes, cameras, language, shortcuts and
-// version.
+// appMenuButton - the ☰ menu of the top bar: view modes, cameras, event detection and the
+// events (cameras with events), language, shortcuts and version.
 func (u *ui) appMenuButton() *ptrButton {
 	var b *ptrButton
 	b = newButton("", theme.MenuIcon(), func() {
@@ -20,8 +20,15 @@ func (u *ui) appMenuButton() *ptrButton {
 			fyne.NewMenuItemWithIcon(T("Pełny ekran (F, F11, podwójne kliknięcie)"), theme.ViewFullScreenIcon(), u.toggleFullScreen),
 			fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItemWithIcon(T("Kamery – dodawanie, zmiana nazwy, usuwanie"), cameraIcon, u.showCameras),
-			fyne.NewMenuItemSeparator(),
 		}
+		if len(cameraEvents(u.camera.Selected)) > 0 {
+			items = append(items,
+				fyne.NewMenuItemWithIcon(T("Wykrywanie zdarzeń – ruch, ludzie, samochody"), lucide("scan-eye"), u.showDetection))
+		}
+		if hasEventCameras() {
+			items = append(items, fyne.NewMenuItemWithIcon(T("Zdarzenia – ostatnie wykrycia"), lucide("bell"), u.showEvents))
+		}
+		items = append(items, fyne.NewMenuItemSeparator())
 		for _, l := range languages {
 			code := l.code
 			it := fyne.NewMenuItem(l.name, func() { u.setLanguage(code) })
@@ -31,7 +38,7 @@ func (u *ui) appMenuButton() *ptrButton {
 		items = append(items, fyne.NewMenuItemSeparator(),
 			fyne.NewMenuItemWithIcon(T("Skróty klawiaturowe i wersja"), theme.HelpIcon(), u.showShortcuts))
 		showMenuBelow(b, fyne.NewMenu("", items...))
-	}).withTip(T("Menu: tylko obraz, pełny ekran, kamery, język, skróty klawiaturowe i wersja"))
+	}).withTip(T("Menu: tylko obraz, pełny ekran, kamery, zdarzenia, język, skróty klawiaturowe i wersja"))
 	return b
 }
 

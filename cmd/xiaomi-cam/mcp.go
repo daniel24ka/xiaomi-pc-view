@@ -147,6 +147,15 @@ func runMCP() error {
 			return apiText("GET", "record", url.Values{"camera": {in.Camera}})
 		})
 
+	type eventsArgs struct {
+		cameraArg
+		Hours int `json:"hours,omitempty" jsonschema:"the last N hours (default 24, up to 744)"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "list_events", Description: "Events detected by the camera (motion, person, car, a person near a car, entering/leaving the virtual fence) with their times, from the SD card recordings. Use get_snapshot to see the camera now."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in eventsArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("GET", "events", url.Values{"camera": {in.Camera}, "hours": {strconv.Itoa(in.Hours)}})
+		})
+
 	mcp.AddTool(server, &mcp.Tool{Name: "list_points", Description: "List camera points 1-3 (saved positions, e.g. 1 = car, 2 = driveway) with their names."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in cameraArg) (*mcp.CallToolResult, any, error) {
 			return apiText("GET", "points", url.Values{"camera": {in.Camera}})

@@ -1,6 +1,7 @@
 package miss
 
 import (
+	"encoding/binary"
 	"fmt"
 	"testing"
 )
@@ -66,5 +67,35 @@ func TestRecordingsMerge(t *testing.T) {
 	}
 	if fmt.Sprint(starts) != "[100 400 460 700 900]" {
 		t.Fatalf("got %v", starts)
+	}
+}
+
+func TestParseSDEvents(t *testing.T) {
+	// a page as the camera sends it: [?][total][index][32 bytes] + 32 bytes per event
+	page := func(total, index uint32, ev ...SDEvent) []byte {
+		b := make([]byte, 44+32*len(ev)+32) // an empty record at the end
+		binary.LittleEndian.PutUint32(b[4:], total)
+		binary.LittleEndian.PutUint32(b[8:], index)
+		for i, e := range ev {
+			binary.LittleEndian.PutUint64(b[44+32*i:], uint64(e.Start))
+			binary.LittleEndian.PutUint32(b[44+32*i+8:], uint32(e.Type))
+		}
+		return b
+	}
+	ev, last := parseSDEvents(page(2, 1, SDEvent{1792149617, SDEventPeopleMotion}, SDEvent{1792149500, SDEventCarDetected}))
+	if last || len(ev) != 2 || ev[0].Start != 1792149617 || ev[0].Type != SDEventPeopleMotion {
+		t.Fatalf("page 1: %v %v", ev, last)
+	}
+	ev2, last := parseSDEvents(page(2, 2, SDEvent{1792149617, SDEventObjectMotion}))
+	if !last || len(ev2) != 1 {
+		t.Fatalf("page 2: %v %v", ev2, last)
+	}
+	// sorted, one per start: the highest code (like Mi Home)
+	m := mergeSDEvents(append(ev, ev2...))
+	if len(m) != 2 || m[0].Start != 1792149500 || m[1].Type != SDEventPeopleMotion {
+		t.Fatalf("merged: %v", m)
+	}
+	if ev, last := parseSDEvents(nil); ev != nil || !last {
+		t.Fatalf("empty answer: %v %v", ev, last)
 	}
 }

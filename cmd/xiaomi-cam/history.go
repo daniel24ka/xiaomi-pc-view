@@ -3,17 +3,19 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"fyne.io/fyne/v2/canvas"
-	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 	"image"
 	"os"
 	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/AlexxIT/go2rtc/internal/xccore"
+	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 )
 
 // History - playback of SD card recordings, like the timeline in Mi Home.
@@ -36,6 +38,9 @@ type history struct {
 	firstFrame time.Time // when the first frame of this playback arrived
 	listed     bool      // the SD card file list was read in this history session
 	listing    bool
+
+	kinds     map[eventKind]bool  // the shown events (nil: all)
+	eventBtns []fyne.CanvasObject // the event filter and jumps (cameras with events)
 }
 
 func (u *ui) buildHistory() {
@@ -70,6 +75,7 @@ func (u *ui) buildHistory() {
 		}
 		return out
 	}
+	h.tl.events = u.historyEvents
 	h.tl.onPick = func(t time.Time) {
 		u.win.Canvas().Unfocus()
 		u.showHistoryPreview(time.Time{}, 0)
@@ -98,14 +104,23 @@ func (u *ui) buildHistory() {
 			u.playHistory(from.Add(d))
 		}
 	}
+	var filter *ptrButton
+	filter = newButton("", lucide("filter"), func() { u.showEventFilter(filter) }).
+		withTip(T("Pokazywane zdarzenia: wszystkie albo wybrane rodzaje"))
+	prevEv := newButton("", lucide("step-back"), func() { u.jumpEvent(-1) }).withTip(T("Poprzednie zdarzenie"))
+	nextEv := newButton("", lucide("step-forward"), func() { u.jumpEvent(1) }).withTip(T("Następne zdarzenie"))
+	h.eventBtns = []fyne.CanvasObject{filter, prevEv, nextEv}
 	h.bar = container.NewBorder(nil, nil,
 		container.NewHBox(
 			h.date.btn,
+			filter,
 			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)).withTip(T("10 minut wstecz")),
 			newButton("", theme.MediaSkipPreviousIcon(), step(-time.Minute)).withTip(T("1 minuta wstecz")),
+			prevEv,
 		),
 		container.NewHBox(
 			h.label,
+			nextEv,
 			newButton("", theme.MediaSkipNextIcon(), step(time.Minute)).withTip(T("1 minuta do przodu")),
 			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)).withTip(T("10 minut do przodu")),
 			h.speed,
@@ -155,6 +170,12 @@ func (u *ui) showHistoryPreview(t time.Time, x float32) {
 		return
 	}
 	p.label.Text = t.Format("15:04:05")
+	if e, ok := u.eventAt(t); ok {
+		p.label.Text += " · " + eventName(e.Kind)
+		p.label.Color = eventColor(e.Kind)
+	} else {
+		p.label.Color = palette.text
+	}
 	p.label.Refresh()
 	path := thumbNear(cameraDid(cameraSource(u.camera.Selected)), t, 2)
 	if path != p.path {
@@ -328,6 +349,114 @@ func (u *ui) listSDFiles(name string) {
 		h.tl.Refresh()
 		h.date.refresh()
 	})
+	if err == nil && len(cameraEvents(name)) > 0 {
+		u.loadHistoryEvents(name)
+	}
+}
+
+// loadHistoryEvents reads the events of the days on the SD card (~0.15 s a day; the past
+// days only once, they are kept), today first.
+func (u *ui) loadHistoryEvents(name string) {
+	did := cameraDid(cameraSource(name))
+	oldest, _, ok := miss.RecordingsSpan(did)
+	if !ok {
+		return
+	}
+	first := dayStart(time.Unix(oldest, 0))
+	for day := dayStart(time.Now()); !day.Before(first); day = day.AddDate(0, 0, -1) {
+		if evStore.complete(did, day) {
+			continue
+		}
+		if !u.hist.on || name != u.camera.Selected {
+			break
+		}
+		list, err := readDayEvents(name, day)
+		histDebug("SD card events of %s: %d, err %v", day.Format("2006-01-02"), len(list), err)
+		if err != nil {
+			break
+		}
+		fyne.Do(u.hist.tl.Refresh)
+	}
+	evStore.save()
+}
+
+// historyEvents - the shown events of the selected camera (the filter of the history bar)
+func (u *ui) historyEvents(from, to time.Time) []xccore.Event {
+	list := evStore.between(cameraDid(cameraSource(u.camera.Selected)), from, to)
+	if u.hist.kinds == nil {
+		return list
+	}
+	out := list[:0]
+	for _, e := range list {
+		if u.hist.kinds[e.Kind] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// eventAt - the shown event of the recording with time t
+func (u *ui) eventAt(t time.Time) (xccore.Event, bool) {
+	list := u.historyEvents(t.Add(-time.Minute), t.Add(time.Second))
+	for i := len(list) - 1; i >= 0; i-- {
+		if !list[i].Time.After(t) && t.Sub(list[i].Time) < time.Minute {
+			return list[i], true
+		}
+	}
+	return xccore.Event{}, false
+}
+
+// jumpEvent plays the previous (dir -1) or the next (1) shown event.
+func (u *ui) jumpEvent(dir int) {
+	from := u.historyPosition()
+	if from.IsZero() {
+		from = u.historyTime()
+	}
+	var list []xccore.Event
+	if dir < 0 {
+		list = u.historyEvents(from.AddDate(0, 0, -31), from.Add(-5*time.Second))
+		if len(list) > 0 {
+			u.playHistory(list[len(list)-1].Time)
+			return
+		}
+	} else {
+		list = u.historyEvents(from.Add(5*time.Second), time.Now())
+		if len(list) > 0 {
+			u.playHistory(list[0].Time)
+			return
+		}
+	}
+	u.status.SetText(T("Brak kolejnych zdarzeń"))
+}
+
+// showEventFilter - the menu of the event kinds shown on the timeline
+func (u *ui) showEventFilter(b fyne.CanvasObject) {
+	h := &u.hist
+	all := fyne.NewMenuItem(T("Wszystkie zdarzenia"), func() {
+		h.kinds = nil
+		h.tl.Refresh()
+	})
+	all.Checked = h.kinds == nil
+	items := []*fyne.MenuItem{all, fyne.NewMenuItemSeparator()}
+	for _, k := range cameraEvents(u.camera.Selected) {
+		k := k
+		it := fyne.NewMenuItem(eventName(k), func() {
+			if h.kinds == nil {
+				h.kinds = map[eventKind]bool{}
+			}
+			h.kinds[k] = !h.kinds[k]
+			h.tl.Refresh()
+		})
+		it.Checked = h.kinds != nil && h.kinds[k]
+		items = append(items, it)
+	}
+	c := fyne.CurrentApp().Driver().CanvasForObject(b)
+	if c == nil {
+		return
+	}
+	pop := widget.NewPopUpMenu(fyne.NewMenu("", items...), c)
+	pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(b)
+	pop.ShowAtPosition(fyne.NewPos(pos.X, max(pos.Y-pop.MinSize().Height-4, 0)))
 }
 
 // historyStatus - status line during playback, updated every second

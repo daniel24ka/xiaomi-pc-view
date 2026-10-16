@@ -35,6 +35,7 @@ import (
 //	GET  /api/xiaomi-cam/points                      camera points 1-3
 //	POST /api/xiaomi-cam/points/goto?point=1         turn to a point (number or name)
 //	POST /api/xiaomi-cam/points/save?point=1&name=auto  save the current position
+//	GET  /api/xiaomi-cam/events?hours=24             camera events (motion, person, car, fence)
 func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	handle := func(path, method string, f func(r *http.Request, name string) (any, error)) {
 		api.HandleFunc("api/xiaomi-cam/"+path, func(w http.ResponseWriter, r *http.Request) {
@@ -291,6 +292,34 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			pointsChanged()
 		}
 		return map[string]any{"point": slot, "name": label}, nil
+	})
+
+	handle("events", "GET", func(r *http.Request, name string) (any, error) {
+		if len(cameraEvents(name)) == 0 {
+			return nil, fmt.Errorf("camera %q reports no events", name)
+		}
+		hours, _ := strconv.Atoi(r.URL.Query().Get("hours"))
+		if hours <= 0 {
+			hours = 24
+		}
+		hours = min(hours, 31*24)
+		from := time.Now().Add(-time.Duration(hours) * time.Hour)
+		// today from the camera (a short session when nobody watches it), older days kept
+		_, err := readDayEvents(name, time.Now())
+		type ev struct {
+			Time string    `json:"time"`
+			Kind eventKind `json:"kind"`
+			Name string    `json:"name"`
+		}
+		out := []ev{}
+		for _, e := range evStore.between(cameraDid(cameraSource(name)), from, time.Now().Add(time.Hour)) {
+			out = append(out, ev{e.Time.Format(time.RFC3339), e.Kind, english[eventNames[e.Kind]]})
+		}
+		res := map[string]any{"camera": name, "events": out}
+		if err != nil {
+			res["warning"] = "today's events not read: " + err.Error()
+		}
+		return res, nil
 	})
 
 	handle("siren", "POST", func(r *http.Request, name string) (any, error) {

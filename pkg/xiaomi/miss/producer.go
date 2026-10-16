@@ -251,13 +251,18 @@ func (p *Producer) Request(cmd uint32, params string, resp uint32, timeout time.
 }
 
 // Command sends a MISS command over this producer's session.
+func (p *Producer) Command(cmd uint32, params string) error {
+	return p.client.Command(cmd, params)
+}
+
 // SDFiles returns the files on the SD card (over this session).
 func (p *Producer) SDFiles(timeout time.Duration) ([]SDFile, error) {
 	return p.client.SDFiles(timeout)
 }
 
-func (p *Producer) Command(cmd uint32, params string) error {
-	return p.client.Command(cmd, params)
+// SDEvents returns the event types of the SD card recordings of a day (over this session).
+func (p *Producer) SDEvents(day string, timeout time.Duration) ([]SDEvent, error) {
+	return p.client.SDEvents(day, timeout)
 }
 
 // TimeToRTP convert time in milliseconds to RTP time

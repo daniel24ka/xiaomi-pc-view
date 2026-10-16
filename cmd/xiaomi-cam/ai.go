@@ -78,6 +78,7 @@ type aiConfig struct {
 	SlackWebhook   string         `json:"slack_webhook,omitempty"`
 	Ntfy           ntfyConfig     `json:"ntfy,omitzero"`
 	Telegram       telegramConfig `json:"telegram,omitzero"`
+	Events         eventsConfig   `json:"events,omitzero"` // actions on camera events (events.go)
 	Tasks          []*aiTask      `json:"tasks"`
 }
 
@@ -186,6 +187,13 @@ func (e *aiEngine) setNotifications(n notifyChannels) error {
 	e.cfg.SlackWebhook = strings.TrimSpace(n.SlackWebhook)
 	e.cfg.Ntfy = n.Ntfy
 	e.cfg.Telegram = n.Telegram
+	e.mu.Unlock()
+	return e.save()
+}
+
+func (e *aiEngine) setEvents(c eventsConfig) error {
+	e.mu.Lock()
+	e.cfg.Events = c
 	e.mu.Unlock()
 	return e.save()
 }

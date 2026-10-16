@@ -333,10 +333,15 @@ func SetProp(name string, p MiotProp, value any) error {
 	}
 	var out []MiotProp
 	if err = json.Unmarshal(res, &out); err == nil && len(out) > 0 && out[0].Code != 0 {
-		return fmt.Errorf("camera returned code %d", out[0].Code)
+		return CodeError(out[0].Code)
 	}
 	return nil
 }
+
+// CodeError - the camera didn't set a property (MIoT code; 1: being applied, confirmed later)
+type CodeError int
+
+func (e CodeError) Error() string { return fmt.Sprintf("camera returned code %d", int(e)) }
 
 // Same reports whether p is the property q (for reading GetProps results).
 func (p MiotProp) Same(q MiotProp) bool { return p.Siid == q.Siid && p.Piid == q.Piid }

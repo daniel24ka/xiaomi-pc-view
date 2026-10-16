@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.25.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.26.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -99,7 +99,8 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   `thumbs.go` one thumbnail per minute (192x108 JPEG, `~/.cache/xiaomi-cam/thumbs/<did>/<unix
   minute>.jpg`, 30 days) saved from the shown picture (`captureThumb`: live = now, history =
   position). Not done: scanning a range for thumbnails (it would use the one camera session).
-  `XC_TLTEST=<dir>` screenshots of the timeline and the preview.
+  `XC_TLTEST=<dir>` screenshots of the timeline and the preview. Event marks come from
+  `evStore` (events.go); the min width is 120 px so the history bar fits the window min.
 - `grid.go` multi-camera grid, `caps.go` hide unsupported features, `pointsui.go`/`presets.go`
   points 1–3, `history.go` SD playback, `recorder.go` MP4 (selected/each/grid),
   `ai.go`/`aiui.go` AI tasks (Claude SDK, OpenAI, own LM Studio/Ollama server, cron),
@@ -119,9 +120,25 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
   answer [cmd LE][size LE][status LE][data] split into ~2 KB messages, 8 bytes per file
   (start u32 LE, duration u8 (0 = 60), motion, saved, deleting). The user's card: ~17,300
   files, 12 days, ~0.5 s. Found via github.com/vickers-rz/go2rtc-c700-cloud-relay (docs
-  only, no license: don't copy code). Command 11 (event types) not done. `cmd/xc-rdtprobe`
-  lists the files with its own session (stop the app first). Never probe unknown MISS
-  command codes blindly: 0x116 with binary data made the motor answer "motorReach".
+  only, no license: don't copy code). `cmd/xc-rdtprobe` lists the files and today's events
+  with its own session (stop the app first). Never probe unknown MISS command codes
+  blindly: 0x116 with binary data made the motor answer "motorReach".
+- Events (v1.26.0): RDT cmd 11 = [11][len][JSON {"mac":"F1F2F3F4F5F6","time":"YYYYMMDD",
+  "channel":"0"} padded to 4] (time "" answers nothing: ask per day); answer pages (same
+  12-byte header) [?][total][index][32 B] + 32 B per event (start u64 LE, type u32 LE),
+  last page index >= total; ~0.03 s a day. Codes (Mi Home plugin): 0 motion, 1 person, 2/3
+  cat/dog, 4/5 face, 7 baby cry, 8 AI, 17 person near car, 19 car, 20/21 fence in/out (CW400
+  hlc8: 12/14 car). Detection MIoT: 5.1 on, 5.2 interval min, 5.3 sensitivity 1-3, 13.4
+  person, 13.5 motion, 13.1 JSON list [{id 1 type 2 car | id 2 type 1 fence, switch, event
+  bits 1/2, pos, left_top/right_bottom in 640x360 (0 on fw >= _0060)}] (write one entry, code
+  1 = being applied), 6.20 JSON which events start the sound+light alarm, 2.8/2.10 motion/
+  person tracking, 10.1 patrol (car/fence exclude patrol and tracking). 2.7 recording on
+  Hualai: 0 always, 1 motion, 2 off (spec names wrong). The user's camera had detection off
+  (5.1/13.4/13.5 false; restored after tests). Cloud: the camera API host
+  `{region}.business.smartcamera.api.io.mi.com` takes GET with RC4 params signed with the
+  whole path (`Cloud.Get`, xmtool `camera:/path`); `/common/app/get/eventlist` is empty
+  without a subscription (`/miot/camera/app/v1/vip/status`: NONE_VIP, free alerts ended
+  2025-03), `/user/get_user_device_data` has no camera events either.
 - SD playback (0x10D/0x10E): the answer is `{"id","status":"filefound|filenotfound","starttime",
   "duration"}`; files are ~60 s (60–62, sometimes shorter), one after another; the camera
   answers requests one after another (~0.2–0.3 s each, remote). `miss.StartPlayback` tries
@@ -143,7 +160,12 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-16: **v1.25.0 released** (SD card file list over RDT: calendar days, full timeline,
+State 2026-10-16: **v1.26.0 released** (camera events: `events.go`/`eventsui.go`, core
+  `internal/xccore/events.go`; timeline marks, filter, prev/next event, ☰ Event detection,
+  ☰ Events list, Settings → Events watcher with actions (short RDT session without video
+  when nobody watches, ~0.5 s), `list_events` MCP / `GET events`; `XC_EVENTTEST=<dir>`).
+  Not done: drawing the car area / virtual fence (Mi Home does it, needs PTZ calibration),
+  events on Android. **v1.25.0** (SD card file list over RDT: calendar days, full timeline,
   see Camera protocol facts). **v1.24.3** (own `datepicker.go` replaces Fyne DateEntry: above the
   button, app language; `XC_DATETEST`). **v1.24.2** (timeline: drag moves the range, click picks; `browsed` stops
   following the playback). **v1.24.1** (fix: history showed live video – `streams.Producer.SetSource`

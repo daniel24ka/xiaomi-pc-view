@@ -429,6 +429,28 @@ func CloudRequest(rawURL, apiURL, params string) ([]byte, error) {
 	return cloudUserRequest(u.User, apiURL, params)
 }
 
+// CloudGet calls a GET API of the Mi Home camera host (business.smartcamera, e.g.
+// "/common/app/get/eventlist") in the region of the xiaomi:// source URL.
+func CloudGet(rawURL, apiURL, params string) ([]byte, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.User == nil {
+		return nil, errors.New("xiaomi: source without account")
+	}
+	cloud, err := getCloud(u.User.Username())
+	if err != nil {
+		return nil, err
+	}
+	host := "https://business.smartcamera.api.io.mi.com"
+	switch region, _ := u.User.Password(); region {
+	case "de", "i2", "ru", "sg", "us":
+		host = "https://" + region + ".business.smartcamera.api.io.mi.com"
+	}
+	return cloud.Get(host+apiURL, params)
+}
+
 // MissURL resolves a xiaomi:// source to the camera session URL (keys from the cloud).
 func MissURL(src string) (string, error) {
 	u, err := url.Parse(src)
@@ -436,6 +458,26 @@ func MissURL(src string) (string, error) {
 		return "", err
 	}
 	return getCameraURL(u)
+}
+
+// SDEventLister is a source that can list the event types of the SD card recordings.
+type SDEventLister interface {
+	SDEvents(day string, timeout time.Duration) ([]miss.SDEvent, error)
+}
+
+// SDEvents lists the event types of the SD card recordings of a day ("20261016") of the
+// camera behind stream `name`, over the session the stream already holds.
+func SDEvents(name, day string, timeout time.Duration) ([]miss.SDEvent, error) {
+	stream := streams.Get(name)
+	if stream == nil {
+		return nil, fmt.Errorf("xiaomi: SD events: no stream %q", name)
+	}
+	for _, conn := range stream.Conns() {
+		if l, ok := conn.(SDEventLister); ok {
+			return l.SDEvents(day, timeout)
+		}
+	}
+	return nil, errors.New("xiaomi: SD events: camera is not connected")
 }
 
 // SDFileLister is a source that can list the files on the camera's SD card.

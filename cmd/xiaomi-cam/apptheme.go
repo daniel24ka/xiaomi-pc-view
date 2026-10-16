@@ -213,7 +213,7 @@ func init() {
 	for _, name := range themeIcons {
 		lucide(name)
 	}
-	for _, name := range []string{"cctv", "moon", "lightbulb", "move", "video"} {
+	for _, name := range []string{"cctv", "moon", "lightbulb", "move", "video", "bell", "scan-eye", "filter", "step-back", "step-forward"} {
 		lucide(name)
 	}
 }

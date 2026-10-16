@@ -49,6 +49,22 @@ see [Android](#android).
   to play from there, the mouse wheel zooms it (15 min – 24 h). Hovering shows the time and a
   **thumbnail** of that minute: thumbnails are kept (once a minute, ~5 KB) from the live
   picture and from the history you watched, for 30 days in `~/.cache/xiaomi-cam/thumbs`.
+- **Camera events** (cameras with AI detection, e.g. the CW700S / CW400 Pro): motion, person,
+  car, a person near a car, entering and leaving the virtual fence.
+  - ☰ → **Event detection**: turn detection on, sensitivity, time between alarms, the event
+    kinds, which events start the **sound and light alarm** (spotlight + siren), and motion /
+    person tracking. Changes go to the camera right away, like in Mi Home. The car area and
+    the virtual fence are drawn in Mi Home.
+  - The **timeline** marks the recordings with an event in the colors of Mi Home; the
+    preview names the event; buttons jump to the **previous / next event**, and a filter
+    shows only chosen kinds. The camera saves the kind with its SD card recordings, and the
+    app reads them over the RDT channel (command 11, ~0.03 s a day, past days only once).
+  - ☰ → **Events**: the latest events of all cameras; a click plays the recording.
+  - Settings → **Events**: check the cameras every 1–30 minutes and react to the chosen
+    kinds: desktop notification, e-mail / ntfy / Telegram with a picture, Slack, save a
+    snapshot, record a video. While you watch the camera this uses the open connection;
+    otherwise a short connection without video (~0.5 s). It needs no Xiaomi cloud
+    subscription: without one the cloud keeps no alerts.
 - **Spotlight** with brightness, and **siren** (light bulb button on the picture, together
   with the night mode).
 - **Night mode** (infrared): auto infrared, auto / smart full color (with the spotlight),
@@ -197,7 +213,7 @@ with a debug key: Android asks to confirm the install.
 - The video stops when the app is in the background (the camera takes one session at a
   time, so the PC app can connect meanwhile).
 
-Not in the Android app: the siren, SD card history, recording, AI tasks, notifications,
+Not in the Android app: the siren, SD card history, camera events, recording, AI tasks, notifications,
 the MCP server and the HTTP API.
 
 Build: `make apk VERSION=vX.Y.Z` (needs JDK 17, Android SDK + NDK and gomobile, see
@@ -310,6 +326,7 @@ default is the first camera.
 | `start_recording` | `duration_seconds` (optional, auto stop), `mode` (`selected`/`each`/`grid`) | starts MP4 recording(s), returns the paths |
 | `stop_recording` | – | finishes all recordings, returns the paths and durations |
 | `recording_status` | – | recording or not, file path, elapsed seconds |
+| `list_events` | `hours` (default 24) | camera events (motion, person, car, a person near a car, fence) with their times |
 
 Example prompts: *"Show me what the camera sees"*, *"Turn the camera left and zoom in on the
 gate"*, *"Is there a car parked in front of the house?"*.
@@ -336,6 +353,7 @@ camera. Errors return a non-200 status with a text message.
 | GET | `/api/xiaomi-cam/points` | – | `[{"point", "defined", "name"}]` |
 | POST | `/api/xiaomi-cam/points/goto` | `point` (1–3 or name) | `{"point", "name"}` after the camera stops |
 | POST | `/api/xiaomi-cam/points/save` | `point` (1–3), `name` | `{"point", "name"}` |
+| GET | `/api/xiaomi-cam/events` | `hours` (default 24, max 744) | `{"camera", "events": [{"time", "kind", "name"}]}` |
 
 ```sh
 # snapshot
@@ -379,6 +397,8 @@ Other controls:
 | Zoom | MISS command `530` `{"value": zoom×10}`, found in the camera's Mi Home plugin |
 | Spotlight, siren | Xiaomi cloud (MIoT properties) |
 | History | MISS `PLAYBACK_REQ` `0x10D` |
+| SD card files, events | RDT (CS2 channel 1): command `6` file list, `11` event types of a day |
+| Event detection | MIoT `5.1`–`5.3`, `13.1` (car area, virtual fence), `13.4`, `13.5`, `6.20` (sound and light alarm) |
 
 For history, the camera needs the exact start of a recorded file (files are about 61 s). The
 app searches for it second by second and plays from the start of the file that contains the

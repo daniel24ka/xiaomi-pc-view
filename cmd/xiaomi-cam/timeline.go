@@ -3,6 +3,8 @@ package main
 import (
 	"time"
 
+	"github.com/AlexxIT/go2rtc/internal/xccore"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/driver/desktop"
@@ -11,7 +13,7 @@ import (
 )
 
 // timeline - the history time axis: a scale (hours with labels, minor ticks), the known
-// recorded files, the playback position; the mouse shows the time under it (with a
+// recorded files, the events (colored by kind), the playback position; the mouse shows the time under it (with a
 // thumbnail, see onHover), a click picks the time, a drag (or a horizontal scroll) moves the
 // shown range, the wheel zooms (15 min – 24 h).
 // It draws a few dozen rectangles and texts, rebuilt only when the view changes.
@@ -24,6 +26,7 @@ type timeline struct {
 	hover  time.Time     // the time under the mouse (zero: none)
 
 	files    func(from, to time.Time) [][2]time.Time // known recordings in the range
+	events   func(from, to time.Time) []xccore.Event // known events in the range (events.go)
 	onPick   func(t time.Time)                       // a time chosen (click, drag released)
 	onHover  func(t time.Time, x float32)            // the mouse over the axis (zero t: left)
 	dragging bool
@@ -170,7 +173,7 @@ func (t *timeline) tickSteps() (minor, major time.Duration) {
 	return time.Hour, 6 * time.Hour
 }
 
-func (t *timeline) MinSize() fyne.Size { return fyne.NewSize(200, tlHeight) }
+func (t *timeline) MinSize() fyne.Size { return fyne.NewSize(120, tlHeight) }
 
 func (t *timeline) CreateRenderer() fyne.WidgetRenderer {
 	r := &timelineRenderer{t: t}
@@ -220,6 +223,23 @@ func (r *timelineRenderer) rebuild(size fyne.Size) {
 				seg.Resize(fyne.NewSize(x1-x0, barH-6))
 				r.objs = append(r.objs, seg)
 			}
+		}
+	}
+	// the events: a mark per recording with an event (the file of ~1 min), at least 2 px
+	if t.events != nil {
+		lastX := float32(-10)
+		for _, e := range t.events(t.from().Add(-time.Minute), t.from().Add(t.span)) {
+			x0, x1 := t.xAt(e.Time), t.xAt(e.Time.Add(time.Minute))
+			x0, x1 = max(x0, 0), min(max(x1, x0+2), size.Width)
+			if x1 <= x0 || x1 <= lastX { // hidden under the previous mark
+				continue
+			}
+			x0 = max(x0, lastX)
+			lastX = x1
+			m := canvas.NewRectangle(eventColor(e.Kind))
+			m.Move(fyne.NewPos(x0, barY))
+			m.Resize(fyne.NewSize(x1-x0, barH))
+			r.objs = append(r.objs, m)
 		}
 	}
 	// the scale

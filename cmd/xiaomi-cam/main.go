@@ -198,6 +198,7 @@ func main() {
 	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)
+	evStore.load()   // camera events read before (events.go)
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
 	a.Settings().SetTheme(appTheme{})
@@ -272,6 +273,7 @@ func main() {
 	if len(cameraNames()) == 0 && !startHidden {
 		showChooseCamera(u.win, u.selectCamera)
 	}
+	u.startEventWatcher()
 	if devHook != nil {
 		go devHook(u) // only in builds with -tags devtest
 	}
@@ -282,6 +284,7 @@ func main() {
 	a.Run()
 	startDebug("UI ended")
 	saveRecordings()
+	evStore.save()
 	u.player.stop()
 }
 

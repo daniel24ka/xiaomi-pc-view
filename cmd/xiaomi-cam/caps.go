@@ -42,4 +42,5 @@ func (u *ui) applyCaps() {
 	show(c.NightMode, u.capNight)
 	show(c.Light || c.Siren || c.NightMode, u.camControls)
 	show(c.History, u.hist.button)
+	show(len(cameraEvents(u.camera.Selected)) > 0, u.hist.eventBtns...)
 }

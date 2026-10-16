@@ -469,6 +469,59 @@ func (c *Cloud) Request(baseURL, apiURL, params string, headers map[string]strin
 	return res1.Result, nil
 }
 
+// Get calls a GET API of another Mi Home host (e.g. the camera API
+// https://de.business.smartcamera.api.io.mi.com/common/app/get/eventlist) with the same
+// encryption as Request (signed with the whole path).
+// It returns the whole decrypted answer (its fields differ between the hosts).
+func (c *Cloud) Get(rawURL, params string) ([]byte, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	form := url.Values{"data": {params}}
+
+	nonce := genNonce()
+	signedNonce := genSignedNonce(c.ssecurity, nonce)
+	path := u.Path
+
+	form.Set("rc4_hash__", genSignature64("GET", path, form, signedNonce))
+	for _, v := range form {
+		ciphertext, err := crypt(signedNonce, []byte(v[0]))
+		if err != nil {
+			return nil, err
+		}
+		v[0] = base64.StdEncoding.EncodeToString(ciphertext)
+	}
+	form.Set("signature", genSignature64("GET", path, form, signedNonce))
+	form.Set("_nonce", base64.StdEncoding.EncodeToString(nonce))
+	form.Set("ssecurity", base64.StdEncoding.EncodeToString(c.ssecurity))
+
+	req, err := http.NewRequest("GET", rawURL+"?"+form.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Cookie", c.cookies)
+
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("xiaomi: %s %.200s", res.Status, body)
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("xiaomi: %.200s", body)
+	}
+	return crypt(signedNonce, ciphertext)
+}
+
 func readLoginResponse(rc io.ReadCloser, v any) ([]byte, error) {
 	defer rc.Close()
 
