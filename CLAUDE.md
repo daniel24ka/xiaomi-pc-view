@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.27.4 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.27.5 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -162,7 +162,7 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-16: **v1.27.4 released** (fix: the window hung ("not responding") on show from the tray: glfw Restore spins forever waiting for a VisibilityNotify, now `wmRestore` (XMapWindow + _NET_ACTIVE_WINDOW); `vblank_mode=0` (SwapBuffers blocked seconds while minimized under XWayland); hang watchdog `hang.go` writes goroutine stacks to ~/.cache/xiaomi-cam/hang-*.txt when the UI doesn't answer 5 s; `XC_RESTORETEST=<n>`, `XC_HANGTEST`). **v1.27.3** (HLS source: starts at the last two segments and paces packets by timestamps, `mpegts.Producer.Pace`; before, the whole playlist played fast at the start and each 6 s segment came in a burst). **v1.27.2** (fix: late frames of the grid tiles after the UI stopped
+State 2026-10-16: **v1.27.5 released** (fix: grid recording said "Saved" but no file: ffmpeg opens the inputs one after another, ~22 s for 9 cameras with the default probe, and creates the file only then; stop before that killed it. Now short probe (~7 s), wall clock timestamps + fps=25, status "Connecting to the cameras…" until `recording.writing()`, errors with ffmpeg stderr tail instead of "Saved"). **v1.27.4** (fix: the window hung ("not responding") on show from the tray: glfw Restore spins forever waiting for a VisibilityNotify, now `wmRestore` (XMapWindow + _NET_ACTIVE_WINDOW); `vblank_mode=0` (SwapBuffers blocked seconds while minimized under XWayland); hang watchdog `hang.go` writes goroutine stacks to ~/.cache/xiaomi-cam/hang-*.txt when the UI doesn't answer 5 s; `XC_RESTORETEST=<n>`, `XC_HANGTEST`). **v1.27.3** (HLS source: starts at the last two segments and paces packets by timestamps, `mpegts.Producer.Pace`; before, the whole playlist played fast at the start and each 6 s segment came in a burst). **v1.27.2** (fix: late frames of the grid tiles after the UI stopped
   called fyne.Do: `appStopped`; 4 Polish test cameras added). **v1.27.1** (the window starts with the grid: Settings → General →
   View at start, prefs `start_view` ""/"last", `last_camera`; fix: leaving the grid dropped
   the area editor layer, now `videoAreaObjects`). **v1.27.0** (`areaeditor.go`: the car area / virtual fence drawn on
