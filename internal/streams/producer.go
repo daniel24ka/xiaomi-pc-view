@@ -46,11 +46,20 @@ func NewProducer(source string) *Producer {
 	return &Producer{url: source}
 }
 
+// SetSource changes the source URL. A running connection with another URL is stopped, so
+// the next consumer dials the new source: the consumer of a stopped player is removed
+// asynchronously and a new one could otherwise join the old connection (e.g. history
+// showed live video instead of the SD card recording).
 func (p *Producer) SetSource(s string) {
-	if p.template == "" {
-		p.url = s
-	} else {
-		p.url = strings.Replace(p.template, SourceTemplate, s, 1)
+	if p.template != "" {
+		s = strings.Replace(p.template, SourceTemplate, s, 1)
+	}
+	p.mu.Lock()
+	changed := p.url != s
+	p.url = s
+	p.mu.Unlock()
+	if changed {
+		p.stop()
 	}
 }
 
