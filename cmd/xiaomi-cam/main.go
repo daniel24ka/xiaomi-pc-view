@@ -271,8 +271,8 @@ func main() {
 	if !startHidden {
 		u.show()
 	}
-	if a.Preferences().String(prefLayout) == "grid" {
-		u.setGrid(true)
+	if u.startInGrid() {
+		u.setGrid(true) // with 2 or more cameras
 	}
 	if len(cameraNames()) == 0 && !startHidden {
 		showChooseCamera(u.win, u.selectCamera)
@@ -346,6 +346,9 @@ func (u *ui) build() {
 	}
 
 	u.camera = newSelect(cameraNames(), func(name string) {
+		if !u.syncing {
+			u.app.Preferences().SetString(prefLastCamera, name)
+		}
 		if !u.syncing && u.grid {
 			u.selectTile(name)
 			return
@@ -548,7 +551,8 @@ func (u *ui) build() {
 		container.New(layout.NewCustomPaddedLayout(0, 0, 0, 10), // 10 px from right edge, centered
 			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
-	u.videoArea = container.NewStack(u.video, u.pictureControls, u.buildAreaEditor(), u.exitView)
+	u.buildAreaEditor()
+	u.videoArea = container.NewStack(u.videoAreaObjects(u.video)...)
 	u.updateGridButton()
 	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, u.videoArea))
 
@@ -598,8 +602,12 @@ func (u *ui) build() {
 	})
 
 	if names := cameraNames(); len(names) > 0 {
+		first := names[0]
+		if last := u.app.Preferences().String(prefLastCamera); cameraExists(last) {
+			first = last
+		}
 		u.syncing = true
-		u.camera.SetSelected(names[0])
+		u.camera.SetSelected(first)
 		u.syncing = false
 		go u.loadCameraState()
 		u.updateCaps()

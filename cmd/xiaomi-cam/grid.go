@@ -15,7 +15,25 @@ import (
 // Grid view: all cameras at once. Click a tile to select the camera (all controls work on
 // the selected one), double click to open it alone. Sound plays from the selected camera.
 
-const prefLayout = "layout" // "grid" or "" (one camera)
+const (
+	prefLayout     = "layout"      // "grid" or "" (one camera): the last view
+	prefStartView  = "start_view"  // "" - the grid of all cameras, "last" - the last view
+	prefLastCamera = "last_camera" // the selected camera (shown in the "last" view, chosen in the grid)
+)
+
+// startInGrid - the window starts with the grid (Settings → General → View at start).
+func (u *ui) startInGrid() bool {
+	if u.app.Preferences().String(prefStartView) == "last" {
+		return u.app.Preferences().String(prefLayout) == "grid"
+	}
+	return true
+}
+
+// videoAreaObjects - the layers of the video area: the picture (one camera or the grid),
+// the controls on it, the area editor, the exit button of video-only mode.
+func (u *ui) videoAreaObjects(picture fyne.CanvasObject) []fyne.CanvasObject {
+	return []fyne.CanvasObject{picture, u.pictureControls, u.areaBox, u.exitView}
+}
 
 type tile struct {
 	name   string
@@ -115,7 +133,7 @@ func (u *ui) setGrid(on bool) {
 	if !on {
 		u.stopTiles()
 		u.tiles = nil
-		u.videoArea.Objects = []fyne.CanvasObject{u.video, u.pictureControls, u.exitView}
+		u.videoArea.Objects = u.videoAreaObjects(u.video)
 		u.videoArea.Refresh()
 		u.restart()
 		return
@@ -130,7 +148,7 @@ func (u *ui) setGrid(on bool) {
 	}
 	cols := int(math.Ceil(math.Sqrt(float64(len(u.tiles)))))
 	grid := container.New(&insetLayout{4}, container.NewGridWithColumns(cols, objs...))
-	u.videoArea.Objects = []fyne.CanvasObject{grid, u.pictureControls, u.exitView}
+	u.videoArea.Objects = u.videoAreaObjects(grid)
 	u.videoArea.Refresh()
 	u.highlightTile()
 	if u.visible {
@@ -146,6 +164,7 @@ func (u *ui) setGrid(on bool) {
 func (u *ui) selectTile(name string) {
 	prev, _ := u.current.Load().(string)
 	if name != prev {
+		u.app.Preferences().SetString(prefLastCamera, name)
 		u.syncing = true
 		u.camera.SetSelected(name)
 		u.syncing = false

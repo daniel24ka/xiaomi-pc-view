@@ -87,7 +87,8 @@ see [Android](#android).
 - **Several cameras**: switch between one camera and a **grid** of all cameras (button in the
   top bar, shown with 2+ cameras). In the grid click a camera to select it – all controls
   (pan/tilt, zoom, points, spotlight, quality, snapshot, recording, sound) work on the
-  selected one; double click opens it alone.
+  selected one; double click opens it alone. The app starts with the grid (Settings → General
+  → View at start: the grid or the last view); the last selected camera stays selected.
 - Full screen mode.
 - **Modern dark look**: graphite theme with one amber accent, the Geist font and Lucide icons.
   The picture fills the window. Pan/tilt, camera points, zoom, light and sound lie on the

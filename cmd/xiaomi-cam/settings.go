@@ -97,8 +97,29 @@ func (u *ui) showSettings() {
 	}).withTip(T("Aplikacja startuje po zalogowaniu i czeka w zasobniku – zadania AI i powiadomienia działają od razu"))
 	autostart.SetChecked(autostartEnabled())
 
+	startViews := []struct{ name, id string }{
+		{"Siatka wszystkich kamer", ""},
+		{"Ostatni widok (kamera albo siatka)", "last"},
+	}
+	var viewNames []string
+	for _, v := range startViews {
+		viewNames = append(viewNames, T(v.name))
+	}
+	startView := newSelect(viewNames, nil)
+	startView.SetSelectedIndex(0)
+	for i, v := range startViews {
+		if v.id == u.app.Preferences().String(prefStartView) {
+			startView.SetSelectedIndex(i)
+		}
+	}
+	startView.OnChanged = func(string) {
+		u.app.Preferences().SetString(prefStartView, startViews[max(startView.SelectedIndex(), 0)].id)
+	}
+	startView.tip = T("Co pokazuje okno po uruchomieniu aplikacji (siatka – przy 2 i więcej kamerach)")
+
 	form := widget.NewForm(
 		widget.NewFormItem(T("Start"), autostart),
+		widget.NewFormItem(T("Widok na starcie"), startView),
 		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),
