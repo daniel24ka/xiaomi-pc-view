@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.27.1 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.27.2 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -160,7 +160,8 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-16: **v1.27.1 released** (the window starts with the grid: Settings → General →
+State 2026-10-16: **v1.27.2 released** (fix: late frames of the grid tiles after the UI stopped
+  called fyne.Do: `appStopped`; 4 Polish test cameras added). **v1.27.1** (the window starts with the grid: Settings → General →
   View at start, prefs `start_view` ""/"last", `last_camera`; fix: leaving the grid dropped
   the area editor layer, now `videoAreaObjects`). **v1.27.0** (`areaeditor.go`: the car area / virtual fence drawn on
   the live picture, saved to 13.1 like the Mi Home FencingArea page (switch on, pos as read,
@@ -224,7 +225,10 @@ with the anchored pkill (with `( --tray)?`), relaunch with `--tray`. The test wi
 the focus: hooks disable keyboard shortcuts. Never take full-screen screenshots where the
 user's windows are (a password manager was captured once); crop to the test window only.
 Point 1 of the camera is named "Home" by the user. Public test cameras (WhatsUpCams HLS):
-Pula, Dubrownik – Stradun, Pag – plaża Gajac, Bale – Istria.
+Pula, Dubrownik – Stradun, Pag – plaża Gajac, Bale – Istria; Polish (webcamera.pl, 1080p H.264
+HLS, no token; the page has the URL ROT13-coded in `data-src`): Kraków – Wawel, Gdańsk – Stare
+Miasto, Sopot – Molo, Zakopane – Krupówki (9 cameras: grid 3x3, ~2 cores of 16). More found:
+Kraków Zakole Wisły (krakow2), Kasprowy Wierch, Białystok, Zamość, Łeba, Karpacz.
 
 ## Open ideas / not done
 

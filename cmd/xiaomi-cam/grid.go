@@ -70,6 +70,9 @@ func newTile(u *ui, name string) *tile {
 	t.view.onSecondary = u.video.onSecondary
 	t.view.onMouseMove = u.video.onMouseMove
 	t.player.onFrame = func(img *image.RGBA, gen int64) {
+		if appStopped.Load() {
+			return
+		}
 		fyne.Do(func() {
 			if gen == t.player.gen.Load() {
 				t.view.setFrame(img)

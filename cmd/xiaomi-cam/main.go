@@ -249,7 +249,11 @@ func main() {
 		}
 	})
 	a.Lifecycle().SetOnStopped(func() {
-		u.player.stop() // no frames to the UI after it stopped
+		appStopped.Store(true) // late frames of the players don't go to the UI
+		u.player.stop()
+		for _, t := range u.tiles {
+			t.player.stop()
+		}
 		stopAllRecordings()
 	})
 
@@ -292,6 +296,9 @@ func main() {
 	u.player.stop()
 }
 
+// appStopped - the UI has ended (Lifecycle OnStopped): fyne.Do must not be called any more
+var appStopped atomic.Bool
+
 func (u *ui) build() {
 	u.video = newVideoView()
 	u.video.onDoubleTap = u.toggleFullScreen
@@ -318,6 +325,9 @@ func (u *ui) build() {
 	u.status = newStatusLabel()
 	u.activity = newSpinner(spinnerFrames)
 	u.player.onFrame = func(img *image.RGBA, gen int64) {
+		if appStopped.Load() {
+			return
+		}
 		fyne.Do(func() {
 			if gen != u.player.gen.Load() {
 				return // late frame of a stopped playback
