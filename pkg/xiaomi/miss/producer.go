@@ -251,6 +251,11 @@ func (p *Producer) Request(cmd uint32, params string, resp uint32, timeout time.
 }
 
 // Command sends a MISS command over this producer's session.
+// SDFiles returns the files on the SD card (over this session).
+func (p *Producer) SDFiles(timeout time.Duration) ([]SDFile, error) {
+	return p.client.SDFiles(timeout)
+}
+
 func (p *Producer) Command(cmd uint32, params string) error {
 	return p.client.Command(cmd, params)
 }

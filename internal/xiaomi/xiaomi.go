@@ -17,6 +17,7 @@ import (
 	"github.com/AlexxIT/go2rtc/pkg/core"
 	"github.com/AlexxIT/go2rtc/pkg/xiaomi"
 	"github.com/AlexxIT/go2rtc/pkg/xiaomi/crypto"
+	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 )
 
 func Init() {
@@ -426,4 +427,33 @@ func CloudRequest(rawURL, apiURL, params string) ([]byte, error) {
 		return nil, errors.New("xiaomi: source without account")
 	}
 	return cloudUserRequest(u.User, apiURL, params)
+}
+
+// MissURL resolves a xiaomi:// source to the camera session URL (keys from the cloud).
+func MissURL(src string) (string, error) {
+	u, err := url.Parse(src)
+	if err != nil {
+		return "", err
+	}
+	return getCameraURL(u)
+}
+
+// SDFileLister is a source that can list the files on the camera's SD card.
+type SDFileLister interface {
+	SDFiles(timeout time.Duration) ([]miss.SDFile, error)
+}
+
+// SDFiles lists the SD card files of the camera behind stream `name`, over the session the
+// stream already holds.
+func SDFiles(name string, timeout time.Duration) ([]miss.SDFile, error) {
+	stream := streams.Get(name)
+	if stream == nil {
+		return nil, fmt.Errorf("xiaomi: SD files: no stream %q", name)
+	}
+	for _, conn := range stream.Conns() {
+		if l, ok := conn.(SDFileLister); ok {
+			return l.SDFiles(timeout)
+		}
+	}
+	return nil, errors.New("xiaomi: SD files: camera is not connected")
 }

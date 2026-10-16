@@ -28,6 +28,7 @@ import (
 	"github.com/AlexxIT/go2rtc/internal/streams"
 	"github.com/AlexxIT/go2rtc/internal/tapo"
 	"github.com/AlexxIT/go2rtc/internal/xiaomi"
+	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 )
 
 const (
@@ -227,6 +228,15 @@ func Motor(name string, op int) error {
 		return ErrNotXiaomi
 	}
 	return xiaomi.Motor(name, op)
+}
+
+// SDFiles lists the files on the SD card of a Xiaomi camera over its open session (live video
+// or playback) and adds them to the recordings cache (miss.RecordingsBetween).
+func SDFiles(name string) ([]miss.SDFile, error) {
+	if CameraSource(name) == "" {
+		return nil, ErrNotXiaomi
+	}
+	return xiaomi.SDFiles(name, 10*time.Second)
 }
 
 // CameraZoom sets the optical/sensor zoom of the camera (1.0-9.0), like the Mi Home plugin:

@@ -1,6 +1,9 @@
 package miss
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestRecordingCandidates(t *testing.T) {
 	r := &recordingCache{files: map[string][]recording{}}
@@ -33,5 +36,35 @@ func TestRecordingCandidates(t *testing.T) {
 	}
 	if len(p)+len(c) != playbackSearch {
 		t.Fatalf("%d candidates", len(p)+len(c))
+	}
+}
+
+func TestParseSDFiles(t *testing.T) {
+	b := []byte{
+		0x10, 0, 0, 0, 0, 1, 0, 0, // start 16, duration 0 = 60, motion
+		0x08, 0, 0, 0, 30, 0, 1, 0, // start 8, 30 s, saved
+		0x20, 0, 0, 0, 60, 0, 0, 1, // being deleted: skipped
+		0, 0, 0, 0, 60, 0, 0, 0, // start 0: skipped
+	}
+	got := parseSDFiles(b)
+	want := []SDFile{{8, 30, false, true}, {16, 60, true, false}}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestRecordingsMerge(t *testing.T) {
+	r := &recordingCache{files: map[string][]recording{}}
+	for _, s := range []int64{100, 500, 900} {
+		r.add("cam", recording{s, 60})
+	}
+	// the SD card list covers 400..700: 500 is gone (overwritten), 100 and 900 stay
+	r.merge("cam", []recording{{400, 60}, {460, 60}, {700, 60}})
+	var starts []int64
+	for _, f := range r.files["cam"] {
+		starts = append(starts, f.start)
+	}
+	if fmt.Sprint(starts) != "[100 400 460 700 900]" {
+		t.Fatalf("got %v", starts)
 	}
 }

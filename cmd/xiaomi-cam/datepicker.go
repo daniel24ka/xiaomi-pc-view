@@ -14,11 +14,15 @@ import (
 // datePicker - a button with the date and a month calendar in the app language (Fyne's
 // DateEntry uses the system locale and always opens below itself: off the window in the
 // bottom bar). The calendar opens above the button if there is room, inside the window;
-// future days are disabled, the week starts on Monday.
+// only the days with recordings can be picked (all past days while they are not known),
+// the week starts on Monday.
 type datePicker struct {
 	btn       *ptrButton
 	date      time.Time
 	onChanged func(time.Time) // a day picked by the user (not called by setDate)
+	// recorded returns the days of the month with recordings and the oldest recording
+	// (nil: not known, all past days can be picked)
+	recorded func(month time.Time) (days map[int]bool, oldest time.Time)
 
 	pop   *widget.PopUp
 	body  *fyne.Container
@@ -75,11 +79,19 @@ func (p *datePicker) place() {
 func (p *datePicker) fill() {
 	now := time.Now()
 	next := p.month.AddDate(0, 1, 0)
+	var rec map[int]bool
+	var oldest time.Time
+	if p.recorded != nil {
+		rec, oldest = p.recorded(p.month)
+	}
 	prevB := newButton("", theme.NavigateBackIcon(), func() { p.show(p.month.AddDate(0, -1, 0)) }).
 		withTip(T("Poprzedni miesiąc"))
 	nextB := newButton("", theme.NavigateNextIcon(), func() { p.show(next) }).withTip(T("Następny miesiąc"))
 	if next.After(now) {
 		nextB.Disable()
+	}
+	if rec != nil && !oldest.Before(p.month) {
+		prevB.Disable() // no recordings before this month
 	}
 	prevB.Importance, nextB.Importance = widget.LowImportance, widget.LowImportance
 	title := widget.NewLabelWithStyle(fmt.Sprintf("%s %d", T(monthNames[p.month.Month()-1]), p.month.Year()),
@@ -104,7 +116,7 @@ func (p *datePicker) fill() {
 		default:
 			b.Importance = widget.LowImportance
 		}
-		if d.After(now) {
+		if d.After(now) || rec != nil && !rec[d.Day()] && !sameDay(d, now) {
 			b.Disable()
 		}
 		days.Add(b)
@@ -113,6 +125,14 @@ func (p *datePicker) fill() {
 	today.Importance = widget.LowImportance
 	p.body.Objects = []fyne.CanvasObject{header, days, container.NewCenter(today)}
 	p.body.Refresh()
+}
+
+// refresh redraws the open calendar (e.g. the recordings became known).
+func (p *datePicker) refresh() {
+	if p.pop != nil && p.pop.Visible() {
+		p.fill()
+		p.place()
+	}
 }
 
 func (p *datePicker) show(month time.Time) {

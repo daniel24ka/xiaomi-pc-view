@@ -94,6 +94,7 @@ func NewClient(rawURL string) (*Client, error) {
 	}
 	client := &Client{Conn: conn, key: key, model: model, uid: id}
 	client.startCommandLoop()
+	client.startRDTLoop()
 	return client, nil
 }
 
@@ -132,6 +133,8 @@ type Client struct {
 	uid   string // the camera's did (or P2P id): the recordings cache key
 
 	reqMu     sync.Mutex
+	rdtMu     sync.Mutex  // one RDT request at a time
+	rdt       chan []byte // decrypted RDT messages (rdt.go)
 	onCommand atomic.Pointer[func(cmd uint32, data []byte)]
 }
 
@@ -452,10 +455,41 @@ func (r *recordingCache) add(uid string, f recording) {
 	}
 	list = append(list, f)
 	sort.Slice(list, func(i, j int) bool { return list[i].start < list[j].start })
-	if len(list) > 5000 { // ~3 days of 1-minute files
-		list = list[len(list)-5000:]
+	r.files[uid] = trimRecordings(list)
+}
+
+// maxRecordings - ~35 days of 1-minute files
+const maxRecordings = 50000
+
+func trimRecordings(list []recording) []recording {
+	if len(list) > maxRecordings {
+		list = list[len(list)-maxRecordings:]
 	}
-	r.files[uid] = list
+	return list
+}
+
+// merge sets the files of the camera's SD card list (sorted): it is complete for its time
+// range, the files known before outside the range stay.
+func (r *recordingCache) merge(uid string, list []recording) {
+	if len(list) == 0 {
+		return
+	}
+	from, to := list[0].start, list[len(list)-1].start
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []recording
+	for _, f := range r.files[uid] {
+		if f.start < from {
+			out = append(out, f)
+		}
+	}
+	out = append(out, list...)
+	for _, f := range r.files[uid] {
+		if f.start > to {
+			out = append(out, f)
+		}
+	}
+	r.files[uid] = trimRecordings(out)
 }
 
 // candidates returns the starts to try for target: predicted - the known file with target
@@ -541,6 +575,18 @@ func RecordingsBetween(did string, from, to int64) []Recording {
 		}
 	}
 	return out
+}
+
+// RecordingsSpan returns the start of the oldest and the newest known file of the camera
+// (ok false: none known).
+func RecordingsSpan(did string) (oldest, newest int64, ok bool) {
+	recordings.mu.Lock()
+	defer recordings.mu.Unlock()
+	list := recordings.files[did]
+	if len(list) == 0 {
+		return 0, 0, false
+	}
+	return list[0].start, list[len(list)-1].start, true
 }
 
 // AddRecordings adds files found before (e.g. saved by the app last time).

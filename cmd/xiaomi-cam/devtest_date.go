@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 )
 
 // XC_DATETEST=<dir>: the history date picker: open history, screenshots of the calendar in
@@ -38,8 +39,23 @@ func init() {
 			u.win.Resize(fyne.NewSize(1280, 800))
 		})
 		time.Sleep(8 * time.Second)
+		t0 := time.Now()
 		fyne.Do(u.openHistory)
-		time.Sleep(6 * time.Second)
+		for time.Since(t0) < 20*time.Second {
+			var listed bool
+			fyne.DoAndWait(func() { listed = u.hist.listed })
+			if listed {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		fyne.DoAndWait(func() {
+			did := cameraDid(cameraSource(u.camera.Selected))
+			o, n, ok := miss.RecordingsSpan(did)
+			fmt.Printf("SD list after %.1fs: listed %v, known %s..%s (%v), %d files today\n", time.Since(t0).Seconds(),
+				u.hist.listed, time.Unix(o, 0).Format("02.01 15:04"), time.Unix(n, 0).Format("02.01 15:04"), ok,
+				len(miss.RecordingsBetween(did, time.Now().Truncate(24*time.Hour).Unix(), time.Now().Unix())))
+		})
 		report := func(tag string) {
 			fyne.DoAndWait(func() {
 				p := u.hist.date.pop
@@ -48,8 +64,14 @@ func init() {
 					return
 				}
 				pos, size, win := p.Content.Position(), p.Content.Size(), u.win.Canvas().Size()
-				fmt.Printf("%s: calendar at %v size %v, window %v, inside %v\n", tag, pos, size, win,
-					pos.X >= 0 && pos.Y >= 0 && pos.X+size.Width <= win.Width && pos.Y+size.Height <= win.Height)
+				var on []string
+				for _, o := range u.hist.date.body.Objects[1].(*fyne.Container).Objects {
+					if b, ok := o.(*ptrButton); ok && !b.Disabled() {
+						on = append(on, b.Text)
+					}
+				}
+				fmt.Printf("%s: calendar at %v size %v, window %v, inside %v, enabled days %v\n", tag, pos, size, win,
+					pos.X >= 0 && pos.Y >= 0 && pos.X+size.Width <= win.Width && pos.Y+size.Height <= win.Height, on)
 			})
 		}
 		fyne.Do(u.hist.date.open)

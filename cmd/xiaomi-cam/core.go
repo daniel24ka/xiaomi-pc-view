@@ -48,6 +48,7 @@ var (
 	removeCamera     = xccore.RemoveCamera
 	rtspURL          = xccore.RTSPURL
 	motor            = xccore.Motor
+	sdFiles          = xccore.SDFiles
 	cameraZoom       = xccore.CameraZoom
 	currentZoom      = xccore.CurrentZoom
 	setZoomState     = xccore.SetZoomState

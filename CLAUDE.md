@@ -113,6 +113,15 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 - Remote video: CS2 servers 34.34.47.37 / 34.90.51.72 / 34.147.123.47:32100 (EU), the camera
   never answers LAN search. One camera session at a time.
+- SD card file list (v1.25.0, `pkg/xiaomi/miss/rdt.go`): RDT = CS2 channel 1; every message
+  is size (BE u32) + data encrypted with the session key (crypto.Encode/Decode), like
+  commands without the code. Request cmd 6: 24 bytes LE (`6`, channel at offset 16 = 0);
+  answer [cmd LE][size LE][status LE][data] split into ~2 KB messages, 8 bytes per file
+  (start u32 LE, duration u8 (0 = 60), motion, saved, deleting). The user's card: ~17,300
+  files, 12 days, ~0.5 s. Found via github.com/vickers-rz/go2rtc-c700-cloud-relay (docs
+  only, no license: don't copy code). Command 11 (event types) not done. `cmd/xc-rdtprobe`
+  lists the files with its own session (stop the app first). Never probe unknown MISS
+  command codes blindly: 0x116 with binary data made the motor answer "motorReach".
 - SD playback (0x10D/0x10E): the answer is `{"id","status":"filefound|filenotfound","starttime",
   "duration"}`; files are ~60 s (60–62, sometimes shorter), one after another; the camera
   answers requests one after another (~0.2–0.3 s each, remote). `miss.StartPlayback` tries
@@ -211,5 +220,4 @@ Pula, Dubrownik – Stradun, Pag – plaża Gajac, Bale – Istria.
   (5 cameras with the Xiaomi one: grid 3 columns works). US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.
 - Real tests of Telegram, e-mail SMTP, Slack, LM Studio/Ollama,
   Claude provider (no keys); a second real camera for the grid.
-- History has no recordings list (RDT channel not implemented).
 - CS2 server list hardcoded for EU (`&servers=` param for other regions).

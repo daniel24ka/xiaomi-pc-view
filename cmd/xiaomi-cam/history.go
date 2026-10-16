@@ -34,6 +34,8 @@ type history struct {
 
 	target     time.Time // requested playback time
 	firstFrame time.Time // when the first frame of this playback arrived
+	listed     bool      // the SD card file list was read in this history session
+	listing    bool
 }
 
 func (u *ui) buildHistory() {
@@ -43,6 +45,21 @@ func (u *ui) buildHistory() {
 			u.playHistory(u.historyTime())
 		}
 	})
+
+	h.date.recorded = func(month time.Time) (map[int]bool, time.Time) {
+		did := cameraDid(cameraSource(u.camera.Selected))
+		oldest, _, ok := miss.RecordingsSpan(did)
+		if !ok {
+			return nil, time.Time{}
+		}
+		days := map[int]bool{}
+		for _, f := range miss.RecordingsBetween(did, month.Unix(), month.AddDate(0, 1, 0).Unix()) {
+			if t := time.Unix(f.Start, 0); t.Month() == month.Month() {
+				days[t.Day()] = true
+			}
+		}
+		return days, time.Unix(oldest, 0)
+	}
 
 	h.tl = newTimeline()
 	h.label = widget.NewLabel("")
@@ -227,7 +244,7 @@ func (u *ui) openHistory() {
 		u.setGrid(false) // history works with one camera
 	}
 	h := &u.hist
-	h.on = true
+	h.on, h.listed = true, false
 	h.bar.Show()
 	h.button.SetIcon(theme.MediaRecordIcon()) // "back to live"
 	h.button.Importance = widget.HighImportance
@@ -282,9 +299,35 @@ func (u *ui) goLive() {
 
 // historyFrame is called for every frame (UI thread)
 func (u *ui) historyFrame() {
-	if u.hist.on && u.hist.firstFrame.IsZero() {
-		u.hist.firstFrame = time.Now()
+	h := &u.hist
+	if h.on && h.firstFrame.IsZero() {
+		h.firstFrame = time.Now()
+		if !h.listed && !h.listing {
+			h.listing = true
+			go u.listSDFiles(u.camera.Selected)
+		}
 	}
+}
+
+// listSDFiles reads the list of the SD card files over the playback session (~0.5 s): the
+// timeline shows all recordings, the calendar only the days with recordings, and playback
+// requests the exact file starts.
+func (u *ui) listSDFiles(name string) {
+	files, err := sdFiles(name)
+	histDebug("SD card files: %d, err %v", len(files), err)
+	if err == nil {
+		saveRecordings()
+	}
+	fyne.Do(func() {
+		h := &u.hist
+		h.listing = false
+		if err != nil || name != u.camera.Selected {
+			return
+		}
+		h.listed = true
+		h.tl.Refresh()
+		h.date.refresh()
+	})
 }
 
 // historyStatus - status line during playback, updated every second

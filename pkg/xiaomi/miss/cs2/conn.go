@@ -27,7 +27,7 @@ func newConn(conn net.Conn, isTCP bool) *Conn {
 		Conn:  conn,
 		isTCP: isTCP,
 		channels: [4]*dataChannel{
-			newDataChannel(0, 10), nil, newDataChannel(250, 100), nil,
+			newDataChannel(0, 10), newDataChannel(250, 100), newDataChannel(250, 100), nil,
 		},
 	}
 	go c.worker()
@@ -41,8 +41,9 @@ type Conn struct {
 	err    error
 	seqCh0 uint16
 	seqCh3 uint16
+	seqCh1 uint16
 
-	channels [4]*dataChannel
+	channels [4]*dataChannel // 0 commands, 1 RDT (SD card files), 2 media, 3 media to the camera
 
 	cmdMu  sync.Mutex
 	cmdAck func()
@@ -123,6 +124,7 @@ func (c *Conn) Close() error {
 func (c *Conn) worker() {
 	defer func() {
 		c.channels[0].Close()
+		c.channels[1].Close()
 		c.channels[2].Close()
 	}()
 
@@ -145,6 +147,12 @@ func (c *Conn) worker() {
 		switch buf[1] {
 		case msgDrw:
 			ch := buf[5]
+			if ch >= byte(len(c.channels)) || c.channels[ch] == nil {
+				if !c.isTCP {
+					_, _ = c.Conn.Write([]byte{magic, msgDrwAck, 0, 6, magicDrw, ch, 0, 1, buf[6], buf[7]})
+				}
+				continue // a channel nobody reads
+			}
 			channel := c.channels[ch]
 
 			if c.isTCP {
@@ -256,6 +264,33 @@ func (c *Conn) WriteCommand(cmd uint32, data []byte) error {
 			return fmt.Errorf("%s: can't send command %d", "cs2", cmd)
 		}
 	}
+}
+
+// ReadRDT returns the next message of the RDT channel (encrypted by the caller's key).
+func (c *Conn) ReadRDT() ([]byte, error) {
+	data, ok := c.channels[1].Pop()
+	if !ok {
+		return nil, c.Error()
+	}
+	return data, nil
+}
+
+// WriteRDT sends a message on the RDT channel (size + data, like the camera's messages).
+func (c *Conn) WriteRDT(data []byte) error {
+	c.cmdMu.Lock()
+	defer c.cmdMu.Unlock()
+	req := make([]byte, 12+len(data))
+	req[0] = magic
+	req[1] = msgDrw
+	binary.BigEndian.PutUint16(req[2:], uint16(8+len(data)))
+	req[4] = magicDrw
+	req[5] = 1
+	binary.BigEndian.PutUint16(req[6:], c.seqCh1)
+	c.seqCh1++
+	binary.BigEndian.PutUint32(req[8:], uint32(len(data)))
+	copy(req[12:], data)
+	_, err := c.Conn.Write(req)
+	return err
 }
 
 const hdrSize = 32

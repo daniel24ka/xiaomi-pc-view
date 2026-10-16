@@ -41,9 +41,10 @@ see [Android](#android).
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
 - **SD card history**: date (a calendar in the app language), timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
-  A step takes about 2.5 s: the app remembers where the recorded files are (also between
-  runs), so going to a time usually needs one request to the camera.
-  The **timeline** has a scale (hours, minor ticks), shows the recordings found so far and the
+  A step takes about 2.5 s: when history opens, the app reads the list of the files on the
+  SD card (~0.5 s, the RDT channel like Mi Home), so going to a time needs one request to
+  the camera. The calendar enables only the days with recordings.
+  The **timeline** has a scale (hours, minor ticks), shows the recordings on the SD card and the
   playback position; drag it (or scroll sideways on a touchpad) to move to another time, click
   to play from there, the mouse wheel zooms it (15 min – 24 h). Hovering shows the time and a
   **thumbnail** of that minute: thumbnails are kept (once a minute, ~5 KB) from the live
@@ -389,7 +390,6 @@ chosen time.
   `&servers=ip1,ip2` to the camera source in the config.
 - Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
   siren and zoom follow the `isa.camera.700sa` specification.
-- History has no list of recordings (timeline marks) yet.
 - IP cameras: only the picture and sound for now – no pan/tilt (ONVIF PTZ), night mode,
   spotlight, siren or SD card history.
 
