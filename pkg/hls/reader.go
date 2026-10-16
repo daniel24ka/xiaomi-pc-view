@@ -107,6 +107,14 @@ func (r *reader) getSegment() ([]byte, error) {
 
 			r.lastTime = time.Now()
 
+			// start near the live edge: the last two segments, not the whole playlist
+			// (paced, older segments only add delay)
+			if r.lastSegment == nil {
+				if segs := segments(r.playlist); len(segs) > 2 {
+					r.lastSegment = segs[len(segs)-3]
+				}
+			}
+
 			//log.Printf("[hls] load playlist\n%s", r.playlist)
 		}
 
@@ -162,4 +170,18 @@ func getSegment(src []byte) []byte {
 	}
 
 	return src
+}
+
+// segments - the segment lines of a media playlist
+func segments(src []byte) (list [][]byte) {
+	for len(src) > 0 {
+		s := getSegment(src)
+		if s == nil {
+			break
+		}
+		list = append(list, s)
+		i := bytes.Index(src, s)
+		src = src[i+len(s):]
+	}
+	return
 }

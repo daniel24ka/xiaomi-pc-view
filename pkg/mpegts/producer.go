@@ -15,6 +15,10 @@ import (
 type Producer struct {
 	core.Connection
 	rd *core.ReadBuffer
+
+	// Pace sends the packets in real time by their timestamps (HLS downloads whole
+	// segments, which would be played as fast as they arrive)
+	Pace bool
 }
 
 func Open(rd io.Reader) (*Producer, error) {
@@ -40,6 +44,7 @@ func (c *Producer) GetTrack(media *core.Media, codec *core.Codec) (*core.Receive
 
 func (c *Producer) Start() error {
 	rd := NewDemuxer()
+	var pacer pacer
 
 	for {
 		pkt, err := rd.ReadPacket(c.rd)
@@ -48,6 +53,10 @@ func (c *Producer) Start() error {
 		}
 
 		c.Recv += len(pkt.Payload)
+
+		if c.Pace {
+			pacer.wait(pkt.Timestamp)
+		}
 
 		//log.Printf("[mpegts] size: %6d, muxer: %10d, pt: %2d", len(pkt.Payload), pkt.Timestamp, pkt.PayloadType)
 
@@ -162,4 +171,26 @@ func TimestampToRTP(rtp *rtp.Packet, codec *core.Codec) {
 		return
 	}
 	rtp.Timestamp = uint32(float64(rtp.Timestamp) * float64(codec.ClockRate) / ClockRate)
+}
+
+// pacer waits until the wall clock reaches the timestamp (90 kHz) of a packet, counted from
+// the first one; a jump (a new stream, a gap) starts counting again
+type pacer struct {
+	ts0  uint32
+	t0   time.Time
+	init bool
+}
+
+func (p *pacer) wait(ts uint32) {
+	now := time.Now()
+	if p.init {
+		at := p.t0.Add(time.Duration(int32(ts-p.ts0)) * time.Second / ClockRate)
+		if d := at.Sub(now); d > 0 && d < 10*time.Second {
+			time.Sleep(d)
+			return
+		} else if d > -10*time.Second && d <= 0 {
+			return // late: sent at once, the stream catches up
+		}
+	}
+	p.ts0, p.t0, p.init = ts, now, true
 }

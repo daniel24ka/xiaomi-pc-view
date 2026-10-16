@@ -17,6 +17,7 @@ func OpenURL(u *url.URL, body io.ReadCloser) (*mpegts.Producer, error) {
 		return nil, err
 	}
 	prod.FormatName = "hls/mpegts"
+	prod.Pace = true
 	prod.RemoteAddr = u.Host
 	return prod, nil
 }
