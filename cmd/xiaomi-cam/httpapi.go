@@ -237,7 +237,11 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		}
 		var files []map[string]any
 		for _, rec := range stopped {
-			files = append(files, map[string]any{"file": rec.path, "duration_s": int(time.Since(rec.started).Seconds())})
+			f := map[string]any{"file": rec.path, "duration_s": int(time.Since(rec.started).Seconds())}
+			if rec.err != nil {
+				f = map[string]any{"error": rec.err.Error()}
+			}
+			files = append(files, f)
 		}
 		return map[string]any{"recording": false, "files": files}, nil
 	})

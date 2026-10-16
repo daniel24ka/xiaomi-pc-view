@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -158,11 +159,22 @@ func (u *ui) toggleRecording() {
 			fyne.Do(func() {
 				done()
 				u.updateRecordButton()
-				var files []string
+				var files, errs []string
 				for _, r := range stopped {
-					files = append(files, filepath.Base(r.path))
+					if r.err != nil {
+						errs = append(errs, r.err.Error())
+					} else {
+						files = append(files, filepath.Base(r.path))
+					}
 				}
-				u.status.SetText(T("Zapisano ") + strings.Join(files, ", "))
+				if len(files) > 0 {
+					u.status.SetText(T("Zapisano ") + strings.Join(files, ", "))
+				} else {
+					u.status.SetText("")
+				}
+				if len(errs) > 0 {
+					dialog.ShowError(errors.New(strings.Join(errs, "\n")), u.win)
+				}
 			})
 		}()
 		return
@@ -201,6 +213,10 @@ func (u *ui) updateRecordButton() {
 		u.recButton.SetText(T("Stop"))
 		u.recButton.Importance = widget.DangerImportance
 		u.recButton.Refresh()
+	}
+	if !active[0].writing() {
+		u.status.SetText(T("● Łączenie z kamerami…"))
+		return
 	}
 	d := time.Since(active[0].started).Truncate(time.Second)
 	if len(active) > 1 {

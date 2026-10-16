@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -23,13 +24,45 @@ import (
 // view and works with the window hidden. Used by the UI, the HTTP API and MCP.
 
 type recording struct {
-	camera  string
-	path    string
-	started time.Time
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	done    chan struct{}
-	limit   *time.Timer
+	camera   string
+	path     string
+	started  time.Time
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	done     chan struct{}
+	limit    *time.Timer
+	stderr   *tailBuffer
+	err      error // set by stopRecording when the file was not saved
+	stopping atomic.Bool
+}
+
+// tailBuffer keeps the last 2 KB of ffmpeg's errors (for the message when nothing was saved)
+type tailBuffer struct {
+	mu sync.Mutex
+	b  []byte
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	t.b = append(t.b, p...)
+	if len(t.b) > 2048 {
+		t.b = t.b[len(t.b)-2048:]
+	}
+	t.mu.Unlock()
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.b))
+}
+
+// writing - ffmpeg has opened all inputs and writes the file (the grid opens the cameras one
+// after another, that takes seconds)
+func (r *recording) writing() bool {
+	st, err := os.Stat(r.path)
+	return err == nil && st.Size() > 0
 }
 
 var (
@@ -38,6 +71,7 @@ var (
 
 	// onRecordingChanged is called (from any goroutine) when a recording starts or stops
 	onRecordingChanged func(camera string)
+	onRecordingFailed  func(msg string) // ffmpeg ended by itself without a file
 
 	appPrefs fyne.Preferences // set in main, used for save folders
 )
@@ -130,41 +164,55 @@ func startRecording(camera string, limit time.Duration) (*recording, error) {
 	}
 	path := filepath.Join(dir, fileName(camera, "mp4"))
 	cmd := toolCommand(nil, "ffmpeg", "-hide_banner", "-loglevel", "error",
+		"-analyzeduration", "500000", "-probesize", "500000",
 		"-rtsp_transport", "tcp", "-i", rtspURL(camera),
 		"-map", "0:v:0", "-map", "0:a:0?")
 	cmd.Args = append(cmd.Args, recordVideoArgs(camera)...)
 	cmd.Args = append(cmd.Args, "-c:a", "aac", "-b:a", "64k",
 		"-movflags", "+frag_keyframe+empty_moov+default_base_moof",
 		"-y", path)
+	return launchRecording(camera, path, cmd, limit)
+}
+
+// launchRecording starts ffmpeg and registers the recording under key (recMu held).
+func launchRecording(key, path string, cmd *exec.Cmd, limit time.Duration) (*recording, error) {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
 	}
+	r := &recording{camera: key, path: path, started: time.Now(), cmd: cmd, stdin: stdin,
+		done: make(chan struct{}), stderr: &tailBuffer{}}
+	cmd.Stderr = r.stderr
 	if err = cmd.Start(); err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w", err)
 	}
-	r := &recording{camera: camera, path: path, started: time.Now(), cmd: cmd, stdin: stdin, done: make(chan struct{})}
-	recs[camera] = r
+	recs[key] = r
 	go func() {
 		_ = cmd.Wait()
 		recMu.Lock()
-		if recs[camera] == r {
-			delete(recs, camera)
+		if recs[key] == r {
+			delete(recs, key)
 		}
 		recMu.Unlock()
 		close(r.done)
 		if r.limit != nil {
 			r.limit.Stop()
 		}
+		if !r.stopping.Load() && onRecordingFailed != nil {
+			if msg := r.failure(); msg != "" {
+				_ = os.Remove(r.path)
+				onRecordingFailed(msg)
+			}
+		}
 		if onRecordingChanged != nil {
-			onRecordingChanged(camera)
+			onRecordingChanged(key)
 		}
 	}()
 	if limit > 0 {
-		r.limit = time.AfterFunc(limit, func() { _, _ = stopRecording(camera) })
+		r.limit = time.AfterFunc(limit, func() { _, _ = stopRecording(key) })
 	}
 	if onRecordingChanged != nil {
-		onRecordingChanged(camera)
+		onRecordingChanged(key)
 	}
 	return r, nil
 }
@@ -177,6 +225,15 @@ func stopRecording(camera string) (*recording, error) {
 	if r == nil {
 		return nil, errors.New("not recording")
 	}
+	r.stopping.Store(true)
+	if !r.writing() {
+		// still opening the cameras: ffmpeg reads "q" only when it writes
+		_ = r.cmd.Process.Kill()
+		<-r.done
+		_ = os.Remove(r.path)
+		r.err = errors.New(T("nic nie nagrano – kamery jeszcze się łączyły"))
+		return r, r.err
+	}
 	_, _ = io.WriteString(r.stdin, "q")
 	select {
 	case <-r.done:
@@ -185,6 +242,19 @@ func stopRecording(camera string) (*recording, error) {
 		<-r.done
 	}
 	return r, nil
+}
+
+// failure - why a recording saved nothing ("" when it saved)
+func (r *recording) failure() string {
+	if r.writing() {
+		return ""
+	}
+	msg := T("nagranie nie zostało zapisane")
+	if e := r.stderr.String(); e != "" {
+		lines := strings.Split(e, "\n")
+		msg += ": " + lines[len(lines)-1]
+	}
+	return msg
 }
 
 func currentRecording(camera string) *recording {
@@ -333,7 +403,10 @@ func startGridRecording(cameras []string, selected string, limit time.Duration) 
 	args := []string{"-hide_banner", "-loglevel", "error"}
 	audio := 0
 	for i, name := range cameras {
-		args = append(args, "-rtsp_transport", "tcp", "-i", rtspURL(name))
+		// short probe: ffmpeg opens the inputs one after another (9 cameras: 22 s before
+		// the file was created, 7 s now); wall clock timestamps keep the cells in sync
+		args = append(args, "-analyzeduration", "500000", "-probesize", "500000",
+			"-use_wallclock_as_timestamps", "1", "-rtsp_transport", "tcp", "-i", rtspURL(name))
 		if name == selected {
 			audio = i
 		}
@@ -345,13 +418,14 @@ func startGridRecording(cameras []string, selected string, limit time.Duration) 
 		layout = append(layout, fmt.Sprintf("%d_%d", (i%cols)*cw, (i/cols)*ch))
 	}
 	if len(cameras) == 1 {
-		filter.WriteString("[v0]null[v]")
+		filter.WriteString("[v0]null")
 	} else {
 		for i := range cameras {
 			fmt.Fprintf(&filter, "[v%d]", i)
 		}
-		fmt.Fprintf(&filter, "xstack=inputs=%d:layout=%s:fill=black[v]", len(cameras), strings.Join(layout, "|"))
+		fmt.Fprintf(&filter, "xstack=inputs=%d:layout=%s:fill=black", len(cameras), strings.Join(layout, "|"))
 	}
+	filter.WriteString(",fps=25,setpts=PTS-STARTPTS[v]") // constant rate, starting at 0
 	args = append(args,
 		"-filter_complex", filter.String(),
 		"-map", "[v]", "-map", fmt.Sprintf("%d:a:0?", audio),
@@ -361,37 +435,7 @@ func startGridRecording(cameras []string, selected string, limit time.Duration) 
 		"-y", path)
 
 	cmd := toolCommand(nil, "ffmpeg", args...)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err = cmd.Start(); err != nil {
-		return nil, fmt.Errorf("ffmpeg: %w", err)
-	}
-	r := &recording{camera: gridKey, path: path, started: time.Now(), cmd: cmd, stdin: stdin, done: make(chan struct{})}
-	recs[gridKey] = r
-	go func() {
-		_ = cmd.Wait()
-		recMu.Lock()
-		if recs[gridKey] == r {
-			delete(recs, gridKey)
-		}
-		recMu.Unlock()
-		close(r.done)
-		if r.limit != nil {
-			r.limit.Stop()
-		}
-		if onRecordingChanged != nil {
-			onRecordingChanged(gridKey)
-		}
-	}()
-	if limit > 0 {
-		r.limit = time.AfterFunc(limit, func() { _, _ = stopRecording(gridKey) })
-	}
-	if onRecordingChanged != nil {
-		onRecordingChanged(gridKey)
-	}
-	return r, nil
+	return launchRecording(gridKey, path, cmd, limit)
 }
 
 // activeRecordings - all running recordings, oldest first
@@ -410,7 +454,7 @@ func activeRecordings() []*recording {
 func stopAll() []*recording {
 	var out []*recording
 	for _, r := range activeRecordings() {
-		if rr, err := stopRecording(r.camera); err == nil {
+		if rr, _ := stopRecording(r.camera); rr != nil {
 			out = append(out, rr)
 		}
 	}

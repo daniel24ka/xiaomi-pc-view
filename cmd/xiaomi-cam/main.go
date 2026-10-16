@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/AlexxIT/go2rtc/internal/xccore"
 	"image"
@@ -260,6 +261,7 @@ func main() {
 	u.win.Resize(fyne.NewSize(1100, 700))
 	u.win.SetCloseIntercept(u.hide)
 	onRecordingChanged = func(string) { fyne.Do(u.updateRecordButton) }
+	onRecordingFailed = func(msg string) { fyne.Do(func() { dialog.ShowError(errors.New(msg), u.win) }) }
 	pointsChanged = func() { fyne.Do(u.loadPoints) }
 	u.ai = newAIEngine(aiActions{notify: func(title, text string) {
 		a.SendNotification(fyne.NewNotification(title, text))
