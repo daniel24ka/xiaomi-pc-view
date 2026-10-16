@@ -121,18 +121,46 @@ static void wm_lower(void *dpy, unsigned long win) {
 	XFlush(d);
 }
 
+// Restore a minimized window: map it and ask the WM to activate it (_NET_ACTIVE_WINDOW),
+// without waiting. glfwRestoreWindow waits for a VisibilityNotify, and when none comes (the
+// window is mapped already) while other X events are queued, it spins forever.
+static void wm_restore(void *dpy, unsigned long win) {
+	Display *d = (Display *)dpy;
+	XMapWindow(d, win);
+	XEvent ev;
+	memset(&ev, 0, sizeof(ev));
+	ev.xclient.type = ClientMessage;
+	ev.xclient.window = win;
+	ev.xclient.message_type = XInternAtom(d, "_NET_ACTIVE_WINDOW", False);
+	ev.xclient.format = 32;
+	ev.xclient.data.l[0] = 1; // application
+	ev.xclient.data.l[1] = CurrentTime;
+	XSendEvent(d, DefaultRootWindow(d), False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
+	XFlush(d);
+}
+
 static void *wm_open(void) { return XOpenDisplay(NULL); }
 static void wm_close(void *dpy) { XCloseDisplay((Display *)dpy); }
 */
 import "C"
 
 import (
+	"os"
 	"time"
 	"unsafe"
 
 	"fyne.io/fyne/v2"
 	"github.com/go-gl/glfw/v3.4/glfw"
 )
+
+func init() {
+	// no vsync wait in SwapBuffers (Mesa): under XWayland a minimized or hidden window gets
+	// no frames, and a swap blocked the UI goroutine for seconds (Fyne turns it off only on
+	// native Wayland). Fyne draws only changed frames, at most 60 per second.
+	if os.Getenv("vblank_mode") == "" {
+		_ = os.Setenv("vblank_mode", "0")
+	}
+}
 
 // _NET_WM_MOVERESIZE directions
 const (
@@ -156,6 +184,16 @@ func wmMoveResize(w fyne.Window, dir int) bool {
 	}
 	C.wm_moveresize(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()), C.int(dir))
 	return true
+}
+
+// wmRestore brings a minimized window back (UI thread). Not glfw Restore: it can hang (see
+// wm_restore).
+func wmRestore(win *glfw.Window) {
+	if glfw.GetPlatform() != glfw.PlatformX11 {
+		win.Restore()
+		return
+	}
+	C.wm_restore(unsafe.Pointer(glfw.GetX11Display()), C.ulong(win.GetX11Window()))
 }
 
 // setAspectRatio makes the WM keep the picture aspect ratio while resizing (0 - free).

@@ -116,7 +116,7 @@ func (u *ui) notMinimized() {
 			}
 			u.remapping = false
 			if win := glfwWindow(u.win); win != nil && win.GetAttrib(glfw.Iconified) == glfw.True {
-				win.Restore()
+				wmRestore(win)
 			}
 		})
 	})

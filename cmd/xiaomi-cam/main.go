@@ -282,6 +282,7 @@ func main() {
 		showChooseCamera(u.win, u.selectCamera)
 	}
 	u.startEventWatcher()
+	startHangWatchdog()
 	if devHook != nil {
 		go devHook(u) // only in builds with -tags devtest
 	}
@@ -664,7 +665,7 @@ func (u *ui) show() {
 	u.win.Show()
 	u.restoreGeometry(u.geometryKey()) // the WM may place a re-shown window elsewhere
 	if win := glfwWindow(u.win); win != nil && win.GetAttrib(glfw.Iconified) == glfw.True {
-		win.Restore() // it was minimized to tray
+		wmRestore(win) // it was minimized to tray
 	}
 	u.win.RequestFocus()
 	if u.grid {

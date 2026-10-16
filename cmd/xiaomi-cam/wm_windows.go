@@ -112,6 +112,8 @@ func setAspectRatio(w fyne.Window, num, den int) {
 // desktops don't report it).
 func wmOnCurrentDesktop(fyne.Window) bool { return true }
 
+func wmRestore(win *glfw.Window) { win.Restore() }
+
 func wallpaperSupported(w fyne.Window) bool { return hwndOf(w) != 0 }
 
 const wallpaperUnsupported = "Tryb tapety nie jest dostępny."
