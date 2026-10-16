@@ -40,7 +40,7 @@ see [Android](#android).
 - **Native camera zoom up to 9×**: the camera zooms itself, so details stay sharp and the
   date/time printed by the camera keeps its size. Use the mouse wheel, `+`/`−`, or the
   slider in video-only mode.
-- **SD card history**: date, timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
+- **SD card history**: date (a calendar in the app language), timeline of the day, ±1/±10 min, speed 1–16×, and back to live.
   A step takes about 2.5 s: the app remembers where the recorded files are (also between
   runs), so going to a time usually needs one request to the camera.
   The **timeline** has a scale (hours, minor ticks), shows the recordings found so far and the

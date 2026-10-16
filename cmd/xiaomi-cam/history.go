@@ -25,7 +25,7 @@ var playbackSpeeds = []int{1, 2, 4, 8, 16}
 type history struct {
 	on     bool
 	bar    *fyne.Container
-	date   *widget.DateEntry
+	date   *datePicker
 	tl     *timeline // the time axis with the scale and the recordings
 	sel    time.Time // the chosen time
 	label  *widget.Label
@@ -38,14 +38,11 @@ type history struct {
 
 func (u *ui) buildHistory() {
 	h := &u.hist
-	h.date = widget.NewDateEntry()
-	today := time.Now()
-	h.date.SetDate(&today)
-	h.date.OnChanged = func(*time.Time) {
+	h.date = newDatePicker(func(time.Time) {
 		if !u.syncing {
 			u.playHistory(u.historyTime())
 		}
-	}
+	})
 
 	h.tl = newTimeline()
 	h.label = widget.NewLabel("")
@@ -86,7 +83,7 @@ func (u *ui) buildHistory() {
 	}
 	h.bar = container.NewBorder(nil, nil,
 		container.NewHBox(
-			container.NewGridWrap(fyne.NewSize(150, 36), h.date),
+			h.date.btn,
 			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)).withTip(T("10 minut wstecz")),
 			newButton("", theme.MediaSkipPreviousIcon(), step(-time.Minute)).withTip(T("1 minuta wstecz")),
 		),
@@ -115,7 +112,7 @@ func (u *ui) historyTime() time.Time {
 	if t.IsZero() {
 		t = time.Now().Add(-5 * time.Minute)
 	}
-	if d := u.hist.date.Date; d != nil && (d.Year() != t.Year() || d.YearDay() != t.YearDay()) {
+	if d := u.hist.date.date; !sameDay(d, t) {
 		t = time.Date(d.Year(), d.Month(), d.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.Local)
 	}
 	return t
@@ -123,7 +120,7 @@ func (u *ui) historyTime() time.Time {
 
 func (u *ui) setHistoryTime(t time.Time) {
 	u.hist.sel = t
-	u.hist.date.SetDate(&t)
+	u.hist.date.setDate(t)
 	u.hist.tl.center, u.hist.tl.browsed = t, false
 	u.hist.tl.setPos(t)
 	u.hist.label.SetText(t.Format("15:04"))
