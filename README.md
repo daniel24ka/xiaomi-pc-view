@@ -53,8 +53,10 @@ see [Android](#android).
   car, a person near a car, entering and leaving the virtual fence.
   - ☰ → **Event detection**: turn detection on, sensitivity, time between alarms, the event
     kinds, which events start the **sound and light alarm** (spotlight + siren), and motion /
-    person tracking. Changes go to the camera right away, like in Mi Home. The car area and
-    the virtual fence are drawn in Mi Home.
+    person tracking. Changes go to the camera right away, like in Mi Home.
+  - **Car detection area** and **virtual fence**: drag a rectangle on the live picture
+    (corners resize, the middle moves, outside draws a new one) and save; the camera watches
+    it in the direction it faces (nothing turns the camera) and can draw it on the picture.
   - The **timeline** marks the recordings with an event in the colors of Mi Home; the
     preview names the event; buttons jump to the **previous / next event**, and a filter
     shows only chosen kinds. The camera saves the kind with its SD card recordings, and the
@@ -398,7 +400,7 @@ Other controls:
 | Spotlight, siren | Xiaomi cloud (MIoT properties) |
 | History | MISS `PLAYBACK_REQ` `0x10D` |
 | SD card files, events | RDT (CS2 channel 1): command `6` file list, `11` event types of a day |
-| Event detection | MIoT `5.1`–`5.3`, `13.1` (car area, virtual fence), `13.4`, `13.5`, `6.20` (sound and light alarm) |
+| Event detection | MIoT `5.1`–`5.3`, `13.1` (car area, virtual fence: a rectangle in 640×360 of the frame), `13.4`, `13.5`, `13.6` (areas on the picture), `6.20` (sound and light alarm) |
 
 For history, the camera needs the exact start of a recorded file (files are about 61 s). The
 app searches for it second by second and plays from the start of the file that contains the

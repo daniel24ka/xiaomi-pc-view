@@ -124,7 +124,11 @@ type ui struct {
 	soundBox                                    *fyne.Container
 	liveDot                                     *canvas.Circle
 	histPreview                                 *histPreview
-	lastThumb                                   int64 // the unix minute of the last thumbnail
+	areaEdit                                    *areaEditor // the car area / fence editor (areaeditor.go)
+	areaTitle                                   *widget.Label
+	areaButtons, areaBox                        *fyne.Container
+	detectionDlg                                dialog.Dialog // ☰ Event detection, while open
+	lastThumb                                   int64         // the unix minute of the last thumbnail
 	controlsTimer                               *time.Timer
 	// onVideoMouse shows the controls lying on the picture (they hide after a while)
 	onVideoMouse func()
@@ -544,7 +548,7 @@ func (u *ui) build() {
 		container.New(layout.NewCustomPaddedLayout(0, 0, 0, 10), // 10 px from right edge, centered
 			container.NewVBox(layout.NewSpacer(), zoomBox, layout.NewSpacer())))
 	u.exitView.Hide()
-	u.videoArea = container.NewStack(u.video, u.pictureControls, u.exitView)
+	u.videoArea = container.NewStack(u.video, u.pictureControls, u.buildAreaEditor(), u.exitView)
 	u.updateGridButton()
 	u.win.SetContent(container.NewBorder(top, bottomBox, nil, nil, u.videoArea))
 

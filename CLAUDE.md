@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.26.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.27.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -160,12 +160,15 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-16: **v1.26.0 released** (camera events: `events.go`/`eventsui.go`, core
+State 2026-10-16: **v1.27.0 released** (`areaeditor.go`: the car area / virtual fence drawn on
+  the live picture, saved to 13.1 like the Mi Home FencingArea page (switch on, pos as read,
+  never 13.2 "activate" or 6.19 PTZ calibration: they move the motor); verified: the camera
+  draws the same frame (13.6), motor 6.12 unchanged; `XC_AREATEST=<dir>` (puts the fence
+  back)). **v1.26.0** (camera events: `events.go`/`eventsui.go`, core
   `internal/xccore/events.go`; timeline marks, filter, prev/next event, ☰ Event detection,
   ☰ Events list, Settings → Events watcher with actions (short RDT session without video
   when nobody watches, ~0.5 s), `list_events` MCP / `GET events`; `XC_EVENTTEST=<dir>`).
-  Not done: drawing the car area / virtual fence (Mi Home does it, needs PTZ calibration),
-  events on Android. **v1.25.0** (SD card file list over RDT: calendar days, full timeline,
+  Not done: events on Android. **v1.25.0** (SD card file list over RDT: calendar days, full timeline,
   see Camera protocol facts). **v1.24.3** (own `datepicker.go` replaces Fyne DateEntry: above the
   button, app language; `XC_DATETEST`). **v1.24.2** (timeline: drag moves the range, click picks; `browsed` stops
   following the playback). **v1.24.1** (fix: history showed live video – `streams.Producer.SetSource`

@@ -54,6 +54,7 @@ func (u *ui) showDetection() {
 		container.NewVScroll(body), u.win)
 	d.Resize(fyne.NewSize(560, 640))
 	d.Show()
+	u.detectionDlg = d
 	go func() {
 		det, err := getDetection(name)
 		fyne.Do(func() {
@@ -66,6 +67,14 @@ func (u *ui) showDetection() {
 			body.Refresh()
 		})
 	}()
+}
+
+// closeDetection hides the detection dialog (the area editor opens over the picture).
+func (u *ui) closeDetection() {
+	if u.detectionDlg != nil {
+		u.detectionDlg.Hide()
+		u.detectionDlg = nil
+	}
 }
 
 func (u *ui) detectionForm(name string, det *xccore.Detection) *fyne.Container {
@@ -224,7 +233,23 @@ func (u *ui) detectionForm(name string, det *xccore.Detection) *fyne.Container {
 	areaCheck(xccore.EventFenceIn, &det.Fence, 1, T("Człowiek wchodzi do wirtualnego ogrodzenia"))
 	areaCheck(xccore.EventFenceOut, &det.Fence, 2, T("Człowiek wychodzi z wirtualnego ogrodzenia"))
 	if det.Has[xccore.PropAIArea] {
-		add(helpLabel(T("Obszar wykrywania aut i wirtualne ogrodzenie rysuje się w aplikacji Mi Home (Ustawienia kamery → Wykrywanie AI). Tu je włączasz i wyłączasz.")))
+		areaBtn := func(label string, kind int, k eventKind) fyne.CanvasObject {
+			if !kinds[k] {
+				return layout.NewSpacer()
+			}
+			return newButton(label, lucide("scan"), func() {
+				u.closeDetection()
+				u.editArea(det, kind)
+			})
+		}
+		add(container.NewGridWithColumns(2,
+			areaBtn(T("Obszar wykrywania aut…"), xccore.AreaCar, xccore.EventCar),
+			areaBtn(T("Wirtualne ogrodzenie…"), xccore.AreaFence, xccore.EventFenceIn)))
+		if det.Has[xccore.PropAreaOSD] {
+			add(boolProp(T("Kamera rysuje obszary na obrazie"), xccore.PropAreaOSD, det.AreaOSD,
+				func(v bool) { det.AreaOSD = v }).withTip(T("Ramka obszaru aut i wirtualnego ogrodzenia widoczna w obrazie z kamery")))
+		}
+		add(helpLabel(T("Obszar zaznaczasz na obrazie na żywo; kamera pilnuje go w kierunku, w którym patrzy przy zapisie. Zapis obszaru włącza jego wykrywanie.")))
 	}
 
 	if det.LightAlarm != nil {

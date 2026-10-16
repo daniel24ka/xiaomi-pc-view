@@ -177,6 +177,7 @@ var (
 	PropAIArea        = MiotProp{Siid: 13, Piid: 1} // car detection and virtual fence (JSON)
 	PropPersonDetect  = MiotProp{Siid: 13, Piid: 4} // person detection
 	PropMotionDetect  = MiotProp{Siid: 13, Piid: 5} // motion detection
+	PropAreaOSD       = MiotProp{Siid: 13, Piid: 6} // the camera draws the car area / fence on the picture
 	PropLightAlarm    = MiotProp{Siid: 6, Piid: 20} // events turning on the light/siren alarm (JSON)
 	PropMotionTrack   = MiotProp{Siid: 2, Piid: 8}  // the camera follows motion
 	PropHumanTrack    = MiotProp{Siid: 2, Piid: 10} // the camera follows a person
@@ -215,6 +216,7 @@ type Detection struct {
 	Tracking    bool                       // follows motion
 	HumanTrack  bool                       // follows a person
 	Cruise      bool                       // patrol (car/fence detection turns it off)
+	AreaOSD     bool                       // the camera draws the areas on the picture
 	lightAlarmV map[string]json.RawMessage // other fields of 6.20, kept
 }
 
@@ -227,7 +229,8 @@ var lightAlarmKeys = map[EventKind]string{
 // GetDetection reads the detection settings of a camera (one cloud request).
 func GetDetection(name string) (*Detection, error) {
 	props, err := GetProps(name, PropDetection, PropAlarmInterval, PropSensitivity, PropAIArea,
-		PropPersonDetect, PropMotionDetect, PropLightAlarm, PropMotionTrack, PropHumanTrack, PropCruise)
+		PropPersonDetect, PropMotionDetect, PropLightAlarm, PropMotionTrack, PropHumanTrack, PropCruise,
+		PropAreaOSD)
 	if err != nil {
 		return nil, err
 	}
@@ -261,6 +264,8 @@ func GetDetection(name string) (*Detection, error) {
 			d.HumanTrack = b
 		case PropCruise:
 			d.Cruise = b
+		case PropAreaOSD:
+			d.AreaOSD = b
 		case PropAIArea:
 			var areas []AIArea
 			_ = json.Unmarshal([]byte(s), &areas)
