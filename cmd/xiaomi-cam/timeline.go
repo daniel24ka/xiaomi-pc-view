@@ -12,7 +12,8 @@ import (
 
 // timeline - the history time axis: a scale (hours with labels, minor ticks), the known
 // recorded files, the playback position; the mouse shows the time under it (with a
-// thumbnail, see onHover), a click or a drag picks the time, the wheel zooms (15 min – 24 h).
+// thumbnail, see onHover), a click picks the time, a drag (or a horizontal scroll) moves the
+// shown range, the wheel zooms (15 min – 24 h).
 // It draws a few dozen rectangles and texts, rebuilt only when the view changes.
 type timeline struct {
 	widget.BaseWidget
@@ -26,6 +27,7 @@ type timeline struct {
 	onPick   func(t time.Time)                       // a time chosen (click, drag released)
 	onHover  func(t time.Time, x float32)            // the mouse over the axis (zero t: left)
 	dragging bool
+	browsed  bool // the user moved or zoomed the range: it doesn't follow the playback
 }
 
 const (
@@ -57,9 +59,10 @@ func (t *timeline) xAt(tm time.Time) float32 {
 	return float32(float64(tm.Sub(t.from())) / float64(t.span) * float64(t.Size().Width))
 }
 
-// show makes the time visible (the range moves when it is near an edge).
+// show makes the time visible (the range moves when it is near an edge), unless the user
+// is browsing another range.
 func (t *timeline) show(tm time.Time) {
-	if tm.Before(t.from().Add(t.span/10)) || tm.After(t.from().Add(t.span*9/10)) {
+	if !t.browsed && (tm.Before(t.from().Add(t.span/10)) || tm.After(t.from().Add(t.span*9/10))) {
 		t.center = tm
 	}
 	t.Refresh()
@@ -73,13 +76,16 @@ func (t *timeline) setPos(tm time.Time) {
 // --- mouse
 
 func (t *timeline) Tapped(e *fyne.PointEvent) {
+	t.browsed = false
 	if t.onPick != nil {
 		t.onPick(t.timeAt(e.Position.X))
 	}
 }
 
+// Dragged moves the shown range with the mouse (the scale follows the pointer).
 func (t *timeline) Dragged(e *fyne.DragEvent) {
 	t.dragging = true
+	t.pan(-e.Dragged.DX)
 	t.hover = t.timeAt(e.Position.X)
 	t.Refresh()
 	if t.onHover != nil {
@@ -87,11 +93,16 @@ func (t *timeline) Dragged(e *fyne.DragEvent) {
 	}
 }
 
-func (t *timeline) DragEnd() {
-	t.dragging = false
-	if !t.hover.IsZero() && t.onPick != nil {
-		t.onPick(t.hover)
+func (t *timeline) DragEnd() { t.dragging = false }
+
+// pan moves the range by dx pixels (positive: later), not further than a bit after now.
+func (t *timeline) pan(dx float32) {
+	w := max(t.Size().Width, 1)
+	t.center = t.center.Add(time.Duration(float64(dx) / float64(w) * float64(t.span)))
+	if latest := time.Now().Add(t.span * 4 / 10); t.center.After(latest) {
+		t.center = latest
 	}
+	t.browsed = true
 }
 
 func (t *timeline) MouseIn(e *desktop.MouseEvent) { t.MouseMoved(e) }
@@ -115,8 +126,15 @@ func (t *timeline) MouseOut() {
 
 func (t *timeline) Cursor() desktop.Cursor { return desktop.PointerCursor }
 
-// Scrolled zooms around the time under the mouse.
+// Scrolled zooms around the time under the mouse; a horizontal scroll (touchpad) moves
+// the range.
 func (t *timeline) Scrolled(e *fyne.ScrollEvent) {
+	if dx, dy := e.Scrolled.DX, e.Scrolled.DY; dx != 0 && abs32(dx) > abs32(dy) {
+		t.pan(-dx)
+		t.hover = t.timeAt(e.Position.X)
+		t.Refresh()
+		return
+	}
 	at := t.timeAt(e.Position.X)
 	span := t.span
 	if e.Scrolled.DY > 0 {
@@ -129,6 +147,7 @@ func (t *timeline) Scrolled(e *fyne.ScrollEvent) {
 	f := float64(e.Position.X / max(t.Size().Width, 1))
 	t.span = span
 	t.center = at.Add(-time.Duration(f*float64(span)) + span/2)
+	t.browsed = true
 	t.Refresh()
 }
 

@@ -44,7 +44,8 @@ see [Android](#android).
   A step takes about 2.5 s: the app remembers where the recorded files are (also between
   runs), so going to a time usually needs one request to the camera.
   The **timeline** has a scale (hours, minor ticks), shows the recordings found so far and the
-  playback position; the mouse wheel zooms it (15 min – 24 h). Hovering shows the time and a
+  playback position; drag it (or scroll sideways on a touchpad) to move to another time, click
+  to play from there, the mouse wheel zooms it (15 min – 24 h). Hovering shows the time and a
   **thumbnail** of that minute: thumbnails are kept (once a minute, ~5 KB) from the live
   picture and from the history you watched, for 30 days in `~/.cache/xiaomi-cam/thumbs`.
 - **Spotlight** with brightness, and **siren** (light bulb button on the picture, together

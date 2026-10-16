@@ -124,7 +124,7 @@ func (u *ui) historyTime() time.Time {
 func (u *ui) setHistoryTime(t time.Time) {
 	u.hist.sel = t
 	u.hist.date.SetDate(&t)
-	u.hist.tl.center = t
+	u.hist.tl.center, u.hist.tl.browsed = t, false
 	u.hist.tl.setPos(t)
 	u.hist.label.SetText(t.Format("15:04"))
 }

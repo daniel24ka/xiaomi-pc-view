@@ -63,6 +63,32 @@ func init() {
 			u.hist.tl.Refresh()
 		})
 		shot("tl_zoom_out.jpg")
+		// drag the scale back to 2:00 at night (2 h range), click there
+		night := time.Date(live.Year(), live.Month(), live.Day(), 2, 0, 0, 0, time.Local)
+		fyne.DoAndWait(func() {
+			tl := u.hist.tl
+			tl.span = 2 * time.Hour
+			for i := 0; tl.center.After(night) && i < 1000; i++ {
+				tl.Dragged(&fyne.DragEvent{PointEvent: fyne.PointEvent{Position: fyne.NewPos(300, 20)},
+					Dragged: fyne.NewDelta(min(40, tl.xAt(tl.center)-tl.xAt(night)), 0)})
+			}
+			tl.DragEnd()
+			fmt.Printf("dragged: tl %s..%s\n", tl.from().Format("15:04"), tl.from().Add(tl.span).Format("15:04"))
+		})
+		time.Sleep(3 * time.Second) // the playback position must not pull the range back
+		fyne.DoAndWait(func() {
+			tl := u.hist.tl
+			fmt.Printf("after 3 s: tl %s..%s\n", tl.from().Format("15:04"), tl.from().Add(tl.span).Format("15:04"))
+		})
+		shot("tl_dragged.jpg")
+		fyne.Do(func() {
+			u.hist.tl.Tapped(&fyne.PointEvent{Position: fyne.NewPos(u.hist.tl.xAt(night.Add(30*time.Second)), 20)})
+		})
+		time.Sleep(15 * time.Second)
+		fyne.DoAndWait(func() {
+			fmt.Printf("picked 2:00: position %s, status %q\n", u.historyPosition().Format("15:04:05"), u.status.Text)
+		})
+		shot("tl_night.jpg")
 		fyne.Do(u.goLive)
 		time.Sleep(4 * time.Second)
 		fyne.Do(u.app.Quit)
