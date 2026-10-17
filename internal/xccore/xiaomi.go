@@ -54,9 +54,13 @@ type LoginResult struct {
 	Captcha     string `json:"captcha,omitempty"` // base64 JPEG: send "captcha"
 	VerifyPhone string `json:"verify_phone,omitempty"`
 	VerifyEmail string `json:"verify_email,omitempty"` // a code was sent: send "verify"
+	QR          string `json:"qr,omitempty"`           // base64 PNG to scan: send "qr"="wait"
+	QRURL       string `json:"qr_url,omitempty"`
+	QRWait      bool   `json:"qr_wait,omitempty"` // not scanned yet: send "qr"="wait" again
 }
 
-// Login sends a login step: {username, password}, then {captcha} or {verify} when asked.
+// Login sends a login step: {username, password}, then {captcha} or {verify} when asked;
+// or {qr: "start"}, then {qr: "wait"} until the code is scanned with the phone.
 func Login(form url.Values) (*LoginResult, error) {
 	b, code, err := APICall("POST", "/api/xiaomi", nil, form)
 	switch {

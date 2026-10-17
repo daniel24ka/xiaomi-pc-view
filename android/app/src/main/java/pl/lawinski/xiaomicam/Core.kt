@@ -33,7 +33,10 @@ data class NightMode(val value: Int, val id: String)
 
 data class Device(val name: String, val info: String, val url: String)
 
-data class LoginStep(val ok: Boolean, val captcha: String, val verifyTarget: String)
+data class LoginStep(
+    val ok: Boolean, val captcha: String, val verifyTarget: String,
+    val qr: String = "", val qrWait: Boolean = false,
+)
 
 object Core {
     const val MOTOR_LEFT = 1L
@@ -145,11 +148,14 @@ object Core {
         return LoginStep(
             o.optBoolean("ok"), o.optString("captcha"),
             o.optString("verify_email") + o.optString("verify_phone"),
+            o.optString("qr"), o.optBoolean("qr_wait"),
         )
     }
 
     suspend fun login(user: String, password: String): LoginStep = io { loginStep(Mobile.login(user, password)) }
     suspend fun loginCode(key: String, code: String): LoginStep = io { loginStep(Mobile.loginCode(key, code)) }
+    suspend fun loginQr(): LoginStep = io { loginStep(Mobile.loginQR()) }
+    suspend fun loginQrWait(): LoginStep = io { loginStep(Mobile.loginQRWait()) }
 
     suspend fun devices(account: String, region: String): List<Device> = io {
         JSONArray(Mobile.devices(account, region)).objects().map {

@@ -115,7 +115,8 @@ see [Android](#android).
   icons), on all workspaces, and clicks go through it. Remembered after a restart; "Show" in the tray menu brings the normal window
   back (X11 / XWayland).
 - Polish / English UI.
-- Mi Home login with captcha and 2FA code support.
+- Mi Home login with a QR code scanned by the phone (no password, no e-mail code), or with
+  the password plus captcha and 2FA code support.
 
 ## Requirements
 
@@ -182,8 +183,9 @@ virtual machine with the software OpenGL it was not shown (not tested on a PC wi
 ## First run
 
 1. Start **Xiaomi Cam** from the applications menu.
-2. Log in with your Mi Home account. The password goes only to the embedded go2rtc and to
-   Xiaomi servers. Only a token is stored, in `~/.config/xiaomi-cam-viewer/go2rtc.yaml`
+2. Log in with your Mi Home account: **Sign in with a QR code** (scan it with a phone signed
+   in to Xiaomi: Mi Home → + → Scan, and confirm on the phone; no e-mail code), or with the
+   e-mail and password. The password goes only to the embedded go2rtc and to Xiaomi servers. Only a token is stored, in `~/.config/xiaomi-cam-viewer/go2rtc.yaml`
    (mode 600).
 3. Choose the region of your account (e.g. **Europe**) and the cameras.
 
@@ -204,7 +206,8 @@ smaller `arm64-v8a` one for most phones and the Shield, `armeabi-v7a` for older 
 devices) and open it on the device (allow installing from this source). The APK is signed
 with a debug key: Android asks to confirm the install.
 
-- **Add cameras:** sign in to Mi Home in the app, or **Import from the PC**: pick the
+- **Add cameras:** sign in to Mi Home in the app (best with the QR code: on a car head unit
+  scan it with the phone, no e-mail codes), or **Import from the PC**: pick the
   `~/.config/xiaomi-cam-viewer/go2rtc.yaml` file of the desktop app (the Mi account and all
   cameras, also IP cameras), or add an IP camera by its address.
 - **Live view:** quality 2.5K / 720p / SD (2.5K uses the software decoder on phones whose

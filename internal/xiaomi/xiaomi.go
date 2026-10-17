@@ -275,6 +275,13 @@ func apiDeviceList(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if err != nil {
+		var verr *xiaomi.VerifyError
+		if errors.As(err, &verr) {
+			// a wrong code: the login step stays, the code can be typed again
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -287,7 +294,10 @@ type Device struct {
 	IP    string `json:"localip"`
 }
 
-var auth *xiaomi.Cloud
+var (
+	auth   *xiaomi.Cloud
+	authMu sync.Mutex
+)
 
 func apiAuth(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -299,29 +309,50 @@ func apiAuth(w http.ResponseWriter, r *http.Request) {
 	password := r.Form.Get("password")
 	captcha := r.Form.Get("captcha")
 	verify := r.Form.Get("verify")
+	qr := r.Form.Get("qr") // "start": a QR code to scan with the phone, "wait": until scanned
+
+	authMu.Lock()
+	a := auth
+	authMu.Unlock()
 
 	var err error
 
 	switch {
 	case username != "" || password != "":
-		auth = xiaomi.NewCloud(AppXiaomiHome)
-		err = auth.Login(username, password)
-	case (captcha != "" || verify != "") && auth == nil:
+		a = xiaomi.NewCloud(AppXiaomiHome)
+		err = a.Login(username, password)
+	case qr == "start":
+		a = xiaomi.NewCloud(AppXiaomiHome)
+		err = a.LoginQR()
+	case (captcha != "" || verify != "" || qr != "") && a == nil:
 		// the login was started by another process (the app was restarted meanwhile)
 		http.Error(w, "the login expired, sign in again", http.StatusBadRequest)
 		return
 	case captcha != "":
-		err = auth.LoginWithCaptcha(captcha)
+		err = a.LoginWithCaptcha(captcha)
 	case verify != "":
-		err = auth.LoginWithVerify(verify)
+		err = a.LoginWithVerify(verify)
+	case qr == "wait":
+		// under the 30 s timeout of the app's API calls: the app asks again
+		err = a.LoginQRWait(r.Context(), 20*time.Second)
 	default:
 		http.Error(w, "wrong request", http.StatusBadRequest)
 		return
 	}
 
+	authMu.Lock()
+	switch {
+	case err == nil:
+		if auth == a {
+			auth = nil
+		}
+	case username != "" || password != "" || qr == "start":
+		auth = a // the next steps (captcha, code, QR wait) continue this login
+	}
+	authMu.Unlock()
+
 	if err == nil {
-		userID, token := auth.UserToken()
-		auth = nil
+		userID, token := a.UserToken()
 
 		cloudsMu.Lock()
 		if tokens == nil {
@@ -340,6 +371,13 @@ func apiAuth(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", api.MimeJSON)
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(err)
+			return
+		}
+
+		var verr *xiaomi.VerifyError
+		if errors.As(err, &verr) {
+			// a wrong code: the login step stays, the code can be typed again
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

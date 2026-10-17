@@ -104,7 +104,19 @@ fun WelcomeScreen(onLogin: () -> Unit, onImport: () -> Unit, onIp: () -> Unit, o
     }
 }
 
-/** Mi account login: user and password, then the captcha or the code when Xiaomi asks. */
+/**
+ * The started login (what Xiaomi asked for), kept for the process: the activity can be
+ * recreated while the user reads the e-mail (car head units do it), and the Go side still
+ * waits for the code. Starting over would make Xiaomi send a new code (and lock the account
+ * after a few).
+ */
+object LoginSession {
+    var step: LoginStep? = null
+    var qr = false // the QR code login was chosen
+    val active get() = step != null
+}
+
+/** Mi account login: a QR code scanned with the phone, or user and password, then the captcha or the code. */
 @Composable
 fun LoginScreen(onDone: () -> Unit, onCancel: () -> Unit) {
     val s = strings()
@@ -112,9 +124,21 @@ fun LoginScreen(onDone: () -> Unit, onCancel: () -> Unit) {
     var user by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    var step by remember { mutableStateOf<LoginStep?>(null) } // null: user + password
+    var step by remember { mutableStateOf(LoginSession.step) } // null: the choice / user + password
+    var qrMode by remember { mutableStateOf(LoginSession.qr) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+
+    fun setStep(r: LoginStep?) {
+        step = r
+        LoginSession.step = r
+    }
+
+    fun finish() {
+        LoginSession.step = null
+        LoginSession.qr = false
+        onDone()
+    }
 
     fun run(block: suspend () -> LoginStep) {
         busy = true
@@ -122,28 +146,67 @@ fun LoginScreen(onDone: () -> Unit, onCancel: () -> Unit) {
         scope.launch {
             try {
                 val r = block()
-                if (r.ok) onDone() else {
-                    step = r
+                if (r.ok) finish() else {
+                    setStep(r)
                     code = ""
                 }
             } catch (e: Exception) {
-                error = e.message
+                // a wrong code: the step stays, the same code can be typed again
+                val msg = e.message ?: ""
+                error = if (msg.contains("not accepted")) s.codeWrong.format(msg.substringAfter("not accepted").trim()) else msg
             } finally {
                 busy = false
             }
         }
     }
 
+    // the QR code: wait for the scan (each call ~20 s) while the screen is shown
+    val qrShown = step?.qr?.isNotEmpty() == true
+    LaunchedEffect(qrShown, step?.qr) {
+        if (!qrShown) return@LaunchedEffect
+        while (true) {
+            val r = try {
+                Core.loginQrWait()
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                error = if (msg.contains("expired")) s.qrExpired else msg
+                break
+            }
+            if (r.ok) {
+                finish()
+                break
+            }
+        }
+    }
+
     FormScreen(s.loginMi) {
         val st = step
-        if (st == null) {
-            OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), label = { Text(s.user) }, singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-            OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), label = { Text(s.password) }, singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-        } else {
-            if (st.captcha.isNotEmpty()) {
+        when {
+            st == null && !qrMode -> {
+                BigButton(s.loginQr, null, primary = true) {
+                    if (busy) return@BigButton
+                    qrMode = true
+                    LoginSession.qr = true
+                    run { Core.loginQr() }
+                }
+                Text(s.loginPassword, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(user, { user = it }, Modifier.fillMaxWidth(), label = { Text(s.user) }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), label = { Text(s.password) }, singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+            }
+            st == null || st.qr.isNotEmpty() -> {
+                Text(s.qrText)
+                val bmp = remember(st?.qr) {
+                    st?.qr?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
+                        ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                }
+                if (bmp != null) {
+                    Image(bmp.asImageBitmap(), null, Modifier.size(240.dp).background(Palette.text))
+                }
+            }
+            st.captcha.isNotEmpty() -> {
                 Text(s.captchaText)
                 val bmp = remember(st.captcha) {
                     runCatching { Base64.decode(st.captcha, Base64.DEFAULT) }.getOrNull()
@@ -152,20 +215,40 @@ fun LoginScreen(onDone: () -> Unit, onCancel: () -> Unit) {
                 if (bmp != null) {
                     Image(bmp.asImageBitmap(), null, Modifier.height(80.dp).background(Palette.text))
                 }
-            } else {
-                Text(s.codeSentTo.format(st.verifyTarget))
+                OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), singleLine = true)
             }
-            OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), singleLine = true)
+            else -> {
+                Text(s.codeSentTo.format(st.verifyTarget))
+                OutlinedTextField(code, { code = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+            }
         }
         ErrorText(error)
         if (busy) CircularProgressIndicator(color = Palette.accent)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.weight(1f)) { BigButton(s.cancel, null, onClick = onCancel) }
             Box(Modifier.weight(1f)) {
-                BigButton(if (st == null) s.signIn else s.send, null, primary = true) {
-                    if (busy) return@BigButton
-                    if (st == null) run { Core.login(user, pass) }
-                    else run { Core.loginCode(if (st.captcha.isNotEmpty()) "captcha" else "verify", code) }
+                BigButton(s.cancel, null) {
+                    LoginSession.step = null
+                    LoginSession.qr = false
+                    onCancel()
+                }
+            }
+            val st2 = step
+            when {
+                qrMode && (st2 == null || st2.qr.isNotEmpty()) -> Box(Modifier.weight(1f)) {
+                    // a new code only on request (the old one expired or did not load)
+                    BigButton(s.qrNew, null, primary = st2 == null || error != null) {
+                        if (busy) return@BigButton
+                        setStep(null)
+                        run { Core.loginQr() }
+                    }
+                }
+                else -> Box(Modifier.weight(1f)) {
+                    BigButton(if (st2 == null) s.signIn else s.send, null, primary = true) {
+                        if (busy) return@BigButton
+                        if (st2 == null) run { Core.login(user, pass) }
+                        else if (code.isNotBlank()) run { Core.loginCode(if (st2.captcha.isNotEmpty()) "captcha" else "verify", code) }
+                    }
                 }
             }
         }

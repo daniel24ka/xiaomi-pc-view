@@ -97,6 +97,8 @@ private fun AppRoot(tv: Boolean) {
             selected = cameras.firstOrNull { it.name == want } ?: cameras.firstOrNull()
             selected?.let { prefs.edit().putString(PREF_CAMERA, it.name).apply() }
             screen = when {
+                // the activity was recreated during the login (e.g. while reading the e-mail)
+                name == null && LoginSession.active -> Screen.LOGIN
                 selected == null -> Screen.WELCOME
                 name == null && cameras.size > 1 && prefs.getBoolean(PREF_GRID, false) -> Screen.GRID
                 else -> Screen.LIVE

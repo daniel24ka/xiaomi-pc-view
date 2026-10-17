@@ -293,6 +293,24 @@ func LoginCode(key, code string) (string, error) {
 	return toJSON(r), nil
 }
 
+// LoginQR starts a QR code login: {"qr" (base64 PNG), "qr_url"}; then LoginQRWait.
+func LoginQR() (string, error) {
+	r, err := xccore.Login(url.Values{"qr": {"start"}})
+	if err != nil {
+		return "", err
+	}
+	return toJSON(r), nil
+}
+
+// LoginQRWait waits ~20 s for the scan: {"ok"} or {"qr_wait": true} (call again).
+func LoginQRWait() (string, error) {
+	r, err := xccore.Login(url.Values{"qr": {"wait"}})
+	if err != nil {
+		return "", err
+	}
+	return toJSON(r), nil
+}
+
 // Devices returns [{"name","info","url"}] of the account in the region ([] - none).
 func Devices(account, region string) (string, error) {
 	list, err := xccore.Devices(account, region)

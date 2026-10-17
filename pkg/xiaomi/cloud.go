@@ -2,6 +2,7 @@ package xiaomi
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/rc4"
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"strconv"
 	"strings"
@@ -24,6 +26,7 @@ import (
 
 type Cloud struct {
 	client *http.Client
+	lc     *http.Client // the login steps: one cookie jar for the whole login (identity_session, ick...)
 
 	sid       string
 	cookies   string // for auth
@@ -42,8 +45,43 @@ func NewCloud(sid string) *Cloud {
 	}
 }
 
+const accountURL = "https://account.xiaomi.com"
+
+// loginClient returns the client of the started login (a new one with an empty jar).
+func (c *Cloud) loginClient() *http.Client {
+	if c.lc == nil {
+		jar, _ := cookiejar.New(nil)
+		c.lc = &http.Client{Timeout: 15 * time.Second, Jar: jar}
+	}
+	return c.lc
+}
+
+// jarCookie returns a cookie of the login jar for account.xiaomi.com.
+func (c *Cloud) jarCookie(name string) string {
+	if c.lc == nil {
+		return ""
+	}
+	u, _ := url.Parse(accountURL + "/")
+	for _, cookie := range c.lc.Jar.Cookies(u) {
+		if cookie.Name == name {
+			return cookie.Value
+		}
+	}
+	return ""
+}
+
 func (c *Cloud) Login(username, password string) error {
-	res, err := c.client.Get("https://account.xiaomi.com/pass/serviceLogin?_json=true&sid=" + c.sid)
+	captcha := c.auth != nil && c.auth["captcha_code"] != ""
+	if !captcha {
+		c.lc = nil // a new login: new cookies
+	}
+	client := c.loginClient()
+	if !captcha {
+		u, _ := url.Parse(accountURL + "/")
+		client.Jar.SetCookies(u, []*http.Cookie{{Name: "deviceId", Value: core.RandString(16, 62)}})
+	}
+
+	res, err := client.Get(accountURL + "/pass/serviceLogin?_json=true&sid=" + c.sid)
 	if err != nil {
 		return err
 	}
@@ -69,22 +107,19 @@ func (c *Cloud) Login(username, password string) error {
 		"qs":       {v1.Qs},
 		"user":     {username},
 	}
-	cookies := "deviceId=" + core.RandString(16, 62)
 
-	// login after captcha
-	if c.auth != nil && c.auth["captcha_code"] != "" {
+	// login after captcha (the ick cookie of the captcha picture is in the jar)
+	if captcha {
 		form.Set("captCode", c.auth["captcha_code"])
-		cookies += "; ick=" + c.auth["ick"]
 	}
 
 	req := Request{
-		Method:     "POST",
-		URL:        "https://account.xiaomi.com/pass/serviceLoginAuth2",
-		Body:       form,
-		RawCookies: cookies,
+		Method: "POST",
+		URL:    accountURL + "/pass/serviceLoginAuth2",
+		Body:   form,
 	}.Encode()
 
-	res, err = c.client.Do(req)
+	res, err = client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -129,7 +164,7 @@ func (c *Cloud) Login(username, password string) error {
 
 func (c *Cloud) LoginWithCaptcha(captcha string) error {
 	if c.auth == nil || c.auth["ick"] == "" {
-		panic("wrong login step")
+		return errors.New("xiaomi: wrong login step, sign in again")
 	}
 
 	c.auth["captcha_code"] = captcha
@@ -142,39 +177,156 @@ func (c *Cloud) LoginWithCaptcha(captcha string) error {
 	return c.Login(c.auth["username"], c.auth["password"])
 }
 
+// identityParams - the query of the identity pages (verify, send ticket) of this login
+func (c *Cloud) identityParams() url.Values {
+	return url.Values{
+		"_flag":   {c.auth["flag"]},
+		"_json":   {"true"},
+		"sid":     {c.sid},
+		"context": {c.auth["context"]},
+		"mask":    {"0"},
+		"_locale": {"en_US"},
+	}
+}
+
+// LoginWithVerify sends the code from the e-mail / SMS. A wrong code returns an error and
+// keeps the login step, so the same code can be typed again: it never asks Xiaomi for a
+// new code (each new code counts towards the 24 h account lock).
 func (c *Cloud) LoginWithVerify(ticket string) error {
 	if c.auth == nil || c.auth["flag"] == "" {
-		panic("wrong login step")
+		return errors.New("xiaomi: wrong login step, sign in again")
 	}
 
+	ticket = strings.TrimSpace(ticket)
+	form := url.Values{
+		"_flag":  {c.auth["flag"]},
+		"ticket": {ticket},
+		"trust":  {"true"}, // a trusted device: the saved token logs in without a new code
+		"_json":  {"true"},
+		"ick":    {c.jarCookie("ick")},
+	}
 	req := Request{
-		Method:     "POST",
-		URL:        "https://account.xiaomi.com/identity/auth/verify" + c.verifyName(),
-		RawParams:  "_flag=" + c.auth["flag"] + "&ticket=" + ticket + "&trust=false&_json=true",
-		RawCookies: "identity_session=" + c.auth["identity_session"],
+		Method:    "POST",
+		URL:       accountURL + "/identity/auth/verify" + c.verifyName(),
+		RawParams: c.identityParams().Encode(),
+		Body:      form,
 	}.Encode()
 
-	res, err := c.client.Do(req)
+	client := c.loginClient()
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 
 	var v1 struct {
-		Location string `json:"location"`
+		Code        int    `json:"code"`
+		Location    string `json:"location"`
+		Description string `json:"description"`
+		Desc        string `json:"desc"`
 	}
-	body, err := readLoginResponse(res.Body, &v1)
+	body, err := readLoginResponseAny(res, &v1)
 	if err != nil {
 		return err
 	}
-	if v1.Location == "" {
-		return fmt.Errorf("xiaomi: %s", body)
+	if v1.Code != 0 || v1.Location == "" {
+		// 70014: a wrong code
+		msg := v1.Description
+		if msg == "" {
+			msg = v1.Desc
+		}
+		if msg == "" {
+			msg = string(body)
+		}
+		return &VerifyError{Code: v1.Code, Msg: msg}
 	}
 
-	return c.finishAuth(v1.Location)
+	return c.finishVerify(v1.Location)
+}
+
+// VerifyError - Xiaomi did not take the code (the login step stays: the code can be typed again).
+type VerifyError struct {
+	Code int
+	Msg  string
+}
+
+func (e *VerifyError) Error() string {
+	return fmt.Sprintf("xiaomi: the code was not accepted (%d %s)", e.Code, e.Msg)
+}
+
+// finishVerify follows the end of the verification: identity/result/check →
+// serviceLoginAuth2/end (passToken, userId cookies, ssecurity in Extension-Pragma; sometimes
+// a "Tips" page first) → sts (serviceToken).
+func (c *Cloud) finishVerify(location string) error {
+	client := c.loginClient()
+	noRedirect := *client
+	noRedirect.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	get := func(rawURL string) (*http.Response, []byte, error) {
+		res, err := noRedirect.Get(rawURL)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer res.Body.Close()
+		body, err := io.ReadAll(res.Body)
+		return res, body, err
+	}
+
+	next := location
+	var sts string
+	for i := 0; i < 8 && next != ""; i++ {
+		res, body, err := get(next)
+		if err != nil {
+			return err
+		}
+		if s := res.Header.Get("Extension-Pragma"); s != "" {
+			var v struct {
+				Ssecurity []byte `json:"ssecurity"`
+			}
+			if json.Unmarshal([]byte(s), &v) == nil && v.Ssecurity != nil {
+				c.ssecurity = v.Ssecurity
+			}
+		}
+		loc := res.Header.Get("Location")
+		if loc == "" && res.StatusCode == http.StatusOK && bytes.Contains(body, []byte("Tips")) {
+			continue // the "Tips" page: the same URL again gives the redirect
+		}
+		if loc == "" {
+			if j := bytes.Index(body, []byte("https://sts.api.io.mi.com/sts")); j >= 0 {
+				end := bytes.IndexAny(body[j:], "\"' <")
+				if end < 0 {
+					end = len(body) - j
+				}
+				loc = string(body[j : j+end])
+			}
+		}
+		if loc == "" {
+			break
+		}
+		if u, err := res.Request.URL.Parse(loc); err == nil {
+			loc = u.String()
+		}
+		if strings.Contains(loc, "sts.api.io.mi.com") {
+			sts = loc
+			break
+		}
+		next = loc
+	}
+
+	c.passToken = c.jarCookie("passToken")
+	c.userID = c.jarCookie("userId")
+	if c.passToken == "" || c.userID == "" {
+		return errors.New("xiaomi: the code was accepted, but Xiaomi did not give the login token")
+	}
+	c.auth = nil
+
+	if sts != "" {
+		_ = c.finishAuth(sts) // the service token; the saved passToken is what matters
+	}
+	return nil
 }
 
 func (c *Cloud) getCaptcha(captchaURL string) error {
-	res, err := c.client.Get("https://account.xiaomi.com" + captchaURL)
+	res, err := c.loginClient().Get(accountURL + captchaURL)
 	if err != nil {
 		return err
 	}
@@ -193,8 +345,19 @@ func (c *Cloud) getCaptcha(captchaURL string) error {
 }
 
 func (c *Cloud) authStart(notificationURL string) error {
+	client := c.loginClient()
+
+	// open the page first (sets the identity cookies), then ask for the verification options
+	if res, err := client.Get(notificationURL); err == nil {
+		_ = res.Body.Close()
+	}
+
+	if u, err := url.Parse(notificationURL); err == nil {
+		c.auth["context"] = u.Query().Get("context")
+	}
+
 	rawURL := strings.Replace(notificationURL, "/fe/service/identity/authStart", "/identity/list", 1)
-	res, err := c.client.Get(rawURL)
+	res, err := client.Get(rawURL)
 	if err != nil {
 		return err
 	}
@@ -208,7 +371,6 @@ func (c *Cloud) authStart(notificationURL string) error {
 	}
 
 	c.auth["flag"] = strconv.Itoa(v1.Flag)
-	c.auth["identity_session"] = findCookie(res, "identity_session")
 
 	return c.sendTicket()
 }
@@ -234,15 +396,14 @@ func (c *Cloud) verifyName() string {
 
 func (c *Cloud) sendTicket() error {
 	name := c.verifyName()
-	cookies := "identity_session=" + c.auth["identity_session"]
+	client := c.loginClient()
 
 	req := Request{
-		URL:        "https://account.xiaomi.com/identity/auth/verify" + name,
-		RawParams:  "_flag=" + c.auth["flag"] + "&_json=true",
-		RawCookies: cookies,
+		URL:       accountURL + "/identity/auth/verify" + name,
+		RawParams: c.identityParams().Encode(),
 	}.Encode()
 
-	res, err := c.client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -252,30 +413,29 @@ func (c *Cloud) sendTicket() error {
 		MaskedPhone string `json:"maskedPhone"`
 		MaskedEmail string `json:"maskedEmail"`
 	}
-	if _, err = readLoginResponse(res.Body, &v1); err != nil {
+	if _, err = readLoginResponseAny(res, &v1); err != nil {
 		return err
-	}
-
-	// verify after captcha
-	captCode := c.auth["captcha_code"]
-	if captCode != "" {
-		cookies += "; ick=" + c.auth["ick"]
 	}
 
 	form := url.Values{
 		"_json": {"true"},
-		"icode": {captCode},
+		"icode": {c.auth["captcha_code"]}, // verify after captcha
 		"retry": {"0"},
+		"ick":   {c.jarCookie("ick")},
 	}
+	params := c.identityParams()
+	params.Del("_flag")
+	params.Del("_json")
+	params.Set("_dc", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
 	req = Request{
-		Method:     "POST",
-		URL:        "https://account.xiaomi.com/identity/auth/send" + name + "Ticket",
-		Body:       form,
-		RawCookies: cookies,
+		Method:    "POST",
+		URL:       accountURL + "/identity/auth/send" + name + "Ticket",
+		RawParams: params.Encode(),
+		Body:      form,
 	}.Encode()
 
-	res, err = c.client.Do(req)
+	res, err = client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -284,7 +444,7 @@ func (c *Cloud) sendTicket() error {
 		Code       int    `json:"code"`
 		CaptchaURL string `json:"captchaURL"`
 	}
-	body, err := readLoginResponse(res.Body, &v2)
+	body, err := readLoginResponseAny(res, &v2)
 	if err != nil {
 		return err
 	}
@@ -307,10 +467,145 @@ type LoginError struct {
 	Captcha     []byte `json:"captcha,omitempty"`
 	VerifyPhone string `json:"verify_phone,omitempty"`
 	VerifyEmail string `json:"verify_email,omitempty"`
+	QR          []byte `json:"qr,omitempty"`     // a PNG to scan with the phone: then LoginQRWait
+	QRURL       string `json:"qr_url,omitempty"` // the same login as a link
+	QRWait      bool   `json:"qr_wait,omitempty"`
 }
 
 func (l *LoginError) Error() string {
 	return ""
+}
+
+// --- QR code login: scanned with the phone (Mi Home app or Xiaomi phone settings), no
+// password and no e-mail/SMS code.
+
+// LoginQR starts a QR code login: the LoginError has the picture, then call LoginQRWait.
+func (c *Cloud) LoginQR() error {
+	c.lc = nil
+	client := c.loginClient()
+	params := url.Values{
+		"_qrsize":      {"480"},
+		"qs":           {"%3Fsid%3D" + c.sid + "%26_json%3Dtrue"},
+		"callback":     {"https://sts.api.io.mi.com/sts"},
+		"_hasLogo":     {"false"},
+		"sid":          {c.sid},
+		"serviceParam": {""},
+		"_locale":      {"en_US"},
+		"_dc":          {strconv.FormatInt(time.Now().UnixMilli(), 10)},
+	}
+	res, err := client.Get(accountURL + "/longPolling/loginUrl?" + params.Encode())
+	if err != nil {
+		return err
+	}
+	var v1 struct {
+		QR       string `json:"qr"`
+		LoginURL string `json:"loginUrl"`
+		LP       string `json:"lp"`
+		Timeout  int    `json:"timeout"`
+	}
+	body, err := readLoginResponseAny(res, &v1)
+	if err != nil {
+		return err
+	}
+	if v1.QR == "" || v1.LP == "" {
+		return fmt.Errorf("xiaomi: %s", body)
+	}
+	if v1.Timeout <= 0 {
+		v1.Timeout = 300
+	}
+
+	res, err = client.Get(v1.QR)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	png, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	c.auth = map[string]string{
+		"qr_lp":      v1.LP,
+		"qr_expires": strconv.FormatInt(time.Now().Add(time.Duration(v1.Timeout)*time.Second).Unix(), 10),
+	}
+	return &LoginError{QR: png, QRURL: v1.LoginURL}
+}
+
+// ErrQRExpired - nobody scanned the QR code in time
+var ErrQRExpired = errors.New("xiaomi: the QR code expired, show a new one")
+
+// LoginQRWait waits up to wait for the QR code to be scanned and confirmed on the phone.
+// Still waiting: a LoginError with QRWait (call again).
+func (c *Cloud) LoginQRWait(ctx context.Context, wait time.Duration) error {
+	if c.auth == nil || c.auth["qr_lp"] == "" {
+		return errors.New("xiaomi: wrong login step, sign in again")
+	}
+	expires, _ := strconv.ParseInt(c.auth["qr_expires"], 10, 64)
+	if time.Now().Unix() > expires {
+		return ErrQRExpired
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", c.auth["qr_lp"], nil)
+	if err != nil {
+		return err
+	}
+	client := *c.loginClient()
+	client.Timeout = 0 // the long poll: the server answers when the code is scanned
+	res, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return &LoginError{QRWait: true}
+		}
+		return err
+	}
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		return &LoginError{QRWait: true}
+	}
+
+	var v1 struct {
+		Code      int    `json:"code"`
+		UserID    any    `json:"userId"`
+		Ssecurity []byte `json:"ssecurity"`
+		PassToken string `json:"passToken"`
+		Location  string `json:"location"`
+	}
+	body, err := readLoginResponseAny(res, &v1)
+	if err != nil {
+		return err
+	}
+	if v1.PassToken == "" || v1.UserID == nil {
+		return fmt.Errorf("xiaomi: %s", body)
+	}
+
+	c.auth = nil
+	c.userID = fmt.Sprint(v1.UserID)
+	if f, ok := v1.UserID.(float64); ok {
+		c.userID = strconv.FormatInt(int64(f), 10)
+	}
+	c.passToken = v1.PassToken
+	c.ssecurity = v1.Ssecurity
+	if v1.Location != "" {
+		_ = c.finishAuth(v1.Location) // the service token; the saved passToken is what matters
+	}
+	return nil
+}
+
+// readLoginResponseAny reads a JSON answer with or without the &&&START&&& prefix.
+func readLoginResponseAny(res *http.Response, v any) ([]byte, error) {
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	body = bytes.TrimPrefix(bytes.TrimSpace(body), []byte("&&&START&&&"))
+	if err = json.Unmarshal(body, v); err != nil {
+		return body, fmt.Errorf("xiaomi: %s %.200s", res.Status, body)
+	}
+	return body, nil
 }
 
 func (c *Cloud) finishAuth(location string) error {
@@ -380,6 +675,10 @@ func (c *Cloud) LoginWithToken(userID, passToken string) error {
 	}
 	if _, err = readLoginResponse(res.Body, &v1); err != nil {
 		return err
+	}
+
+	if v1.Location == "" {
+		return errors.New("xiaomi: the saved login is not valid any more, sign in again")
 	}
 
 	c.ssecurity = v1.Ssecurity
