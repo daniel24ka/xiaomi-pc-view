@@ -23,7 +23,7 @@ import (
 
 // ipFormOf returns the form fields of a saved IP camera (for editing).
 func ipFormOf(c *ipCamera) *ipForm {
-	f := &ipForm{Kind: c.Kind}
+	f := &ipForm{Kind: c.Kind, ImouApp: c.ImouApp, ImouSecret: c.ImouSecret, ImouDC: c.ImouDC, ImouDevice: c.ImouDevice}
 	u, err := url.Parse(c.Main)
 	if err != nil {
 		return f
@@ -115,6 +115,19 @@ type ipForm struct {
 	Port                   int
 	MainPath, SubPath      string // RTSP, HTTP
 	Channel                int    // DVRIP
+	// Imou cloud (optional): the developer app, its data center, the camera serial number
+	ImouApp, ImouSecret, ImouDC, ImouDevice string
+}
+
+// imouTo copies the Imou cloud settings of the form to the camera.
+func (f *ipForm) imouTo(c *ipCamera) {
+	if f.ImouApp == "" || f.ImouSecret == "" || f.ImouDevice == "" {
+		return
+	}
+	c.ImouApp, c.ImouSecret, c.ImouDevice = f.ImouApp, f.ImouSecret, f.ImouDevice
+	if f.ImouDC != "fk" {
+		c.ImouDC = f.ImouDC
+	}
 }
 
 // hostPort returns host[:port] (no port when it is the default one).

@@ -25,8 +25,15 @@ type IPCamera struct {
 	// video codecs (ffprobe names: h264, hevc, mjpeg)
 	Codec    string `yaml:"codec,omitempty" json:"codec,omitempty"`
 	SubCodec string `yaml:"sub_codec,omitempty" json:"sub_codec,omitempty"`
-	// camera points 1-3 of ONVIF cameras (Pos: the pan/tilt position * 10000)
+	// camera points 1-3 of ONVIF cameras (Pos: the pan/tilt position * 10000) or of Imou
+	// cameras (Coll: the collection point in the camera)
 	Points []Preset `yaml:"points,omitempty" json:"points,omitempty"`
+	// Imou Open API (imoucam.go): the developer app of the Imou Life account, the data
+	// center and the device serial number
+	ImouApp    string `yaml:"imou_app,omitempty" json:"imou_app,omitempty"`
+	ImouSecret string `yaml:"imou_secret,omitempty" json:"-"`
+	ImouDC     string `yaml:"imou_dc,omitempty" json:"imou_dc,omitempty"`
+	ImouDevice string `yaml:"imou_device,omitempty" json:"imou_device,omitempty"`
 }
 
 // Active returns the source of the selected quality.
@@ -94,6 +101,7 @@ func AddIPCamera(name string, c *IPCamera) error {
 		return err
 	}
 	forgetONVIF(name)
+	forgetImou(name)
 	if err := SaveIPCamera(name, c); err != nil {
 		return err
 	}
@@ -113,6 +121,7 @@ func UpdateIPCamera(old, name string, c *IPCamera) error {
 		c.Points = prev.Points
 	}
 	forgetONVIF(old)
+	forgetImou(old)
 	if old != name {
 		if err := AddIPCamera(name, c); err != nil {
 			return err
@@ -128,6 +137,7 @@ func UpdateIPCamera(old, name string, c *IPCamera) error {
 		return err
 	}
 	forgetONVIF(name)
+	forgetImou(name)
 	return nil
 }
 

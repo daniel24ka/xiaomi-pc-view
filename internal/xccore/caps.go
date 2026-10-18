@@ -12,9 +12,10 @@ import (
 
 type Caps struct {
 	PTZ, Zoom, Light, Siren, Points, History, NightMode bool
+	Brightness                                          bool // of the light
 }
 
-var AllCaps = Caps{true, true, true, true, true, true, true}
+var AllCaps = Caps{true, true, true, true, true, true, true, true}
 
 var zoomModels = map[string]bool{
 	"isa.camera.700sa":  true, // Outdoor Camera CW700S (CW400 Pro OverSea)
@@ -31,7 +32,7 @@ func CameraCaps(name string) Caps {
 	var c Caps
 	src := CameraSource(name)
 	if src == "" {
-		return ipCaps(name) // an IP camera: the controls it has over ONVIF
+		return ipCaps(name) // an IP camera: the controls it has over ONVIF and the Imou cloud
 	}
 	c.Zoom = zoomModels[SourceParam(src, "model")]
 	props, err := GetProps(name, PropLight, PropSiren, PropMotorLocation, PropPresets, PropSDStatus, PropZoom, PropNightShot)
@@ -42,7 +43,7 @@ func CameraCaps(name string) Caps {
 		ok := p.Code == 0
 		switch {
 		case p.Same(PropLight):
-			c.Light = ok
+			c.Light, c.Brightness = ok, ok
 		case p.Same(PropSiren):
 			c.Siren = ok
 		case p.Same(PropMotorLocation):
@@ -61,20 +62,24 @@ func CameraCaps(name string) Caps {
 	return c
 }
 
-// ipCaps - the controls of an IP camera over ONVIF (none when the camera doesn't answer:
-// asked again next time).
+// ipCaps - the controls of an IP camera over ONVIF and the Imou cloud (what didn't answer
+// is asked again next time).
 func ipCaps(name string) Caps {
 	var c Caps
-	oc, err := onvifOf(name)
-	if err != nil {
-		if errors.Is(err, errNoONVIF) {
-			CapsCache.Store(name, c)
-		}
-		return c
+	oc, oerr := onvifOf(name)
+	if oerr == nil {
+		c.PTZ = oc.PTZ
+		c.Points = oc.PTZ && oc.Absolute
+		c.NightMode = len(oc.nightModes()) > 0
 	}
-	c.PTZ = oc.PTZ
-	c.Points = oc.PTZ && oc.Absolute
-	c.NightMode = len(oc.nightModes()) > 0
-	CapsCache.Store(name, c)
+	ic, ierr := imouOf(name)
+	if ierr == nil {
+		c.Light, c.Siren = ic.Light, ic.Siren
+		c.Points = c.Points || ic.Points
+		c.NightMode = c.NightMode || len(ic.nightModes()) > 0
+	}
+	if (oerr == nil || errors.Is(oerr, errNoONVIF)) && (ierr == nil || errors.Is(ierr, errNoImou)) {
+		CapsCache.Store(name, c)
+	}
 	return c
 }

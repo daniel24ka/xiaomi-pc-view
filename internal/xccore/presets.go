@@ -29,7 +29,8 @@ type Preset struct {
 	Idx      int    `json:"idx"`
 	Pos      [2]int `json:"pos"`
 	Scale    int    `json:"scale,omitempty"`
-	Name     string `json:"name"` // base64 in the camera
+	Name     string `json:"name"`           // base64 in the camera
+	Coll     string `json:"coll,omitempty"` // Imou: the collection point in the camera
 }
 
 // Label - decoded name
@@ -88,6 +89,10 @@ func DeletePreset(camera string, idx int) error {
 	for _, p := range list {
 		if p.Idx != idx {
 			out = append(out, p)
+		} else if ic := imouPoints(camera); ic != nil {
+			if err := ic.deletePoint(p); err != nil {
+				return err
+			}
 		}
 	}
 	return PutPresets(camera, out)
@@ -102,17 +107,22 @@ func GotoPreset(camera string, idx int) error {
 	return SetProp(camera, PropPresetActive, idx)
 }
 
-// gotoIPPoint turns an ONVIF camera to its point idx.
+// gotoIPPoint turns an IP camera to its point idx (Imou: the collection point; the ONVIF
+// services are nil then).
 func gotoIPPoint(camera string, idx int) (*onvifCam, error) {
-	c, err := ipControl(camera)
-	if err != nil {
-		return nil, err
-	}
 	list, _ := GetPresets(camera)
 	for _, p := range list {
-		if p.Idx == idx {
-			return c, c.moveTo(float64(p.Pos[0])/pointScale, float64(p.Pos[1])/pointScale)
+		if p.Idx != idx {
+			continue
 		}
+		if ic := imouPoints(camera); ic != nil {
+			return nil, ic.gotoPoint(p)
+		}
+		c, err := ipControl(camera)
+		if err != nil {
+			return nil, err
+		}
+		return c, c.moveTo(float64(p.Pos[0])/pointScale, float64(p.Pos[1])/pointScale)
 	}
 	return nil, fmt.Errorf("no point %d", idx)
 }
@@ -133,7 +143,11 @@ func GotoPresetAndWait(camera string, idx int) error {
 		if err != nil {
 			return err
 		}
-		c.waitStill()
+		if c == nil {
+			time.Sleep(imouTurnTime) // Imou: no position to watch
+		} else {
+			c.waitStill()
+		}
 		return nil
 	}
 	if err := GotoPreset(camera, idx); err != nil {
@@ -162,6 +176,12 @@ const PresetSlots = 3
 func SavePresetSlot(camera string, slot int, name string) error {
 	if slot < 1 || slot > PresetSlots {
 		return fmt.Errorf("point must be 1-%d", PresetSlots)
+	}
+	if strings.TrimSpace(name) == "" {
+		name = fmt.Sprintf("%d", slot)
+	}
+	if ic := imouPoints(camera); ic != nil {
+		return ic.savePoint(camera, slot, strings.TrimSpace(name))
 	}
 	loc, err := motorPosition(camera)
 	if err != nil {
@@ -228,9 +248,17 @@ func RenamePresetSlot(camera string, slot int, name string) error {
 	if strings.TrimSpace(name) == "" {
 		name = fmt.Sprintf("%d", slot)
 	}
+	name = strings.TrimSpace(name)
 	for i := range list {
 		if list[i].Idx == slot {
-			list[i].Name = base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(name)))
+			if ic := imouPoints(camera); ic != nil {
+				coll, err := ic.renamePoint(list[i], name)
+				if err != nil {
+					return err
+				}
+				list[i].Coll = coll
+			}
+			list[i].Name = base64.StdEncoding.EncodeToString([]byte(name))
 			return PutPresets(camera, list)
 		}
 	}

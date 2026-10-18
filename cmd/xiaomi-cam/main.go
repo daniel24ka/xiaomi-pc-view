@@ -794,7 +794,7 @@ func (u *ui) changeIPQuality(q int) {
 
 func (u *ui) loadCameraState() {
 	name := u.camera.Selected
-	if cameraSource(name) == "" {
+	if cameraSource(name) == "" && !hasImou(name) {
 		u.loadIPState(name)
 		return
 	}
@@ -807,6 +807,9 @@ func (u *ui) loadCameraState() {
 		u.syncing = true
 		defer func() { u.syncing = false }()
 		for _, p := range props {
+			if p.Code != 0 {
+				continue // the camera has no such property (Imou: no brightness)
+			}
 			switch {
 			case p.Siid == propLight.Siid && p.Piid == propLight.Piid:
 				on, _ := p.Value.(bool)

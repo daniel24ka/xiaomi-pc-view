@@ -204,6 +204,7 @@ func RemoveCamera(name string) error {
 		}
 	}
 	forgetONVIF(name)
+	forgetImou(name)
 	return app.PatchConfig([]string{"streams", name}, nil)
 }
 
@@ -315,7 +316,7 @@ func CameraDid(src string) string {
 func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 	src := CameraSource(name)
 	if src == "" {
-		return nil, ErrNotXiaomi
+		return imouGetProps(name, props) // an Imou camera: the cloud, others: ErrNotXiaomi
 	}
 	var params []map[string]any
 	for _, p := range props {
@@ -336,7 +337,7 @@ func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 func SetProp(name string, p MiotProp, value any) error {
 	src := CameraSource(name)
 	if src == "" {
-		return ErrNotXiaomi
+		return imouSetProp(name, p, value)
 	}
 	b, _ := json.Marshal(map[string]any{"params": []map[string]any{
 		{"did": CameraDid(src), "siid": p.Siid, "piid": p.Piid, "value": value},

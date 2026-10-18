@@ -87,7 +87,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	})
 
 	handle("state", "GET", func(r *http.Request, name string) (any, error) {
-		if c := ipCam(name); c != nil {
+		if c := ipCam(name); c != nil && !hasImou(name) {
 			state := map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}
 			if len(cameraNightModes(name)) > 0 {
 				if v, err := getNightMode(name); err == nil {
@@ -103,7 +103,13 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			return nil, err
 		}
 		state := map[string]any{"camera": name, "zoom": currentZoom(name)}
+		if c := ipCam(name); c != nil { // Imou: the light, siren and night mode in the cloud
+			state = map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}
+		}
 		for _, p := range props {
+			if p.Code != 0 {
+				continue
+			}
 			switch p.Piid {
 			case propLight.Piid:
 				state["spotlight"] = p.Value
