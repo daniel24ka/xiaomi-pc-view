@@ -25,6 +25,8 @@ type IPCamera struct {
 	// video codecs (ffprobe names: h264, hevc, mjpeg)
 	Codec    string `yaml:"codec,omitempty" json:"codec,omitempty"`
 	SubCodec string `yaml:"sub_codec,omitempty" json:"sub_codec,omitempty"`
+	// camera points 1-3 of ONVIF cameras (Pos: the pan/tilt position * 10000)
+	Points []Preset `yaml:"points,omitempty" json:"points,omitempty"`
 }
 
 // Active returns the source of the selected quality.
@@ -75,6 +77,7 @@ func SaveIPCamera(name string, c *IPCamera) error {
 		delete(ipCams.m, name)
 	} else {
 		cc := *c
+		cc.Points = append([]Preset(nil), c.Points...)
 		ipCams.m[name] = &cc
 	}
 	// all of them: the config patch can't add a key under a missing parent
@@ -90,15 +93,26 @@ func AddIPCamera(name string, c *IPCamera) error {
 	if err := AddCamera(name, c.Active()); err != nil {
 		return err
 	}
-	return SaveIPCamera(name, c)
+	forgetONVIF(name)
+	if err := SaveIPCamera(name, c); err != nil {
+		return err
+	}
+	if onvifEventsOn.Load() {
+		startONVIFEvents(name)
+	}
+	return nil
 }
 
 // UpdateIPCamera saves the edited camera (old name: the camera before the edit). The caller
 // stops its video first.
 func UpdateIPCamera(old, name string, c *IPCamera) error {
-	if prev := IPCam(old); prev != nil && c.Sub != "" {
-		c.Quality = prev.Quality // keep main / sub
+	if prev := IPCam(old); prev != nil {
+		if c.Sub != "" {
+			c.Quality = prev.Quality // keep main / sub
+		}
+		c.Points = prev.Points
 	}
+	forgetONVIF(old)
 	if old != name {
 		if err := AddIPCamera(name, c); err != nil {
 			return err
@@ -110,7 +124,11 @@ func UpdateIPCamera(old, name string, c *IPCamera) error {
 	if err := app.PatchConfig([]string{"streams", name}, []string{src}); err != nil {
 		return err
 	}
-	return SaveIPCamera(name, c)
+	if err := SaveIPCamera(name, c); err != nil {
+		return err
+	}
+	forgetONVIF(name)
+	return nil
 }
 
 // SetIPQuality switches the camera to its main (0) or sub (1) stream. The caller stops

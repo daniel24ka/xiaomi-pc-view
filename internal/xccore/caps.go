@@ -1,6 +1,9 @@
 package xccore
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 // Camera capabilities: controls of features the selected camera doesn't have are hidden.
 // Detected by reading the MIoT properties of the features (code 0 - the camera has it,
@@ -28,7 +31,7 @@ func CameraCaps(name string) Caps {
 	var c Caps
 	src := CameraSource(name)
 	if src == "" {
-		return c // not a Xiaomi camera: no controls
+		return ipCaps(name) // an IP camera: the controls it has over ONVIF
 	}
 	c.Zoom = zoomModels[SourceParam(src, "model")]
 	props, err := GetProps(name, PropLight, PropSiren, PropMotorLocation, PropPresets, PropSDStatus, PropZoom, PropNightShot)
@@ -54,6 +57,24 @@ func CameraCaps(name string) Caps {
 			c.NightMode = ok
 		}
 	}
+	CapsCache.Store(name, c)
+	return c
+}
+
+// ipCaps - the controls of an IP camera over ONVIF (none when the camera doesn't answer:
+// asked again next time).
+func ipCaps(name string) Caps {
+	var c Caps
+	oc, err := onvifOf(name)
+	if err != nil {
+		if errors.Is(err, errNoONVIF) {
+			CapsCache.Store(name, c)
+		}
+		return c
+	}
+	c.PTZ = oc.PTZ
+	c.Points = oc.PTZ && oc.Absolute
+	c.NightMode = len(oc.nightModes()) > 0
 	CapsCache.Store(name, c)
 	return c
 }

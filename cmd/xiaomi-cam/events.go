@@ -117,6 +117,23 @@ func (s *eventStore) add(did string, day time.Time, list []xccore.Event) {
 	}
 }
 
+// merge adds the events that are not in the store yet.
+func (s *eventStore) merge(did string, list []xccore.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.camera(did)
+	have := map[storedEvent]bool{}
+	for _, e := range c.Events {
+		have[e] = true
+	}
+	for _, e := range list {
+		if se := (storedEvent{e.Time.Unix(), e.Kind}); !have[se] {
+			c.Events = append(c.Events, se)
+		}
+	}
+	sort.Slice(c.Events, func(i, j int) bool { return c.Events[i].T < c.Events[j].T })
+}
+
 // between - the events of a camera in [from, to)
 func (s *eventStore) between(did string, from, to time.Time) []xccore.Event {
 	s.mu.Lock()
@@ -209,13 +226,27 @@ func dayStart(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.Local)
 }
 
-// readDayEvents reads the events of a day from the camera into the store.
+// eventKey - the camera in the store: the device id of a Xiaomi camera, "ip:<name>" of an
+// IP camera.
+func eventKey(name string) string {
+	if ipCam(name) != nil {
+		return "ip:" + name
+	}
+	return cameraDid(cameraSource(name))
+}
+
+// readDayEvents reads the events of a day from the camera into the store. IP cameras give
+// the events received while the app runs, so they are added to the stored ones.
 func readDayEvents(name string, day time.Time) ([]xccore.Event, error) {
 	list, err := sdEvents(name, day)
 	if err != nil {
 		return nil, err
 	}
-	evStore.add(cameraDid(cameraSource(name)), day, list)
+	if ipCam(name) != nil {
+		evStore.merge(eventKey(name), list)
+		return evStore.between(eventKey(name), dayStart(day), dayStart(day).AddDate(0, 0, 1)), nil
+	}
+	evStore.add(eventKey(name), day, list)
 	return list, nil
 }
 
@@ -284,7 +315,7 @@ func (u *ui) startEventWatcher() {
 // checkEvents reads the events of today (and of yesterday after midnight) and runs the
 // actions for the new ones; the first check only marks the events as seen.
 func (u *ui) checkEvents(name string, cfg eventsConfig) {
-	did := cameraDid(cameraSource(name))
+	did := eventKey(name)
 	now := time.Now()
 	seen := evStore.seen(did, 0)
 	days := []time.Time{now}
@@ -409,7 +440,7 @@ func recentEvents(limit int) []namedEvent {
 		if len(cameraEvents(name)) == 0 {
 			continue
 		}
-		for _, e := range evStore.between(cameraDid(cameraSource(name)), from, time.Now().Add(time.Hour)) {
+		for _, e := range evStore.between(eventKey(name), from, time.Now().Add(time.Hour)) {
 			out = append(out, namedEvent{name, e})
 		}
 	}

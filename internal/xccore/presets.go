@@ -11,7 +11,7 @@ import (
 )
 
 // Preset positions ("often viewed positions" in Mi Home), stored in the camera, so they are
-// shared with the Mi Home app:
+// shared with the Mi Home app (IP cameras: ONVIF positions in the app config, IPCamera.Points):
 //   6.12 - current motor position {"x":637,"y":63,"scale":10}
 //   9.1  - list [{"location":1,"idx":1,"pos":[x,y],"scale":10,"name":"<base64>"}], up to 6
 //   9.2  - write idx: the camera turns to that position
@@ -41,6 +41,11 @@ func (p Preset) Label() string {
 }
 
 func GetPresets(camera string) ([]Preset, error) {
+	if ip := IPCam(camera); ip != nil {
+		list := append([]Preset(nil), ip.Points...)
+		sort.Slice(list, func(i, j int) bool { return list[i].Location < list[j].Location })
+		return list, nil
+	}
 	props, err := GetProps(camera, PropPresets)
 	if err != nil {
 		return nil, err
@@ -62,6 +67,10 @@ func GetPresets(camera string) ([]Preset, error) {
 func PutPresets(camera string, list []Preset) error {
 	for i := range list {
 		list[i].Location = i + 1
+	}
+	if ip := IPCam(camera); ip != nil {
+		ip.Points = list
+		return SaveIPCamera(camera, ip)
 	}
 	b, _ := json.Marshal(list)
 	if len(list) == 0 {
@@ -86,7 +95,26 @@ func DeletePreset(camera string, idx int) error {
 
 // GotoPreset turns the camera to a stored position.
 func GotoPreset(camera string, idx int) error {
+	if IPCam(camera) != nil {
+		_, err := gotoIPPoint(camera, idx)
+		return err
+	}
 	return SetProp(camera, PropPresetActive, idx)
+}
+
+// gotoIPPoint turns an ONVIF camera to its point idx.
+func gotoIPPoint(camera string, idx int) (*onvifCam, error) {
+	c, err := ipControl(camera)
+	if err != nil {
+		return nil, err
+	}
+	list, _ := GetPresets(camera)
+	for _, p := range list {
+		if p.Idx == idx {
+			return c, c.moveTo(float64(p.Pos[0])/pointScale, float64(p.Pos[1])/pointScale)
+		}
+	}
+	return nil, fmt.Errorf("no point %d", idx)
 }
 
 // PointReached: the camera turned to the point p, and zoomed to its zoom (scale = zoom*10):
@@ -100,6 +128,14 @@ func PointReached(camera string, p Preset) {
 // GotoPresetAndWait turns to a position and waits until the camera stops (the motor
 // position doesn't change), max 15 s.
 func GotoPresetAndWait(camera string, idx int) error {
+	if IPCam(camera) != nil {
+		c, err := gotoIPPoint(camera, idx)
+		if err != nil {
+			return err
+		}
+		c.waitStill()
+		return nil
+	}
 	if err := GotoPreset(camera, idx); err != nil {
 		return err
 	}
@@ -127,17 +163,9 @@ func SavePresetSlot(camera string, slot int, name string) error {
 	if slot < 1 || slot > PresetSlots {
 		return fmt.Errorf("point must be 1-%d", PresetSlots)
 	}
-	props, err := GetProps(camera, PropMotorLocation)
+	loc, err := motorPosition(camera)
 	if err != nil {
 		return err
-	}
-	if len(props) == 0 {
-		return errors.New("no position from the camera")
-	}
-	var loc struct{ X, Y, Scale int }
-	s, _ := props[0].Value.(string)
-	if err = json.Unmarshal([]byte(s), &loc); err != nil {
-		return fmt.Errorf("position: %w (%s)", err, s)
 	}
 	if strings.TrimSpace(name) == "" {
 		name = fmt.Sprintf("%d", slot)
@@ -159,6 +187,36 @@ func SavePresetSlot(camera string, slot int, name string) error {
 	out = append(out, p)
 	sort.Slice(out, func(i, j int) bool { return out[i].Idx < out[j].Idx })
 	return PutPresets(camera, out)
+}
+
+type motorLocation struct{ X, Y, Scale int }
+
+// motorPosition - the current position (Xiaomi: MIoT 6.12, IP cameras: ONVIF * pointScale)
+func motorPosition(camera string) (loc motorLocation, err error) {
+	if IPCam(camera) != nil {
+		c, err := ipControl(camera)
+		if err != nil {
+			return loc, err
+		}
+		x, y, err := c.position()
+		if err != nil {
+			return loc, err
+		}
+		p := pointOf(x, y)
+		return motorLocation{X: p[0], Y: p[1]}, nil
+	}
+	props, err := GetProps(camera, PropMotorLocation)
+	if err != nil {
+		return loc, err
+	}
+	if len(props) == 0 {
+		return loc, errors.New("no position from the camera")
+	}
+	s, _ := props[0].Value.(string)
+	if err = json.Unmarshal([]byte(s), &loc); err != nil {
+		return loc, fmt.Errorf("position: %w (%s)", err, s)
+	}
+	return loc, nil
 }
 
 // RenamePresetSlot changes the name of point slot (1-3); its position stays.

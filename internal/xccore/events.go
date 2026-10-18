@@ -47,6 +47,12 @@ var eventModels = map[string][]EventKind{
 
 // CameraEvents returns the event kinds the camera reports (nil: no event support known).
 func CameraEvents(name string) []EventKind {
+	if IPCam(name) != nil {
+		if c := onvifCached(name); c != nil && c.Motion {
+			return []EventKind{EventMotion} // ONVIF motion alarms
+		}
+		return nil
+	}
 	return eventModels[SourceParam(CameraSource(name), "model")]
 }
 
@@ -103,6 +109,9 @@ var (
 func SDEvents(name string, day time.Time) ([]Event, error) {
 	src := CameraSource(name)
 	if src == "" {
+		if IPCam(name) != nil {
+			return onvifDayEvents(name, day), nil // received while the app runs
+		}
 		return nil, ErrNotXiaomi
 	}
 	model := SourceParam(src, "model")

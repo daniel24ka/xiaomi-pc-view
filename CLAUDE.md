@@ -254,9 +254,22 @@ Kraków Zakole Wisły (krakow2), Kasprowy Wierch, Białystok, Zamość, Łeba, K
   SDK + NDK, gomobile, Android TV emulator image (~8–10 GB in ~/Android, no sudo). No Shield
   access for tests yet (would need network ADB debugging and its IP).
 
-- IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
-  spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
-  IP camera to test yet.
+- IP cameras phase 2 (branch `feature/onvif-controls`, 2026-10-18, built and tested on Windows
+  with an Imou Cruiser IPC-S7C-3M0WE, fw 2.810 2025-12): `internal/xccore/onvifcam.go` (ONVIF
+  detection, also for RTSP/HTTP cameras on port 80 with the same login; PTZ ContinuousMove
+  with a 1 s timeout repeated by the Mover; points = positions kept in `IPCamera.Points`
+  (Pos * 10000) + AbsoluteMove, only when a no-op AbsoluteMove to the current position works;
+  IR cut filter → night modes auto/on/off), `onvifevents.go` (PullPoint per camera from
+  `StartONVIFEvents`, motion rising edges → EventMotion in memory, `eventKey` "ip:<name>" +
+  `evStore.merge` in the app). Imou facts: no ONVIF presets (MaximumNumberOfPresets 0), lists
+  AbsolutePanTiltPositionSpace but AbsoluteMove = "not implemented" and GetStatus is always
+  0.8/0.8, no IrCutFilter in Imaging, Dahua CGI on :80 doesn't answer (ONVIF does), RTSP
+  `/cam/realmonitor?channel=1&subtype=0|1` with admin + the safety code. PullMessages needs
+  WS-Addressing Action+To ("Resource Unknown" without); few subscriptions ("Subscribe Creation
+  Failed" until old ones expire: subscribe for 120 s, renew every 60 s, Unsubscribe on exit).
+  PTZ moves don't raise MotionAlarm. Tools: `cmd/xc-onvifprobe`, `XC_ONVIFCAM=<name> go test
+  -run TestONVIFLive|TestONVIFPullRaw ./internal/xccore`. Imou spotlight/siren/night/presets/SD
+  would need the Imou cloud Open API (not done). ONVIF IR cut filter untested (no camera).
 - The user has four public webcams added for testing (WhatsUpCams HLS, Croatia): "Pula (Chorwacja)",
   "Dubrownik – Stradun (Chorwacja)", "Pag – plaża Gajac (Chorwacja)", "Bale – Istria (Chorwacja)"
   (5 cameras with the Xiaomi one: grid 3 columns works). US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.

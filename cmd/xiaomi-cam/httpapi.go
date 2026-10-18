@@ -88,7 +88,15 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 
 	handle("state", "GET", func(r *http.Request, name string) (any, error) {
 		if c := ipCam(name); c != nil {
-			return map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}, nil
+			state := map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}
+			if len(cameraNightModes(name)) > 0 {
+				if v, err := getNightMode(name); err == nil {
+					if i := nightModeByValue(v); i >= 0 {
+						state["night_mode"] = nightModes[i].ID
+					}
+				}
+			}
+			return state, nil
 		}
 		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 		if err != nil {
@@ -179,7 +187,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		if err != nil {
 			return nil, err
 		}
-		if err = setProp(name, propNightShot, m.Value); err != nil {
+		if err = setNightMode(name, m.Value); err != nil {
 			return nil, err
 		}
 		return map[string]any{"night_mode": m.ID}, nil
@@ -316,7 +324,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			Name string    `json:"name"`
 		}
 		out := []ev{}
-		for _, e := range evStore.between(cameraDid(cameraSource(name)), from, time.Now().Add(time.Hour)) {
+		for _, e := range evStore.between(eventKey(name), from, time.Now().Add(time.Hour)) {
 			out = append(out, ev{e.Time.Format(time.RFC3339), e.Kind, english[eventNames[e.Kind]]})
 		}
 		res := map[string]any{"camera": name, "events": out}

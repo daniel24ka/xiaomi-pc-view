@@ -203,7 +203,7 @@ func RemoveCamera(name string) error {
 			return err
 		}
 	}
-	CapsCache.Delete(name)
+	forgetONVIF(name)
 	return app.PatchConfig([]string{"streams", name}, nil)
 }
 
@@ -220,14 +220,28 @@ const (
 	MotorDown  = 4
 )
 
-// ErrNotXiaomi - camera controls of IP cameras are not supported (yet)
-var ErrNotXiaomi = errors.New("this camera has no such control (only Xiaomi cameras)")
+// ErrNotXiaomi - the camera has no such control (an IP camera: only some controls work
+// over ONVIF)
+var ErrNotXiaomi = errors.New("this camera has no such control")
 
 func Motor(name string, op int) error {
 	if CameraSource(name) == "" {
-		return ErrNotXiaomi
+		c, err := ipControl(name)
+		if err != nil {
+			return err
+		}
+		return c.move(op)
 	}
 	return xiaomi.Motor(name, op)
+}
+
+// ipControl returns the ONVIF services of an IP camera (ErrNotXiaomi: no ONVIF).
+func ipControl(name string) (*onvifCam, error) {
+	c, err := onvifOf(name)
+	if errors.Is(err, errNoONVIF) {
+		return nil, ErrNotXiaomi
+	}
+	return c, err
 }
 
 // SDFiles lists the files on the SD card of a Xiaomi camera over its open session (live video

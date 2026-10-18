@@ -374,6 +374,9 @@ func (u *ui) playEvent(e namedEvent) {
 	if e.Camera != u.camera.Selected {
 		u.camera.SetSelected(e.Camera)
 	}
+	if ipCam(e.Camera) != nil {
+		return // no recordings of IP cameras: the live picture
+	}
 	if !u.hist.on {
 		u.openHistory()
 	}

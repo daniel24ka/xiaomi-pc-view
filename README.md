@@ -28,8 +28,14 @@ see [Android](#android).
   - **Test** checks the connection and the picture size before adding. Quality: **main** or
     **sub stream** (when the camera has two). Picture, sound, snapshots, MP4 recording
     (H.264/H.265 copied, MJPEG encoded to H.264), the grid, AI tasks, notifications, HTTP API
-    and MCP work with IP cameras too. Pan/tilt, zoom, spotlight, siren, night mode and SD
-    history are Xiaomi only for now (hidden for IP cameras).
+    and MCP work with IP cameras too.
+  - **ONVIF controls** (also for a camera added as RTSP / HTTP: the app asks ONVIF on port 80
+    with the same login): **pan/tilt**, **camera points 1–3** (positions kept by the app, for
+    cameras with absolute PTZ positioning), **night mode** (the IR cut filter: auto / infrared /
+    off) and **motion events** (a PullPoint subscription while the app runs: the events list,
+    notifications, e-mail / ntfy / Telegram, snapshot, recording). Only what the camera
+    answers is shown; e.g. Imou (Cruiser) has pan/tilt and motion events, but no positions and
+    no IR cut filter over ONVIF. Zoom, spotlight, siren and SD history are Xiaomi only.
 - **Remote connection from any network**, like Mi Home, without port forwarding or VPN.
   There is also a local (LAN) mode.
 - **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.

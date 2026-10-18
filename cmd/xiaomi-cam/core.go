@@ -61,6 +61,10 @@ var (
 	cameraCaps       = xccore.CameraCaps
 	nightModeByValue = xccore.NightModeByValue
 	nightModeByID    = xccore.NightModeByID
+	cameraNightModes = xccore.CameraNightModes
+	getNightMode     = xccore.GetNightMode
+	setNightMode     = xccore.SetNightMode
+	startONVIFEvents = xccore.StartONVIFEvents
 
 	getPresets        = xccore.GetPresets
 	putPresets        = xccore.PutPresets
