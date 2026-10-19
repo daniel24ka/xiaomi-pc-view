@@ -284,7 +284,7 @@ Kraków Zakole Wisły (krakow2), Kasprowy Wierch, Białystok, Zamość, Łeba, K
   setCollection saves the current position, turnCollection, modifyCollection,
   deleteCollection; 21201 "Unknown error" right after another point change → `pointCall`
   retries. Verified on the Cruiser (`XC_IMOU="app|secret|serial" XC_IMOURTSP=<rtsp>
-  XC_FFMPEG=distfmpeg.exe go test -run TestImouLive ./internal/xccore`): night 5→2→5,
+  XC_FFMPEG=dist/ffmpeg.exe go test -run TestImouLive ./internal/xccore`): night 5→2→5,
   point add/rename/delete, turn right 2 s + back to the point (picture diff 71.7 → 1.5).
   White light verified (`XC_IMOULIGHT=1`: on, off; the cloud reports a switch ~1 s late, so
   `imouSetProp` waits 1.5 s before the UI reads it back). Siren: setDeviceCameraStatus siren
