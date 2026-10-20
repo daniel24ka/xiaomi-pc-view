@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.28.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.29.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -162,7 +162,13 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-17: **v1.28.0 released** (Mi login: QR code login `qr=start`/`qr=wait` in
+State 2026-10-20: **v1.29.0 released** = merged PR #1 (feature/onvif-controls by a teammate,
+kwlodarski: ONVIF PTZ/points/IR cut/motion events + Imou Open API light/siren/night/points, see
+Open ideas → IP cameras phase 2) + fix: HLS/MJPEG URLs and non-SOAP answers (CDN 404) =
+`errNoONVIF` (before: the public webcams were probed on :80 every minute forever). Review
+leftovers (low, not done): editing a camera keeps the running PullPoint loop with the old
+host/login until it fails; points stay when Imou is switched off.
+**v1.28.0** (Mi login: QR code login `qr=start`/`qr=wait` in
 `/api/xiaomi` (`longPolling/loginUrl`, long poll `lp` ~20 s per call, 300 s expiry; tested up to
 the QR shown, scan not tested: the user's account); the e-mail code looped on the car head unit
 (a new code after a correct one, 24 h lock risk): now one cookie jar per login (`Cloud.lc`),
