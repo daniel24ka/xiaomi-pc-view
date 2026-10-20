@@ -5,12 +5,13 @@ import "github.com/AlexxIT/go2rtc/internal/xccore"
 // The camera logic is in internal/xccore (shared with the Android app); short names here.
 
 type (
-	miotProp  = xccore.MiotProp
-	preset    = xccore.Preset
-	camCaps   = xccore.Caps
-	ipCamera  = xccore.IPCamera
-	nightMode = xccore.NightMode
-	mover     = xccore.Mover
+	miotProp   = xccore.MiotProp
+	preset     = xccore.Preset
+	camCaps    = xccore.Caps
+	ipCamera   = xccore.IPCamera
+	imouDevice = xccore.ImouDevice
+	nightMode  = xccore.NightMode
+	mover      = xccore.Mover
 )
 
 const (
@@ -61,6 +62,13 @@ var (
 	cameraCaps       = xccore.CameraCaps
 	nightModeByValue = xccore.NightModeByValue
 	nightModeByID    = xccore.NightModeByID
+	cameraNightModes = xccore.CameraNightModes
+	getNightMode     = xccore.GetNightMode
+	setNightMode     = xccore.SetNightMode
+	startONVIFEvents = xccore.StartONVIFEvents
+	hasImou          = xccore.HasImou
+	imouDevices      = xccore.ImouDevices
+	imouDataCenters  = xccore.ImouDataCenters
 
 	getPresets        = xccore.GetPresets
 	putPresets        = xccore.PutPresets

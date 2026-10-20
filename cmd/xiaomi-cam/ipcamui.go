@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -57,6 +58,39 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 	hint.Wrapping = fyne.TextWrapWord
 	hint.TextStyle.Italic = true
 
+	// Imou cloud (optional): the light, siren, night mode and camera points of Imou cameras
+	imouApp := widget.NewEntry()
+	imouApp.SetPlaceHolder("lc…")
+	imouSecret := widget.NewPasswordEntry()
+	var dcNames []string
+	for _, dc := range imouDataCenters {
+		dcNames = append(dcNames, T(dc.Name))
+	}
+	imouDC := newSelect(dcNames, nil)
+	imouDC.SetSelectedIndex(0)
+	imouDevIDs := map[string]string{} // option -> serial number
+	imouDev := newSelect(nil, nil)
+	imouDev.PlaceHolder = T("Pobierz listę kamer")
+	imouFetch := newButton(T("Pobierz"), theme.DownloadIcon(), nil).withTip(T("Pobiera kamery konta Imou Life"))
+	imouOn := widget.NewCheck(T("Sterowanie przez chmurę Imou (reflektor, syrena, tryb nocny, punkty)"), nil)
+	setImouDevices := func(devs []imouDevice, selectID string) {
+		imouDevIDs = map[string]string{}
+		var opts []string
+		sel := ""
+		for _, dv := range devs {
+			o := fmt.Sprintf("%s – %s (%s)", dv.Name, dv.Model, dv.ID)
+			imouDevIDs[o] = dv.ID
+			opts = append(opts, o)
+			if dv.ID == selectID {
+				sel = o
+			}
+		}
+		imouDev.SetOptions(opts)
+		if sel != "" {
+			imouDev.SetSelected(sel)
+		}
+	}
+
 	var brandNames []string
 	for _, b := range rtspBrands {
 		brandNames = append(brandNames, b.name)
@@ -108,6 +142,16 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 		default:
 			host.SetPlaceHolder("192.168.1.50")
 		}
+		if k.id != "tapo" && k.id != "dvrip" {
+			items = append(items, widget.NewFormItem("", imouOn))
+			if imouOn.Checked {
+				items = append(items,
+					widget.NewFormItem("AppId", imouApp),
+					widget.NewFormItem("AppSecret", imouSecret),
+					widget.NewFormItem(T("Centrum danych"), imouDC),
+					widget.NewFormItem(T("Kamera Imou"), container.NewBorder(nil, nil, nil, imouFetch, imouDev)))
+			}
+		}
 		switch k.id {
 		case "onvif":
 			hint.SetText(T("Kamera sama poda adresy strumieni (profile ONVIF). ONVIF trzeba zwykle włączyć w ustawieniach kamery; login i hasło to konto ONVIF lub konto kamery."))
@@ -128,6 +172,9 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 			items = append(items, widget.NewFormItem(T("Kanał"), channel))
 			hint.SetText(T("Kamery i rejestratory XMeye / Sofia (port 34569). Kanał 0 to pierwsza kamera rejestratora."))
 		}
+		if imouOn.Checked && k.id != "tapo" && k.id != "dvrip" {
+			hint.SetText(T("AppId i AppSecret: open.imoulife.com (konto Imou Life) → My App → Application Information. Obraz idzie lokalnie, chmura Imou tylko steruje (30 000 darmowych zapytań miesięcznie)."))
+		}
 		form.Objects = []fyne.CanvasObject{widget.NewForm(items...)}
 		form.Refresh()
 		if d != nil {
@@ -135,6 +182,8 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 		}
 	}
 	kind.OnChanged = func(string) { build() }
+	imouOn.OnChanged = func(bool) { build() }
+	imouDCID := func() string { return imouDataCenters[max(imouDC.SelectedIndex(), 0)].ID }
 
 	readForm := func() *ipForm {
 		f := &ipForm{
@@ -150,6 +199,10 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 		if f.Kind == "http" && f.MainPath == "" {
 			f.MainPath = "/"
 		}
+		if imouOn.Checked {
+			f.ImouApp, f.ImouSecret = strings.TrimSpace(imouApp.Text), strings.TrimSpace(imouSecret.Text)
+			f.ImouDC, f.ImouDevice = imouDCID(), imouDevIDs[imouDev.Selected]
+		}
 		return f
 	}
 
@@ -160,7 +213,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 	setBusy := func(on bool, text string) {
 		spin.run(on)
 		status.SetText(text)
-		for _, b := range []*ptrButton{test, add, find} {
+		for _, b := range []*ptrButton{test, add, find, imouFetch} {
 			if on {
 				b.Disable()
 			} else {
@@ -175,7 +228,11 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 		if err != nil {
 			return nil, err
 		}
+		if f.ImouApp != "" && f.ImouDevice == "" {
+			return nil, errors.New(T("Wybierz kamerę Imou (przycisk „Pobierz”)"))
+		}
 		c := &ipCamera{Kind: f.Kind, Main: mainSrc}
+		f.imouTo(c)
 		r, err := probeSource(mainSrc)
 		if err != nil {
 			return nil, err
@@ -246,6 +303,34 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 	add.Importance = widget.HighImportance
 	cancel = newButton(T("Anuluj"), theme.CancelIcon(), func() { d.Hide() })
 
+	imouFetch.OnTapped = func() {
+		app, secret, dc := strings.TrimSpace(imouApp.Text), strings.TrimSpace(imouSecret.Text), imouDCID()
+		if app == "" || secret == "" {
+			status.SetText(T("Wpisz AppId i AppSecret aplikacji Imou"))
+			return
+		}
+		selected := imouDevIDs[imouDev.Selected]
+		setBusy(true, T("Pobieram kamery z chmury Imou…"))
+		go func() {
+			devs, err := imouDevices(app, secret, dc)
+			fyne.Do(func() {
+				setBusy(false, "")
+				if err != nil {
+					status.SetText(T("Błąd: ") + err.Error())
+					return
+				}
+				if len(devs) == 0 {
+					status.SetText(T("Konto Imou nie ma kamer (inne centrum danych?)"))
+					return
+				}
+				setImouDevices(devs, selected)
+				if imouDev.Selected == "" {
+					status.SetText(T("Wybierz kamerę z listy"))
+				}
+			})
+		}()
+	}
+
 	find.OnTapped = func() {
 		setBusy(true, T("Szukam kamer ONVIF w sieci…"))
 		go func() {
@@ -301,6 +386,17 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 		mainPath.SetText(prefill.MainPath)
 		subPath.SetText(prefill.SubPath)
 		channel.SetText(strconv.Itoa(prefill.Channel))
+		if prefill.ImouApp != "" {
+			imouApp.SetText(prefill.ImouApp)
+			imouSecret.SetText(prefill.ImouSecret)
+			for i, dc := range imouDataCenters {
+				if dc.ID == prefill.ImouDC {
+					imouDC.SetSelectedIndex(i)
+				}
+			}
+			setImouDevices([]imouDevice{{ID: prefill.ImouDevice, Name: T("zapisana"), Model: "Imou"}}, prefill.ImouDevice)
+			imouOn.SetChecked(true)
+		}
 		for _, b := range rtspBrands {
 			if b.main == prefill.MainPath && b.sub == prefill.SubPath {
 				brand.Selected = b.name // without OnChanged: the paths are set

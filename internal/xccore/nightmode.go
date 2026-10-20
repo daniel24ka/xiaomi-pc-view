@@ -47,3 +47,57 @@ func NightModeByID(id string) (NightMode, error) {
 	}
 	return NightMode{}, errors.New("mode must be one of: " + strings.Join(ids, ", "))
 }
+
+// CameraNightModes - the night modes of the camera (Xiaomi: all; IP cameras: the night
+// vision modes of the Imou cloud or the IR cut filter modes over ONVIF, once detected; nil -
+// none).
+func CameraNightModes(name string) []NightMode {
+	if CameraSource(name) != "" {
+		return NightModes
+	}
+	if c := imouCached(name); c != nil && len(c.nightModes()) > 0 {
+		return c.nightModes()
+	}
+	if c := onvifCached(name); c != nil {
+		return c.nightModes()
+	}
+	return nil
+}
+
+// GetNightMode returns the night mode value of the camera.
+func GetNightMode(name string) (int, error) {
+	if CameraSource(name) == "" {
+		if c, err := imouOf(name); err == nil && len(c.nightModes()) > 0 {
+			return c.nightMode()
+		}
+		c, err := ipControl(name)
+		if err != nil {
+			return 0, err
+		}
+		return c.nightMode()
+	}
+	props, err := GetProps(name, PropNightShot)
+	if err != nil {
+		return 0, err
+	}
+	if len(props) == 0 || props[0].Code != 0 {
+		return 0, ErrNotXiaomi
+	}
+	v, _ := props[0].Value.(float64)
+	return int(v), nil
+}
+
+// SetNightMode sets the night mode (NightMode.Value).
+func SetNightMode(name string, value int) error {
+	if CameraSource(name) == "" {
+		if c, err := imouOf(name); err == nil && len(c.nightModes()) > 0 {
+			return c.setNightMode(value)
+		}
+		c, err := ipControl(name)
+		if err != nil {
+			return err
+		}
+		return c.setNightMode(value)
+	}
+	return SetProp(name, PropNightShot, value)
+}

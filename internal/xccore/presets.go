@@ -11,7 +11,7 @@ import (
 )
 
 // Preset positions ("often viewed positions" in Mi Home), stored in the camera, so they are
-// shared with the Mi Home app:
+// shared with the Mi Home app (IP cameras: ONVIF positions in the app config, IPCamera.Points):
 //   6.12 - current motor position {"x":637,"y":63,"scale":10}
 //   9.1  - list [{"location":1,"idx":1,"pos":[x,y],"scale":10,"name":"<base64>"}], up to 6
 //   9.2  - write idx: the camera turns to that position
@@ -29,7 +29,8 @@ type Preset struct {
 	Idx      int    `json:"idx"`
 	Pos      [2]int `json:"pos"`
 	Scale    int    `json:"scale,omitempty"`
-	Name     string `json:"name"` // base64 in the camera
+	Name     string `json:"name"`           // base64 in the camera
+	Coll     string `json:"coll,omitempty"` // Imou: the collection point in the camera
 }
 
 // Label - decoded name
@@ -41,6 +42,11 @@ func (p Preset) Label() string {
 }
 
 func GetPresets(camera string) ([]Preset, error) {
+	if ip := IPCam(camera); ip != nil {
+		list := append([]Preset(nil), ip.Points...)
+		sort.Slice(list, func(i, j int) bool { return list[i].Location < list[j].Location })
+		return list, nil
+	}
 	props, err := GetProps(camera, PropPresets)
 	if err != nil {
 		return nil, err
@@ -63,6 +69,10 @@ func PutPresets(camera string, list []Preset) error {
 	for i := range list {
 		list[i].Location = i + 1
 	}
+	if ip := IPCam(camera); ip != nil {
+		ip.Points = list
+		return SaveIPCamera(camera, ip)
+	}
 	b, _ := json.Marshal(list)
 	if len(list) == 0 {
 		b = []byte("[]")
@@ -79,6 +89,10 @@ func DeletePreset(camera string, idx int) error {
 	for _, p := range list {
 		if p.Idx != idx {
 			out = append(out, p)
+		} else if ic := imouPoints(camera); ic != nil {
+			if err := ic.deletePoint(p); err != nil {
+				return err
+			}
 		}
 	}
 	return PutPresets(camera, out)
@@ -86,7 +100,31 @@ func DeletePreset(camera string, idx int) error {
 
 // GotoPreset turns the camera to a stored position.
 func GotoPreset(camera string, idx int) error {
+	if IPCam(camera) != nil {
+		_, err := gotoIPPoint(camera, idx)
+		return err
+	}
 	return SetProp(camera, PropPresetActive, idx)
+}
+
+// gotoIPPoint turns an IP camera to its point idx (Imou: the collection point; the ONVIF
+// services are nil then).
+func gotoIPPoint(camera string, idx int) (*onvifCam, error) {
+	list, _ := GetPresets(camera)
+	for _, p := range list {
+		if p.Idx != idx {
+			continue
+		}
+		if ic := imouPoints(camera); ic != nil {
+			return nil, ic.gotoPoint(p)
+		}
+		c, err := ipControl(camera)
+		if err != nil {
+			return nil, err
+		}
+		return c, c.moveTo(float64(p.Pos[0])/pointScale, float64(p.Pos[1])/pointScale)
+	}
+	return nil, fmt.Errorf("no point %d", idx)
 }
 
 // PointReached: the camera turned to the point p, and zoomed to its zoom (scale = zoom*10):
@@ -100,6 +138,18 @@ func PointReached(camera string, p Preset) {
 // GotoPresetAndWait turns to a position and waits until the camera stops (the motor
 // position doesn't change), max 15 s.
 func GotoPresetAndWait(camera string, idx int) error {
+	if IPCam(camera) != nil {
+		c, err := gotoIPPoint(camera, idx)
+		if err != nil {
+			return err
+		}
+		if c == nil {
+			time.Sleep(imouTurnTime) // Imou: no position to watch
+		} else {
+			c.waitStill()
+		}
+		return nil
+	}
 	if err := GotoPreset(camera, idx); err != nil {
 		return err
 	}
@@ -127,17 +177,15 @@ func SavePresetSlot(camera string, slot int, name string) error {
 	if slot < 1 || slot > PresetSlots {
 		return fmt.Errorf("point must be 1-%d", PresetSlots)
 	}
-	props, err := GetProps(camera, PropMotorLocation)
+	if strings.TrimSpace(name) == "" {
+		name = fmt.Sprintf("%d", slot)
+	}
+	if ic := imouPoints(camera); ic != nil {
+		return ic.savePoint(camera, slot, strings.TrimSpace(name))
+	}
+	loc, err := motorPosition(camera)
 	if err != nil {
 		return err
-	}
-	if len(props) == 0 {
-		return errors.New("no position from the camera")
-	}
-	var loc struct{ X, Y, Scale int }
-	s, _ := props[0].Value.(string)
-	if err = json.Unmarshal([]byte(s), &loc); err != nil {
-		return fmt.Errorf("position: %w (%s)", err, s)
 	}
 	if strings.TrimSpace(name) == "" {
 		name = fmt.Sprintf("%d", slot)
@@ -161,6 +209,36 @@ func SavePresetSlot(camera string, slot int, name string) error {
 	return PutPresets(camera, out)
 }
 
+type motorLocation struct{ X, Y, Scale int }
+
+// motorPosition - the current position (Xiaomi: MIoT 6.12, IP cameras: ONVIF * pointScale)
+func motorPosition(camera string) (loc motorLocation, err error) {
+	if IPCam(camera) != nil {
+		c, err := ipControl(camera)
+		if err != nil {
+			return loc, err
+		}
+		x, y, err := c.position()
+		if err != nil {
+			return loc, err
+		}
+		p := pointOf(x, y)
+		return motorLocation{X: p[0], Y: p[1]}, nil
+	}
+	props, err := GetProps(camera, PropMotorLocation)
+	if err != nil {
+		return loc, err
+	}
+	if len(props) == 0 {
+		return loc, errors.New("no position from the camera")
+	}
+	s, _ := props[0].Value.(string)
+	if err = json.Unmarshal([]byte(s), &loc); err != nil {
+		return loc, fmt.Errorf("position: %w (%s)", err, s)
+	}
+	return loc, nil
+}
+
 // RenamePresetSlot changes the name of point slot (1-3); its position stays.
 func RenamePresetSlot(camera string, slot int, name string) error {
 	list, err := GetPresets(camera)
@@ -170,9 +248,17 @@ func RenamePresetSlot(camera string, slot int, name string) error {
 	if strings.TrimSpace(name) == "" {
 		name = fmt.Sprintf("%d", slot)
 	}
+	name = strings.TrimSpace(name)
 	for i := range list {
 		if list[i].Idx == slot {
-			list[i].Name = base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(name)))
+			if ic := imouPoints(camera); ic != nil {
+				coll, err := ic.renamePoint(list[i], name)
+				if err != nil {
+					return err
+				}
+				list[i].Coll = coll
+			}
+			list[i].Name = base64.StdEncoding.EncodeToString([]byte(name))
 			return PutPresets(camera, list)
 		}
 	}

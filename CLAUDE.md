@@ -254,9 +254,52 @@ Kraków Zakole Wisły (krakow2), Kasprowy Wierch, Białystok, Zamość, Łeba, K
   SDK + NDK, gomobile, Android TV emulator image (~8–10 GB in ~/Android, no sudo). No Shield
   access for tests yet (would need network ADB debugging and its IP).
 
-- IP cameras phase 2: ONVIF PTZ (+ presets as points), night mode (ONVIF imaging IrCutFilter),
-  spotlight/siren (ONVIF relay outputs / vendor APIs), SD history (ONVIF Profile G) – no real
-  IP camera to test yet.
+- IP cameras phase 2 (branch `feature/onvif-controls`, 2026-10-18, built and tested on Windows
+  with an Imou Cruiser IPC-S7C-3M0WE, fw 2.810 2025-12): `internal/xccore/onvifcam.go` (ONVIF
+  detection, also for RTSP/HTTP cameras on port 80 with the same login; PTZ ContinuousMove
+  with a 1 s timeout repeated by the Mover; points = positions kept in `IPCamera.Points`
+  (Pos * 10000) + AbsoluteMove, only when a no-op AbsoluteMove to the current position works;
+  IR cut filter → night modes auto/on/off), `onvifevents.go` (PullPoint per camera from
+  `StartONVIFEvents`, motion rising edges → EventMotion in memory, `eventKey` "ip:<name>" +
+  `evStore.merge` in the app). Imou facts: no ONVIF presets (MaximumNumberOfPresets 0), lists
+  AbsolutePanTiltPositionSpace but AbsoluteMove = "not implemented" and GetStatus is always
+  0.8/0.8, no IrCutFilter in Imaging, Dahua CGI on :80 doesn't answer (ONVIF does), RTSP
+  `/cam/realmonitor?channel=1&subtype=0|1` with admin + the safety code. PullMessages needs
+  WS-Addressing Action+To ("Resource Unknown" without); few subscriptions ("Subscribe Creation
+  Failed" until old ones expire: subscribe for 120 s, renew every 60 s, Unsubscribe on exit).
+  PTZ moves don't raise MotionAlarm. Tools: `cmd/xc-onvifprobe`, `XC_ONVIFCAM=<name> go test
+  -run TestONVIFLive|TestONVIFPullRaw ./internal/xccore`. Imou spotlight/siren/night/presets/SD
+  come from the Imou Open API (below). ONVIF IR cut filter untested (no camera).
+- Imou Open API (`internal/xccore/imoucam.go`, 2026-10-18, same branch): `IPCamera.ImouApp/
+  ImouSecret/ImouDC/ImouDevice` (form: "Sterowanie przez chmurę Imou", Get = device list);
+  POST https://openapi-<dc>.easy4ip.com/openapi/<method> (dc fk = EU), sign = Base64(HMAC-
+  SHA256("time:T,nonce:N,appSecret:S", hex(sha256(S)))) (`TestImouSign` = docs test case),
+  accessToken 3 days (TK1002 renew). The developer app of the user's Imou Life account (same
+  login on open.imoulife.com) sees its 7 devices (listDeviceDetailsByPage), nothing bound;
+  Cruiser = `C41D4AEPCG84966` "Podwórko" (abilities WhiteLight, Siren, NVM, CollectionPoint,
+  PT/PTZ, accessType PaaS). Light/siren = setDeviceCameraStatus whiteLight/siren (also
+  read), served as MIoT props 6.16/6.10 by `GetProps`/`SetProp` (no brightness: code
+  -704040003, `Caps.Brightness`); night = getNightVisionMode modes Intelligent/FullColor/
+  Infrared/Off → app values 5/3/2/0; points = collection points by name (`Preset.Coll`):
+  setCollection saves the current position, turnCollection, modifyCollection,
+  deleteCollection; 21201 "Unknown error" right after another point change → `pointCall`
+  retries. Verified on the Cruiser (`XC_IMOU="app|secret|serial" XC_IMOURTSP=<rtsp>
+  XC_FFMPEG=dist/ffmpeg.exe go test -run TestImouLive ./internal/xccore`): night 5→2→5,
+  point add/rename/delete, turn right 2 s + back to the point (picture diff 71.7 → 1.5).
+  White light verified (`XC_IMOULIGHT=1`: on, off; the cloud reports a switch ~1 s late, so
+  `imouSetProp` waits 1.5 s before the UI reads it back). Siren: setDeviceCameraStatus siren
+  = DV1026 on the Cruiser (reading it works), so `setSiren` falls back to the things data
+  model: listDeviceDetailsByIds → productId (Cruiser QLDuttGT), getProductModel → services
+  SirenStart 25500 (input clientLocalTime 25501, "2006-01-02 15:04:05"), SirenStop 22200,
+  GetSirenStatus 25700; iotDeviceControl {productId, deviceId, ref, content}. Verified by
+  the user in the app (Syrena on/off, 2026-10-18; the auto-mode classifier blocks Claude
+  from sounding it). The IoT model also has whiteLightStart/Stop (countdown), PtzMoveFour,
+  collection services, GetLocalRecords. Cost: 30,000 requests + 2 GB flow free a month; never use cloud
+  live/playback (bindDeviceLive HLS, RTMP) by default. SD playback works on the LAN without
+  the cloud: `rtsp://admin:<code>@<ip>/cam/playback?channel=1&subtype=0&starttime=
+  YYYY_MM_DD_HH_MM_SS&endtime=…` (404 = no recording in the window); list via the cloud
+  `queryLocalRecords` (max 30 per call) – not done. Pan/tilt over the cloud (controlMovePTZ
+  op 0-3 up/down/left/right + duration ms) is not used (ONVIF does it).
 - The user has four public webcams added for testing (WhatsUpCams HLS, Croatia): "Pula (Chorwacja)",
   "Dubrownik – Stradun (Chorwacja)", "Pag – plaża Gajac (Chorwacja)", "Bale – Istria (Chorwacja)"
   (5 cameras with the Xiaomi one: grid 3 columns works). US DOT HLS feeds (Caltrans, Iowa) are geo-blocked here.

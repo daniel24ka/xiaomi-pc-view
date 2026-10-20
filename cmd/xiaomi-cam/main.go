@@ -13,6 +13,7 @@ import (
 	"image/jpeg"
 	"os"
 	"runtime/debug"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -102,6 +103,7 @@ type ui struct {
 	snapButton *ptrButton
 	picWait    *pictureWait // sound on/off: waiting for the new decoder's picture
 	night      *ptrSelect   // night vision mode
+	nightList  []nightMode  // the night modes of the selected camera (the options of night)
 	// wallpaper mode (wallpaper.go)
 	wallpaper     bool
 	wallStop      chan struct{} // keepBelow running
@@ -284,6 +286,7 @@ func main() {
 		showChooseCamera(u.win, u.selectCamera)
 	}
 	u.startEventWatcher()
+	startONVIFEvents()
 	startHangWatchdog()
 	if devHook != nil {
 		go devHook(u) // only in builds with -tags devtest
@@ -469,16 +472,13 @@ func (u *ui) build() {
 			}
 		}, u.win)
 	})
-	var nightNames []string
-	for _, m := range nightModes {
-		nightNames = append(nightNames, T(m.Name))
-	}
-	u.night = newSelect(nightNames, func(string) {
+	u.night = newSelect(nil, func(string) {
 		u.win.Canvas().Unfocus()
-		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 {
-			u.setProp(propNightShot, nightModes[i].Value, u.night)
+		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 && i < len(u.nightList) {
+			u.setNight(u.nightList[i].Value)
 		}
 	})
+	u.setNightList(nightModes)
 	u.night.PlaceHolder = T("Tryb nocny")
 	u.night.tip = T("Tryb nocny: podczerwień (czarno-biały obraz) lub kolor z reflektorem; auto przełącza o zmroku")
 	u.capNight = container.NewBorder(nil, nil, widget.NewIcon(moonIcon), nil, container.NewGridWrap(fyne.NewSize(230, u.night.MinSize().Height), u.night))
@@ -793,10 +793,11 @@ func (u *ui) changeIPQuality(q int) {
 }
 
 func (u *ui) loadCameraState() {
-	if cameraSource(u.camera.Selected) == "" {
-		return // not a Xiaomi camera: no state to read
-	}
 	name := u.camera.Selected
+	if cameraSource(name) == "" && !hasImou(name) {
+		u.loadIPState(name)
+		return
+	}
 	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 	if err != nil {
 		fyne.Do(func() { u.status.SetText("Nie udało się odczytać stanu kamery: " + err.Error()) })
@@ -806,6 +807,9 @@ func (u *ui) loadCameraState() {
 		u.syncing = true
 		defer func() { u.syncing = false }()
 		for _, p := range props {
+			if p.Code != 0 {
+				continue // the camera has no such property (Imou: no brightness)
+			}
 			switch {
 			case p.Siid == propLight.Siid && p.Piid == propLight.Piid:
 				on, _ := p.Value.(bool)
@@ -818,12 +822,67 @@ func (u *ui) loadCameraState() {
 				u.siren.SetChecked(on)
 			case p.Siid == propNightShot.Siid && p.Piid == propNightShot.Piid && p.Code == 0:
 				v, _ := p.Value.(float64)
-				if i := nightModeByValue(int(v)); i >= 0 {
-					u.night.SetSelectedIndex(i)
-				}
+				u.showNight(int(v))
 			}
 		}
 	})
+}
+
+// loadIPState reads the state of an IP camera: the night mode (ONVIF IR cut filter).
+func (u *ui) loadIPState(name string) {
+	if name == "" || len(cameraNightModes(name)) == 0 {
+		return
+	}
+	v, err := getNightMode(name)
+	if err != nil {
+		return
+	}
+	fyne.Do(func() {
+		if name == u.camera.Selected {
+			u.syncing = true
+			u.showNight(v)
+			u.syncing = false
+		}
+	})
+}
+
+// setNightList sets the night modes the selected camera has as the options.
+func (u *ui) setNightList(list []nightMode) {
+	if slices.Equal(list, u.nightList) && u.night.Options != nil {
+		return // the same modes: keep the selection
+	}
+	u.nightList = list
+	names := make([]string, 0, len(list))
+	for _, m := range list {
+		names = append(names, T(m.Name))
+	}
+	u.syncing = true
+	u.night.ClearSelected()
+	u.night.SetOptions(names)
+	u.syncing = false
+}
+
+// showNight selects the night mode with the value (u.syncing: set by the caller).
+func (u *ui) showNight(v int) {
+	for i, m := range u.nightList {
+		if m.Value == v {
+			u.night.SetSelectedIndex(i)
+			return
+		}
+	}
+}
+
+// setNight sets the night mode of the selected camera; the list is disabled until it answers.
+func (u *ui) setNight(value int) {
+	name := u.camera.Selected
+	done := u.busy(nil, u.night)
+	go func() {
+		if err := setNightMode(name, value); err != nil {
+			fyne.Do(func() { dialog.ShowError(err, u.win) })
+		}
+		u.loadCameraState()
+		fyne.Do(done)
+	}()
 }
 
 // setProp sets a camera property; the control w is disabled until the camera answers.

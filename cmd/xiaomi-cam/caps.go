@@ -38,7 +38,11 @@ func (u *ui) applyCaps() {
 	show(c.Points, u.capPoints)
 	show(c.Zoom, u.capZoom, u.capOverlayZoom)
 	show(c.Light, u.capLight)
+	show(c.Brightness, u.brightness)
 	show(c.Siren, u.siren)
+	if c.NightMode {
+		u.setNightList(cameraNightModes(u.camera.Selected))
+	}
 	show(c.NightMode, u.capNight)
 	show(c.Light || c.Siren || c.NightMode, u.camControls)
 	show(c.History, u.hist.button)

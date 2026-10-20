@@ -28,8 +28,20 @@ see [Android](#android).
   - **Test** checks the connection and the picture size before adding. Quality: **main** or
     **sub stream** (when the camera has two). Picture, sound, snapshots, MP4 recording
     (H.264/H.265 copied, MJPEG encoded to H.264), the grid, AI tasks, notifications, HTTP API
-    and MCP work with IP cameras too. Pan/tilt, zoom, spotlight, siren, night mode and SD
-    history are Xiaomi only for now (hidden for IP cameras).
+    and MCP work with IP cameras too.
+  - **ONVIF controls** (also for a camera added as RTSP / HTTP: the app asks ONVIF on port 80
+    with the same login): **pan/tilt**, **camera points 1–3** (positions kept by the app, for
+    cameras with absolute PTZ positioning), **night mode** (the IR cut filter: auto / infrared /
+    off) and **motion events** (a PullPoint subscription while the app runs: the events list,
+    notifications, e-mail / ntfy / Telegram, snapshot, recording). Only what the camera
+    answers is shown; e.g. Imou (Cruiser) has pan/tilt and motion events, but no positions and
+    no IR cut filter over ONVIF.
+  - **Imou cloud controls** (optional, for Imou cameras): the **white light**, the **siren**,
+    the **night vision mode** (smart / full color / infrared / off) and **camera points 1–3**
+    (collection points kept in the camera, also seen in the Imou Life app) over the
+    [Imou Open API](https://open.imoulife.com). The video stays local (RTSP); the cloud only
+    sends the commands (free: 30,000 requests a month, a few per action). See
+    [Imou cameras](#imou-cameras) below. Zoom and SD history are Xiaomi only.
 - **Remote connection from any network**, like Mi Home, without port forwarding or VPN.
   There is also a local (LAN) mode.
 - **Pan/tilt**: buttons, arrow keys, or dragging the picture with the mouse.
@@ -193,6 +205,24 @@ For an IP camera choose **IP camera** in the first step, then the type (ONVIF, R
 the address, login and password. ONVIF usually has to be enabled in the camera settings
 (often with its own account). The camera settings, with the password, are stored in the same
 config file.
+
+### Imou cameras
+
+Imou (Dahua) cameras work over RTSP: type **RTSP**, producer **Dahua / Amcrest / Imou**, login
+`admin` and the safety code from the camera label as the password. Pan/tilt and motion events
+come over ONVIF. For the light, the siren, the night mode and camera points:
+
+1. Log in at [open.imoulife.com](https://open.imoulife.com) with the **Imou Life** account
+   (the same e-mail and password; the cameras of the app are seen by the API, nothing has to
+   be bound).
+2. **My App → Application Information**: type **PC Client**, any name, save. Copy the
+   **AppId** and **AppSecret**.
+3. In the camera form tick **Control over the Imou cloud**, paste the AppId and AppSecret,
+   choose the data center (Europe for EU accounts), press **Get** and pick the camera.
+
+The free plan has 30,000 API requests a month (a camera switch reads 3–4 values, each
+command is 1–2 requests). The app never uses the cloud video (live HLS / RTMP or SD
+playback): it counts as paid media flow beyond 2 GB a month.
 
 ## Android
 
@@ -416,8 +446,8 @@ chosen time.
   `&servers=ip1,ip2` to the camera source in the config.
 - Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
   siren and zoom follow the `isa.camera.700sa` specification.
-- IP cameras: only the picture and sound for now – no pan/tilt (ONVIF PTZ), night mode,
-  spotlight, siren or SD card history.
+- IP cameras: no zoom and no SD card history. Light, siren and points without ONVIF positions
+  only for Imou cameras with the Imou cloud settings.
 
 ## License and credits
 
