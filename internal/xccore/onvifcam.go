@@ -36,6 +36,9 @@ type onvifCam struct {
 
 var errNoONVIF = errors.New("the camera has no ONVIF")
 
+// errNotSOAP - the host answered over HTTP but not with SOAP (a web server, a CDN).
+var errNotSOAP = errors.New("ONVIF: not a SOAP answer")
+
 type onvifEntry struct {
 	cam *onvifCam
 	err error
@@ -88,6 +91,9 @@ func detectONVIF(name string) (*onvifCam, error) {
 			host = u.Hostname() + ":80"
 		}
 	case "rtsp", "rtsps", "http", "https":
+		if p := strings.ToLower(u.Path); strings.HasSuffix(p, ".m3u8") || strings.Contains(p, ".mjpg") {
+			return nil, errNoONVIF // a stream on a web server / CDN (HLS, MJPEG), not a camera
+		}
 		host = u.Hostname() + ":80"
 	default:
 		return nil, errNoONVIF
@@ -96,6 +102,9 @@ func detectONVIF(name string) (*onvifCam, error) {
 	c := &onvifCam{user: u.User, device: base + "/onvif/device_service"}
 
 	b, err := c.request(c.device, `<tds:GetCapabilities><tds:Category>All</tds:Category></tds:GetCapabilities>`)
+	if errors.Is(err, errNotSOAP) {
+		return nil, errNoONVIF // a web server answered (404, redirect…): it has no ONVIF, don't ask again
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +196,9 @@ func (c *onvifCam) requestWith(client *http.Client, url, action, body string) ([
 	}
 	if s := onvif.FindTagValue(b, "Text"); s != "" {
 		return nil, errors.New("ONVIF: " + strings.TrimSpace(s))
+	}
+	if !bytes.Contains(b, []byte("Envelope")) {
+		return nil, fmt.Errorf("%w: %s", errNotSOAP, res.Status)
 	}
 	return nil, errors.New("ONVIF: " + res.Status)
 }

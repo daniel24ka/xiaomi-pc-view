@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"errors"
 	"net/http"
+	"net/http/httptest"
 	"regexp"
 
 	"github.com/AlexxIT/go2rtc/pkg/onvif"
@@ -198,5 +200,27 @@ func TestONVIFPullRaw(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		b, err = c.requestWith(client, addr, actionPull, `<tev:PullMessages `+nsEvents+`><tev:Timeout>PT20S</tev:Timeout><tev:MessageLimit>20</tev:MessageLimit></tev:PullMessages>`)
 		t.Logf("pull %d %v: %s", i, err, ns.ReplaceAll(b, nil))
+	}
+}
+
+// A web server / CDN (the HLS webcams) is "no ONVIF", not an error asked again every minute.
+func TestONVIFNotSOAP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "<html>404 Not Found</html>", http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := &onvifCam{}
+	if _, err := c.request(srv.URL+"/onvif/device_service", "<x/>"); !errors.Is(err, errNotSOAP) {
+		t.Fatalf("err = %v, want errNotSOAP", err)
+	}
+	ipCams.Lock()
+	if ipCams.m == nil {
+		ipCams.m = map[string]*IPCamera{}
+	}
+	ipCams.m["__hls_test"] = &IPCamera{Main: "https://cdn.example.com/hls/cam.m3u8"}
+	ipCams.Unlock()
+	defer func() { ipCams.Lock(); delete(ipCams.m, "__hls_test"); ipCams.Unlock() }()
+	if _, err := detectONVIF("__hls_test"); !errors.Is(err, errNoONVIF) {
+		t.Fatalf("HLS: err = %v, want errNoONVIF", err)
 	}
 }
