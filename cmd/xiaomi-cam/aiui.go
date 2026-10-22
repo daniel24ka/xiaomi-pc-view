@@ -115,6 +115,7 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 		if len(tasks) == 0 {
 			l := widget.NewLabel(T("Brak zadań. Dodaj zadanie, aby AI sprawdzało obraz z kamery według harmonogramu."))
 			l.Wrapping = fyne.TextWrapWord
+			rtlAlign(l)
 			list.Add(l)
 		}
 		for _, t := range tasks {
@@ -131,6 +132,7 @@ func (u *ui) aiSettings() fyne.CanvasObject {
 			info.Importance = widget.LowImportance
 			status := widget.NewLabel(taskStatus(t))
 			status.Wrapping = fyne.TextWrapWord
+			rtlAlign(status)
 			run := newButton("", theme.MediaPlayIcon(), func() {
 				u.ai.runNow(t.ID)
 				u.status.SetText(fmt.Sprintf(T("Zadanie „%s” uruchomione"), t.Name))
@@ -224,6 +226,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 
 	cams := append([]string{T("pierwsza kamera")}, cameraNames()...)
 	camera := widget.NewSelect(cams, nil)
+	camera.PlaceHolder = T("(wybierz)")
 	camera.SetSelected(cameraLabel(task.Camera))
 
 	var provNames []string
@@ -231,6 +234,7 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		provNames = append(provNames, T(p.name))
 	}
 	provider := widget.NewSelect(provNames, nil)
+	provider.PlaceHolder = T("(wybierz)")
 	provider.SetSelected(providerName(task.Provider))
 
 	pointNames := []string{T("bez zmiany")}
@@ -242,12 +246,14 @@ func (u *ui) editTask(t *aiTask, done func()) {
 		pointNames = append(pointNames, label)
 	}
 	point := widget.NewSelect(pointNames, nil)
+	point.PlaceHolder = T("(wybierz)")
 	point.SetSelectedIndex(min(max(task.Point, 0), presetSlots))
 
 	prompt := widget.NewMultiLineEntry()
 	prompt.SetText(task.Prompt)
 	prompt.SetPlaceHolder(T("np. Czy przed bramą stoi samochód dostawczy? Czy na posesji jest człowiek?"))
 	prompt.Wrapping = fyne.TextWrapWord
+	rtlAlign(prompt)
 	prompt.SetMinRowsVisible(4)
 
 	cronEntry := widget.NewEntry()
@@ -278,12 +284,14 @@ func (u *ui) editTask(t *aiTask, done func()) {
 	preset.SetSelectedIndex(selected)
 	cronHelp := widget.NewLabel(T("CRON: minuta godzina dzień miesiąc dzień-tygodnia, np. „*/10 7-22 * * *” – co 10 min od 7 do 22, albo odstęp: „@every 20s”, „@every 2m”. Każde sprawdzenie to jedno płatne zapytanie do AI ze zdjęciem – co 10 s to ok. 8600 zapytań na dobę."))
 	cronHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(cronHelp)
 	cronHelp.Importance = widget.LowImportance
 
 	fullRes := widget.NewCheck(T("Pełna rozdzielczość (2560×1440)"), nil)
 	fullRes.SetChecked(task.FullRes)
 	fullResHelp := widget.NewLabel(T("Lepiej rozpoznaje szczegóły (marki, tablice), ale zapytanie jest droższe. Domyślnie 1280 px."))
 	fullResHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(fullResHelp)
 	fullResHelp.Importance = widget.LowImportance
 	notify := widget.NewCheck(T("Powiadomienie systemowe"), nil)
 	notify.SetChecked(task.Notify)

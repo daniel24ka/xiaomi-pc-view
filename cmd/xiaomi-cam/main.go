@@ -42,8 +42,6 @@ var devHook func(u *ui)
 // version is set at build time: -ldflags "-X main.version=v1.0.0"
 var version = "dev"
 
-var qualities = xccore.XiaomiQualities
-
 // quality - a picture quality of a camera: name in the list and picture size
 type quality struct {
 	name string
@@ -73,7 +71,7 @@ func cameraQualities(name string) ([]quality, int) {
 		return qs, min(max(c.Quality, 0), len(qs)-1)
 	}
 	var qs []quality
-	for _, q := range qualities {
+	for _, q := range xccore.CameraQualities(name) {
 		qs = append(qs, quality{q.Name, q.W, q.H})
 	}
 	return qs, xccore.XiaomiQuality(name)
@@ -202,6 +200,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
 	}
+	xccore.EnsureOnAir() // the broadcast address always has a camera
 	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)
@@ -209,14 +208,14 @@ func main() {
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
 	a.Settings().SetTheme(appTheme{})
-	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
+	lang = a.Preferences().StringWithFallback(prefLanguage, defaultLanguage())
 	appPrefs = a.Preferences()
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
 	u.caps = allCaps
 	u.camZoom = 1
 	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
-		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
+		fyne.Do(func() { u.status.SetText(TJ("Obrót: ", err.Error())) })
 	})
 	u.build()
 	xccore.OnZoomState = func(name string, z float64) {
@@ -390,7 +389,7 @@ func (u *ui) build() {
 		if i := u.quality.SelectedIndex(); ipCam(u.camera.Selected) != nil {
 			u.changeIPQuality(i)
 		} else {
-			u.changeSource(map[string]string{"subtype": qualities[i].Subtype})
+			u.changeSource(map[string]string{"subtype": xccore.CameraQualities(u.camera.Selected)[i].Subtype})
 		}
 	})
 	u.connection = newSelect(cNames, func(string) {
@@ -633,10 +632,10 @@ func (u *ui) setupTray() {
 	if !ok {
 		return
 	}
-	show := fyne.NewMenuItem(T("Pokaż"), u.show)
-	hide := fyne.NewMenuItem(T("Ukryj do zasobnika"), u.hide)
-	u.wallpaperItem = fyne.NewMenuItem(T("Tryb tapety (obraz w tle pulpitu)"), func() { u.setWallpaper(!u.wallpaper) })
-	quit := fyne.NewMenuItem(T("Zakończ"), u.app.Quit)
+	show := fyne.NewMenuItem(TN("Pokaż"), u.show)
+	hide := fyne.NewMenuItem(TN("Ukryj do zasobnika"), u.hide)
+	u.wallpaperItem = fyne.NewMenuItem(TN("Tryb tapety (obraz w tle pulpitu)"), func() { u.setWallpaper(!u.wallpaper) })
+	quit := fyne.NewMenuItem(TN("Zakończ"), u.app.Quit)
 	quit.IsQuit = true
 	u.trayMenu = fyne.NewMenu("Xiaomi Cam", show, hide, u.wallpaperItem, fyne.NewMenuItemSeparator(), quit)
 	desk.SetSystemTrayMenu(u.trayMenu)
@@ -916,7 +915,7 @@ func (u *ui) snapshot() {
 				dialog.ShowError(err, u.win)
 				return
 			}
-			u.status.SetText(T("Zapisano ") + path)
+			u.status.SetText(TJ("Zapisano ", path))
 		})
 	}()
 }

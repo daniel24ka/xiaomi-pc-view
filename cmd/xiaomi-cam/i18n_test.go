@@ -32,3 +32,18 @@ func TestTranslations(t *testing.T) {
 		}
 	}
 }
+
+// Every English text has a Hebrew one, with the same format verbs.
+func TestHebrew(t *testing.T) {
+	verbs := regexp.MustCompile(`%[-+# 0]*\d*(?:\.\d+)?[a-zA-Z]`)
+	for pl, en := range english {
+		he, ok := hebrew[en]
+		if !ok {
+			t.Errorf("no Hebrew for %q (%q)", en, pl)
+			continue
+		}
+		if a, b := verbs.FindAllString(en, -1), verbs.FindAllString(he, -1); strings.Join(a, " ") != strings.Join(b, " ") {
+			t.Errorf("verbs differ: %q %v / %q %v", en, a, he, b)
+		}
+	}
+}

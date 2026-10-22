@@ -14,6 +14,7 @@ import (
 
 	"github.com/AlexxIT/go2rtc/internal/api"
 	"github.com/AlexxIT/go2rtc/internal/streams"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
 // Local HTTP API for scripts and AI (the MCP server uses it). Listens only on
@@ -36,6 +37,8 @@ import (
 //	POST /api/xiaomi-cam/points/goto?point=1         turn to a point (number or name)
 //	POST /api/xiaomi-cam/points/save?point=1&name=auto  save the current position
 //	GET  /api/xiaomi-cam/events?hours=24             camera events (motion, person, car, fence)
+//	GET  /api/xiaomi-cam/onair                       the camera on air and the RTSP address for OBS
+//	POST /api/xiaomi-cam/onair?camera=name           put a camera on air
 func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	handle := func(path, method string, f func(r *http.Request, name string) (any, error)) {
 		api.HandleFunc("api/xiaomi-cam/"+path, func(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +70,27 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			_ = json.NewEncoder(w).Encode(res)
 		})
 	}
+
+	api.HandleFunc("api/xiaomi-cam/onair", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+		case "POST":
+			name := r.URL.Query().Get("camera")
+			if !cameraExists(name) {
+				http.Error(w, fmt.Sprintf("no camera %q", name), http.StatusNotFound)
+				return
+			}
+			if err := xccore.SetOnAir(name); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		default:
+			http.Error(w, "GET or POST", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"camera": xccore.OnAirCamera(), "rtsp": xccore.OnAirURL()})
+	})
 
 	api.HandleFunc("api/xiaomi-cam/cameras", func(w http.ResponseWriter, r *http.Request) {
 		type camera struct {

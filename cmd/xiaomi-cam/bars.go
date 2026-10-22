@@ -16,17 +16,17 @@ func (u *ui) appMenuButton() *ptrButton {
 	var b *ptrButton
 	b = newButton("", theme.MenuIcon(), func() {
 		items := []*fyne.MenuItem{
-			fyne.NewMenuItemWithIcon(T("Tylko obraz – ukrywa panele i ramkę okna (H, powrót: Esc)"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
-			fyne.NewMenuItemWithIcon(T("Pełny ekran (F, F11, podwójne kliknięcie)"), theme.ViewFullScreenIcon(), u.toggleFullScreen),
+			fyne.NewMenuItemWithIcon(TM("Tylko obraz – ukrywa panele i ramkę okna (H, powrót: Esc)"), theme.VisibilityOffIcon(), func() { u.setViewOnly(true) }),
+			fyne.NewMenuItemWithIcon(TM("Pełny ekran (F, F11, podwójne kliknięcie)"), theme.ViewFullScreenIcon(), u.toggleFullScreen),
 			fyne.NewMenuItemSeparator(),
-			fyne.NewMenuItemWithIcon(T("Kamery – dodawanie, zmiana nazwy, usuwanie"), cameraIcon, u.showCameras),
+			fyne.NewMenuItemWithIcon(TM("Kamery – dodawanie, zmiana nazwy, usuwanie"), cameraIcon, u.showCameras),
 		}
 		if len(cameraEvents(u.camera.Selected)) > 0 {
 			items = append(items,
-				fyne.NewMenuItemWithIcon(T("Wykrywanie zdarzeń – ruch, ludzie, samochody"), lucide("scan-eye"), u.showDetection))
+				fyne.NewMenuItemWithIcon(TM("Wykrywanie zdarzeń – ruch, ludzie, samochody"), lucide("scan-eye"), u.showDetection))
 		}
 		if hasEventCameras() {
-			items = append(items, fyne.NewMenuItemWithIcon(T("Zdarzenia – ostatnie wykrycia"), lucide("bell"), u.showEvents))
+			items = append(items, fyne.NewMenuItemWithIcon(TM("Zdarzenia – ostatnie wykrycia"), lucide("bell"), u.showEvents))
 		}
 		items = append(items, fyne.NewMenuItemSeparator())
 		for _, l := range languages {
@@ -36,7 +36,7 @@ func (u *ui) appMenuButton() *ptrButton {
 			items = append(items, it)
 		}
 		items = append(items, fyne.NewMenuItemSeparator(),
-			fyne.NewMenuItemWithIcon(T("Skróty klawiaturowe i wersja"), theme.HelpIcon(), u.showShortcuts))
+			fyne.NewMenuItemWithIcon(TM("Skróty klawiaturowe i wersja"), theme.HelpIcon(), u.showShortcuts))
 		showMenuBelow(b, fyne.NewMenu("", items...))
 	}).withTip(T("Menu: tylko obraz, pełny ekran, kamery, zdarzenia, język, skróty klawiaturowe i wersja"))
 	return b

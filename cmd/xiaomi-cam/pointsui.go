@@ -223,6 +223,7 @@ func (u *ui) showPoints() {
 	}
 	help := widget.NewLabel(T("Ustaw kamerę (strzałki, zoom) i zapisz pozycję jako punkt. Kliknięcie punktu lub klawisz 1–3 obraca kamerę do niego. Punkty są zapisane w kamerze (widoczne też w Mi Home)."))
 	help.Wrapping = fyne.TextWrapWord
+	rtlAlign(help)
 	help.Importance = widget.LowImportance
 	d = dialog.NewCustom(T("Punkty kamery"), T("Zamknij"), container.NewVBox(rows, help), u.win)
 	d.Resize(fyne.NewSize(620, 0))

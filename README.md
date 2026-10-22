@@ -126,7 +126,8 @@ see [Android](#android).
   lies under all windows like the desktop background (above the wallpaper, below the desktop
   icons), on all workspaces, and clicks go through it. Remembered after a restart; "Show" in the tray menu brings the normal window
   back (X11 / XWayland).
-- Polish / English UI.
+- Polish / English / Hebrew UI. Hebrew is shown right to left: Fyne lays text out left to
+  right only, so `bidi.go` gives it the text in display order.
 - Mi Home login with a QR code scanned by the phone (no password, no e-mail code), or with
   the password plus captcha and 2FA code support.
 
@@ -186,6 +187,16 @@ is not signed: Windows SmartScreen may ask "Run anyway".
 
 Settings and cameras: `%APPDATA%\xiaomi-cam-viewer\go2rtc.yaml` (the same file as on Linux –
 it can be copied between them). Recordings and snapshots go to Videos and Pictures.
+
+**Portable config:** when a `config` folder exists next to `xiaomi-cam.exe`, the app keeps
+`go2rtc.yaml` there instead. Use it when the app is started by a process manager (pm2, a
+service wrapper) or from a packaged (MSIX) app: such parents can see another `%APPDATA%` than
+yours, and the app would start without cameras.
+
+**Firewall:** cameras connected in the LAN (`cs2` without `p2p=server`, `tutk`) answer from
+another UDP port, so Windows Firewall drops the answers until the app is allowed (inbound,
+private network, local subnet), e.g. in an administrator PowerShell:
+`New-NetFirewallRule -DisplayName "Xiaomi Cam" -Direction Inbound -Program "<path>\xiaomi-cam.exe" -Action Allow -Profile Private -RemoteAddress LocalSubnet`
 
 On a PC without a graphics driver (a virtual machine, Remote Desktop) the app uses the
 software OpenGL of Mesa (installed with it) – slower, but it works. The wallpaper mode on
@@ -390,6 +401,8 @@ camera. Errors return a non-200 status with a text message.
 | POST | `/api/xiaomi-cam/points/goto` | `point` (1–3 or name) | `{"point", "name"}` after the camera stops |
 | POST | `/api/xiaomi-cam/points/save` | `point` (1–3), `name` | `{"point", "name"}` |
 | GET | `/api/xiaomi-cam/events` | `hours` (default 24, max 744) | `{"camera", "events": [{"time", "kind", "name"}]}` |
+| GET | `/api/xiaomi-cam/onair` | – | `{"camera", "rtsp"}` – the camera on air and the address for OBS |
+| POST | `/api/xiaomi-cam/onair` | `camera` | puts the camera on air (OBS switches without touching the scene) |
 
 ```sh
 # snapshot
@@ -409,6 +422,17 @@ history, the snapshot comes from the recording being played.
 
 The embedded go2rtc also serves the camera stream as RTSP:
 `rtsp://127.0.0.1:18554/<camera name>`.
+
+### On air (OBS)
+
+`rtsp://127.0.0.1:18554/__xc_onair` always shows the camera chosen in Settings → General →
+On air (or `POST /api/xiaomi-cam/onair?camera=…`). Add it once in OBS as a Media Source
+(untick "Local File"); switching the broadcast camera later never touches the OBS scene. It
+is video only (the camera microphone is never on air) and re-streams the camera's own
+stream, so the app and OBS share one camera session. Recommended Media Source settings:
+FFmpeg options `rtsp_transport=tcp fflags=nobuffer timeout=5000000`, network buffering 0 MB
+(a 1 Mbps camera stream has seconds of delay in 1 MB), "Show nothing when playback ends" on.
+Without the `timeout` option OBS keeps waiting on a dead connection after an app restart.
 
 ## How it works
 
@@ -442,8 +466,15 @@ chosen time.
 
 ## Limitations
 
-- CS2 server addresses are set for the **Europe** region. For other regions, add
-  `&servers=ip1,ip2` to the camera source in the config.
+- CS2 server addresses are set for the **Europe** region. Cameras of other regions are added
+  with the LAN connection (no `p2p=server`); for remote access add `&servers=ip1,ip2` to the
+  camera source in the config.
+- Picture qualities follow the model: 2.5K / 720p / SD for the CW400 / CW700S family, HD / SD
+  for other (older) cameras, e.g. the C200 (`chuangmi.camera.046c04`, tested).
+- Models outside the CW400 / CW700S family get the video only: their MIoT specifications use
+  other property ids, so the light, siren, night mode and pan/tilt controls are hidden until
+  the model's spec is mapped. `cmd/xc-xprobe` prints the real connection error of a camera
+  (stop the app first).
 - Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
   siren and zoom follow the `isa.camera.700sa` specification.
 - IP cameras: no zoom and no SD card history. Light, siren and points without ONVIF positions

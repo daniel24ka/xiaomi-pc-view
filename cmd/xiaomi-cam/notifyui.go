@@ -40,6 +40,7 @@ func (u *ui) notificationSettings() fyne.CanvasObject {
 	help := func(s string) *widget.Label {
 		l := widget.NewLabel(s)
 		l.Wrapping = fyne.TextWrapWord
+		rtlAlign(l)
 		l.Importance = widget.LowImportance
 		return l
 	}

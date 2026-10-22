@@ -252,9 +252,11 @@ func (u *ui) buildAreaEditor() fyne.CanvasObject {
 	u.areaEdit = newAreaEditor()
 	u.areaTitle = widget.NewLabel("")
 	u.areaTitle.Wrapping = fyne.TextWrapWord
+	rtlAlign(u.areaTitle)
 	u.areaButtons = container.NewHBox()
 	help := widget.NewLabel(T("Przeciągnij róg, aby zmienić rozmiar, środek – aby przesunąć, poza prostokątem – aby narysować nowy. Obszar dotyczy obecnego kierunku kamery."))
 	help.Wrapping = fyne.TextWrapWord
+	rtlAlign(help)
 	help.Importance = widget.LowImportance
 	bar := pill(container.NewBorder(nil, nil, nil, u.areaButtons, container.NewVBox(u.areaTitle, help)))
 	u.areaBox = container.NewStack(u.areaEdit,

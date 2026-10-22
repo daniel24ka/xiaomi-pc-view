@@ -432,7 +432,7 @@ func (u *ui) jumpEvent(dir int) {
 // showEventFilter - the menu of the event kinds shown on the timeline
 func (u *ui) showEventFilter(b fyne.CanvasObject) {
 	h := &u.hist
-	all := fyne.NewMenuItem(T("Wszystkie zdarzenia"), func() {
+	all := fyne.NewMenuItem(TM("Wszystkie zdarzenia"), func() {
 		h.kinds = nil
 		h.tl.Refresh()
 	})

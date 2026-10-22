@@ -1,27 +1,87 @@
 package main
 
-// Polish is the source language; T returns English text when English is selected.
+import (
+	"strings"
+
+	fynelang "fyne.io/fyne/v2/lang"
+)
+
+// Polish is the source language; T returns English text when English is selected and
+// Hebrew (via the English text, in display order: bidi.go) when Hebrew is.
 
 const prefLanguage = "language"
 
 var languages = []struct{ code, name string }{
+	{"he", visual("עברית")},
 	{"pl", "Polski"},
 	{"en", "English"},
 }
 
 var lang = "pl"
 
+// defaultLanguage - the language before one is chosen in the menu: Hebrew on a Hebrew
+// system, Polish otherwise (as before).
+func defaultLanguage() string {
+	if strings.HasPrefix(fynelang.SystemLocale().LanguageString(), "he") {
+		return "he"
+	}
+	return "pl"
+}
+
 func T(pl string) string {
-	if lang == "en" {
+	return TJ(pl, "")
+}
+
+// TJ is T(pl) + rest for texts glued in code (e.g. "Error: " + err): in Hebrew the
+// whole line has to be reordered, not the two halves apart.
+func TJ(pl, rest string) string {
+	s, rtl := translate(pl)
+	if rtl {
+		return visual(s + rest)
+	}
+	return s + rest
+}
+
+// TM - T for one-line Fyne widgets (menu items): no line breaks.
+func TM(pl string) string {
+	s, rtl := translate(pl)
+	if rtl {
+		return visualWrap(s, 0)
+	}
+	return s
+}
+
+// TN - T for native widgets (the tray menu): Windows lays out Hebrew by itself.
+func TN(pl string) string {
+	s, _ := translate(pl)
+	return s
+}
+
+func translate(pl string) (string, bool) {
+	switch lang {
+	case "en":
 		if en, ok := english[pl]; ok {
-			return en
+			return en, false
+		}
+	case "he":
+		if en, ok := english[pl]; ok {
+			if he, ok := hebrew[en]; ok {
+				return he, true
+			}
+			return en, false
 		}
 	}
-	return pl
+	return pl, false
 }
 
 var english = map[string]string{
 	"Wybierz datę":      "Choose a date",
+	"(wybierz)":         "(choose)",
+	"Na antenie (OBS)":  "On air (OBS)",
+	"Kopiuj":            "Copy",
+	"Adres skopiowany":  "Address copied",
+	"Kamera, którą OBS pokazuje pod stałym adresem (tylko obraz, bez mikrofonu)": "The camera OBS shows at a fixed address (video only, no microphone)",
+	"W OBS: Źródło multimediów, odznacz „Plik lokalny”, wklej adres. Zmiana kamery tutaj przełącza obraz w OBS bez ruszania sceny.": "In OBS: Media Source, untick “Local File”, paste the address. Changing the camera here switches the picture in OBS without touching the scene.",
 	"Poprzedni miesiąc": "Previous month",
 	"Następny miesiąc":  "Next month",
 	"Dzisiaj":           "Today",

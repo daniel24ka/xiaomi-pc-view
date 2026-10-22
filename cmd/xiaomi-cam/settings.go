@@ -13,6 +13,8 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
 // showSettings - app settings: folders for recordings and snapshots.
@@ -89,6 +91,7 @@ func (u *ui) showSettings() {
 	showCams()
 	modeHelp := widget.NewLabel(T("Wybrana kamera i osobne pliki kopiują obraz z kamer bez przekodowania (prawie bez obciążenia). Siatka składa kamery w jeden film H.265 – to przekodowanie obciąża procesor."))
 	modeHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(modeHelp)
 	modeHelp.Importance = widget.LowImportance
 
 	autostart := newCheck(T("Uruchamiaj przy logowaniu (schowana w zasobniku)"), func(on bool) {
@@ -118,7 +121,31 @@ func (u *ui) showSettings() {
 	}
 	startView.tip = T("Co pokazuje okno po uruchomieniu aplikacji (siatka – przy 2 i więcej kamerach)")
 
+	// the camera on air: one RTSP address for OBS, the camera behind it is chosen here
+	onAirNames := cameraNames()
+	onAir := newSelect(onAirNames, nil)
+	onAir.SetSelected(xccore.OnAirCamera())
+	onAir.OnChanged = func(name string) {
+		if err := xccore.SetOnAir(name); err != nil {
+			dialog.ShowError(err, u.win)
+		}
+	}
+	onAir.tip = T("Kamera, którą OBS pokazuje pod stałym adresem (tylko obraz, bez mikrofonu)")
+	onAirURL := widget.NewEntry()
+	onAirURL.SetText(xccore.OnAirURL())
+	onAirURL.Disable()
+	copyURL := newButton(T("Kopiuj"), theme.ContentCopyIcon(), func() {
+		u.app.Clipboard().SetContent(xccore.OnAirURL())
+		u.status.SetText(T("Adres skopiowany"))
+	})
+	onAirHelp := widget.NewLabel(T("W OBS: Źródło multimediów, odznacz „Plik lokalny”, wklej adres. Zmiana kamery tutaj przełącza obraz w OBS bez ruszania sceny."))
+	onAirHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(onAirHelp)
+	onAirHelp.Importance = widget.LowImportance
+
 	form := widget.NewForm(
+		widget.NewFormItem(T("Na antenie (OBS)"), container.NewVBox(onAir,
+			container.NewBorder(nil, nil, nil, copyURL, onAirURL), onAirHelp)),
 		widget.NewFormItem(T("Start"), autostart),
 		widget.NewFormItem(T("Widok na starcie"), startView),
 		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),
@@ -168,7 +195,7 @@ func (u *ui) toggleRecording() {
 					}
 				}
 				if len(files) > 0 {
-					u.status.SetText(T("Zapisano ") + strings.Join(files, ", "))
+					u.status.SetText(TJ("Zapisano ", strings.Join(files, ", ")))
 				} else {
 					u.status.SetText("")
 				}

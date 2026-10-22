@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
 // showCameras - camera management window: list with rename/remove, and "Add camera".
@@ -113,6 +114,7 @@ func (u *ui) renameCamera(name string, done func()) {
 			if err := removeCamera(name); err != nil {
 				dialog.ShowError(err, u.win)
 			}
+			xccore.RenameOnAir(name, newName)
 			u.camerasChanged()
 			if selected {
 				u.camera.SetSelected(newName) // restarts video

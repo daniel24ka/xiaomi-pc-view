@@ -84,6 +84,7 @@ func showLoginQR(w fyne.Window, onAdded func(string)) {
 	img.SetMinSize(fyne.NewSize(260, 260))
 	text := widget.NewLabel(T("Zeskanuj ten kod telefonem z kontem Xiaomi (Mi Home → + → Skanuj, albo Ustawienia → Konto Xiaomi na telefonie Xiaomi) i potwierdź logowanie na telefonie."))
 	text.Wrapping = fyne.TextWrapWord
+	rtlAlign(text)
 	status := widget.NewLabel(T("Czekam na zeskanowanie…"))
 	done := make(chan struct{})
 	d := dialog.NewCustom(T("Logowanie do Mi Home"), T("Anuluj"), container.NewVBox(text, img, status), w)
@@ -110,7 +111,7 @@ func showLoginQR(w fyne.Window, onAdded func(string)) {
 				}
 				switch {
 				case err != nil:
-					status.SetText(T("Błąd: ") + err.Error())
+					status.SetText(TJ("Błąd: ", err.Error()))
 				case code != http.StatusOK:
 					msg := strings.TrimSpace(string(b))
 					if strings.Contains(msg, "expired") {
@@ -170,6 +171,7 @@ func showCodeDialog(w fyne.Window, key, captcha, target, errText string, onAdded
 	if errText != "" {
 		l := widget.NewLabel(errText)
 		l.Wrapping = fyne.TextWrapWord
+		rtlAlign(l)
 		l.Importance = widget.DangerImportance
 		box.Add(l)
 	}
@@ -181,7 +183,7 @@ func showCodeDialog(w fyne.Window, key, captcha, target, errText string, onAdded
 		box.Add(widget.NewLabel(T("Przepisz kod z obrazka:")))
 		box.Add(img)
 	} else if target != "" {
-		box.Add(widget.NewLabel(T("Xiaomi wysłało kod weryfikacyjny na: ") + target))
+		box.Add(widget.NewLabel(TJ("Xiaomi wysłało kod weryfikacyjny na: ", target)))
 	} else {
 		box.Add(widget.NewLabel(T("Kod weryfikacyjny:")))
 	}

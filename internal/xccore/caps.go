@@ -22,6 +22,13 @@ var zoomModels = map[string]bool{
 	"isa.camera.hlzoom": true, // CW400 Pro
 }
 
+// specModels - cameras with the MIoT properties of isa.camera.700sa (backend.go Prop*)
+var specModels = map[string]bool{
+	"isa.camera.700sa":  true, // Outdoor Camera CW700S
+	"isa.camera.hlzoom": true, // CW400 Pro
+	"isa.camera.hlc8":   true, // CW400
+}
+
 var CapsCache sync.Map // camera name -> Caps
 
 // CameraCaps returns (cached) capabilities of a camera.
@@ -34,7 +41,14 @@ func CameraCaps(name string) Caps {
 	if src == "" {
 		return ipCaps(name) // an IP camera: the controls it has over ONVIF and the Imou cloud
 	}
-	c.Zoom = zoomModels[SourceParam(src, "model")]
+	model := SourceParam(src, "model")
+	if !specModels[model] {
+		// another MIoT spec: the property ids below may be other features there (e.g. 6.10
+		// is the siren only on these models), so an unknown model gets the video only
+		CapsCache.Store(name, c)
+		return c
+	}
+	c.Zoom = zoomModels[model]
 	props, err := GetProps(name, PropLight, PropSiren, PropMotorLocation, PropPresets, PropSDStatus, PropZoom, PropNightShot)
 	if err != nil {
 		return AllCaps // the cloud didn't answer: don't hide anything, try again next time
