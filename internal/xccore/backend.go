@@ -318,18 +318,37 @@ func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 	if src == "" {
 		return imouGetProps(name, props) // an Imou camera: the cloud, others: ErrNotXiaomi
 	}
+	spec := specOf(src)
+	out := make([]MiotProp, len(props)) // the 700sa ids, in the order asked (models.go)
 	var params []map[string]any
-	for _, p := range props {
-		params = append(params, map[string]any{"did": CameraDid(src), "siid": p.Siid, "piid": p.Piid})
+	var asked []int // index in out of each cloud request param
+	for i, p := range props {
+		out[i] = MiotProp{Siid: p.Siid, Piid: p.Piid, Code: codeNoProp}
+		mp, ok := spec.mapProp(p)
+		if !ok {
+			continue // the model has no such property: never asked, never written
+		}
+		params = append(params, map[string]any{"did": CameraDid(src), "siid": mp.Siid, "piid": mp.Piid})
+		asked = append(asked, i)
+	}
+	if len(params) == 0 {
+		return out, nil
 	}
 	b, _ := json.Marshal(map[string]any{"params": params})
 	res, err := xiaomi.CloudRequest(src, "/miotspec/prop/get", string(b))
 	if err != nil {
 		return nil, err
 	}
-	var out []MiotProp
-	if err = json.Unmarshal(res, &out); err != nil {
+	var got []MiotProp
+	if err = json.Unmarshal(res, &got); err != nil {
 		return nil, err
+	}
+	for j, g := range got {
+		if j >= len(asked) {
+			break
+		}
+		i := asked[j]
+		out[i].Code, out[i].Value = g.Code, spec.fromModel(props[i], g.Value)
 	}
 	return out, nil
 }
@@ -339,8 +358,16 @@ func SetProp(name string, p MiotProp, value any) error {
 	if src == "" {
 		return imouSetProp(name, p, value)
 	}
+	spec := specOf(src)
+	mp, ok := spec.mapProp(p)
+	if !ok {
+		return ErrNotXiaomi // the model has no such control (models.go)
+	}
+	if value, ok = spec.toModel(p, value); !ok {
+		return ErrNotXiaomi
+	}
 	b, _ := json.Marshal(map[string]any{"params": []map[string]any{
-		{"did": CameraDid(src), "siid": p.Siid, "piid": p.Piid, "value": value},
+		{"did": CameraDid(src), "siid": mp.Siid, "piid": mp.Piid, "value": value},
 	}})
 	res, err := xiaomi.CloudRequest(src, "/miotspec/prop/set", string(b))
 	if err != nil {

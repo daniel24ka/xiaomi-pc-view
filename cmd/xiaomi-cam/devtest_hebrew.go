@@ -44,7 +44,16 @@ func init() {
 		})
 		time.Sleep(3 * time.Second)
 		closeAll()
+		time.Sleep(6 * time.Second) // the camera picture and its controls
+		fyne.DoAndWait(func() {
+			if u.onVideoMouse != nil {
+				u.onVideoMouse() // the controls on the picture are shown
+			}
+		})
 		shot("he-main.jpg")
+		fyne.DoAndWait(func() { test.Tap(u.camControls) })
+		shot("he-light.jpg")
+		closeAll()
 		fyne.DoAndWait(func() { test.Tap(u.menuButton) })
 		shot("he-menu.jpg")
 		closeAll()

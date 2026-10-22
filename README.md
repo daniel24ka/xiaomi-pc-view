@@ -471,10 +471,14 @@ chosen time.
   camera source in the config.
 - Picture qualities follow the model: 2.5K / 720p / SD for the CW400 / CW700S family, HD / SD
   for other (older) cameras, e.g. the C200 (`chuangmi.camera.046c04`, tested).
-- Models outside the CW400 / CW700S family get the video only: their MIoT specifications use
-  other property ids, so the light, siren, night mode and pan/tilt controls are hidden until
-  the model's spec is mapped. `cmd/xc-xprobe` prints the real connection error of a camera
-  (stop the app first).
+- Camera models are listed in `internal/xccore/models.go`: the app speaks the MIoT ids and
+  values of `isa.camera.700sa`, and a model entry maps them to its own spec (ids, values,
+  pan/tilt over the MISS motor command). A property the model doesn't have is answered as
+  missing without asking the cloud, so its control is hidden and never written. Mapped: the
+  CW400 / CW700S family and the C200 (`chuangmi.camera.046c04`: pan/tilt, night mode auto /
+  infrared / off, SD status – it has no spotlight, siren, zoom or camera points). Other models
+  get the video only until they are mapped (see https://home.miot-spec.com/spec/<model>).
+  `cmd/xc-xprobe` prints the real connection error of a camera (stop the app first).
 - Cameras with the `cs2` P2P protocol are supported (most newer Xiaomi cameras). Spotlight,
   siren and zoom follow the `isa.camera.700sa` specification.
 - IP cameras: no zoom and no SD card history. Light, siren and points without ONVIF positions
