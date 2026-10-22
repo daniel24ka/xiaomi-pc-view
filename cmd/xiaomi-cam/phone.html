@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101216">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Xiaomi Cam</title>
+<style>
+  :root {
+    --bg: #101216; --card: #181b21; --card2: #20242c; --line: #2a2f39;
+    --text: #e8eaee; --dim: #9aa1ad; --accent: #f5a524; --live: #ef4444; --ok: #22c55e;
+    --r: 16px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  body { padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 16px); }
+  header { display: flex; align-items: center; gap: 10px; padding: 14px 16px 8px; }
+  header h1 { font-size: 18px; margin: 0; font-weight: 700; flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 4px #22c55e22; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 16px 12px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 999px; padding: 8px 14px; font: inherit; display: flex; gap: 6px; align-items: center; }
+  .chip.sel { border-color: var(--accent); background: #f5a5241a; color: var(--accent); font-weight: 600; }
+  .chip .air { width: 7px; height: 7px; border-radius: 50%; background: var(--live); }
+  main { padding: 0 16px; display: grid; gap: 14px; max-width: 720px; margin: 0 auto; }
+  .video { position: relative; aspect-ratio: 16/9; background: #000; border-radius: var(--r); overflow: hidden; }
+  .video video-stream, .video img.still { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .video video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .video img.still { object-fit: contain; display: none; }
+  .badge { position: absolute; top: 10px; inset-inline-start: 10px; display: flex; gap: 6px; z-index: 2; }
+  .tag { background: #000a; backdrop-filter: blur(6px); border-radius: 8px; padding: 4px 9px; font-size: 13px; }
+  .tag.air { background: var(--live); font-weight: 700; display: none; }
+  .vbtns { position: absolute; bottom: 10px; inset-inline-end: 10px; display: flex; gap: 8px; z-index: 2; }
+  .icon { width: 40px; height: 40px; border-radius: 12px; border: 0; background: #000a; color: #fff;
+    backdrop-filter: blur(6px); display: grid; place-items: center; font-size: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+  .card h2 { font-size: 13px; color: var(--dim); font-weight: 600; margin: 0 0 10px; }
+  .pad { direction: ltr; display: grid; grid-template: repeat(3, 64px) / repeat(3, 64px); gap: 6px;
+    justify-content: center; user-select: none; touch-action: none; }
+  .pad button { border: 0; border-radius: 14px; background: var(--card2); color: var(--text); font-size: 22px; }
+  .pad button:active, .pad button.held { background: var(--accent); color: #111; }
+  .pad .c { background: transparent; }
+  .seg { display: flex; flex-wrap: wrap; gap: 8px; }
+  .seg button, .btn { flex: 1 1 auto; border: 1px solid var(--line); background: var(--card2); color: var(--text);
+    border-radius: 12px; padding: 11px 12px; font: inherit; }
+  .seg button.sel { border-color: var(--accent); color: var(--accent); background: #f5a5241a; font-weight: 600; }
+  .btn.primary { background: var(--accent); color: #111; border: 0; font-weight: 700; width: 100%; }
+  .btn:disabled { opacity: .45; }
+  .hidden { display: none !important; }
+  .toast { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 18px); inset-inline: 16px;
+    background: #2a1416; border: 1px solid #ef444466; color: #fecaca; border-radius: 12px; padding: 12px 14px;
+    opacity: 0; transform: translateY(10px); transition: .25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: none; }
+  .empty { color: var(--dim); text-align: center; padding: 40px 16px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="dot"></span>
+  <h1 data-t="title"></h1>
+</header>
+<nav class="chips" id="chips"></nav>
+
+<main id="main">
+  <div class="video" id="video">
+    <div class="badge"><span class="tag air" id="airTag" data-t="onair"></span><span class="tag" id="status"></span></div>
+    <img class="still" id="still" alt="">
+    <div class="vbtns">
+      <button class="icon" id="shot" title="">📷</button>
+      <button class="icon" id="full" title="">⛶</button>
+    </div>
+  </div>
+
+  <section class="card" id="ptzCard">
+    <h2 data-t="move"></h2>
+    <div class="pad" id="pad">
+      <span></span><button data-dir="up">▲</button><span></span>
+      <button data-dir="left">◀</button><span class="c"></span><button data-dir="right">▶</button>
+      <span></span><button data-dir="down">▼</button><span></span>
+    </div>
+  </section>
+
+  <section class="card" id="pointsCard">
+    <h2 data-t="points"></h2>
+    <div class="seg" id="points"></div>
+  </section>
+
+  <section class="card" id="nightCard">
+    <h2 data-t="night"></h2>
+    <div class="seg" id="night"></div>
+  </section>
+
+  <section class="card">
+    <button class="btn primary" id="air" data-t="toAir"></button>
+  </section>
+</main>
+<div class="empty hidden" id="empty" data-t="none"></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import './video-stream.js';
+
+const TEXT = {
+  he: { title: 'המצלמות שלי', onair: 'בשידור', move: 'סיבוב המצלמה', points: 'נקודות שמורות', night: 'מצב לילה',
+        toAir: 'העבר לשידור', isAir: 'המצלמה בשידור', connecting: 'מתחבר…', live: 'חי', still: 'תמונה מתרעננת',
+        none: 'אין מצלמות', point: 'נקודה', error: 'שגיאה' },
+  en: { title: 'My cameras', onair: 'ON AIR', move: 'Pan / tilt', points: 'Camera points', night: 'Night mode',
+        toAir: 'Put on air', isAir: 'This camera is on air', connecting: 'Connecting…', live: 'Live', still: 'Refreshing picture',
+        none: 'No cameras', point: 'Point', error: 'Error' },
+  pl: { title: 'Moje kamery', onair: 'NA ANTENIE', move: 'Obrót kamery', points: 'Punkty kamery', night: 'Tryb nocny',
+        toAir: 'Daj na antenę', isAir: 'Ta kamera jest na antenie', connecting: 'Łączenie…', live: 'Na żywo', still: 'Odświeżany obraz',
+        none: 'Brak kamer', point: 'Punkt', error: 'Błąd' },
+};
+let T = TEXT.he;
+const $ = (id) => document.getElementById(id);
+const api = (path, params = {}, method = 'GET') =>
+  fetch(`api/xiaomi-cam/${path}?` + new URLSearchParams(params), { method }).then(async (r) => {
+    if (!r.ok) throw new Error((await r.text()).trim() || r.status);
+    return r.headers.get('content-type')?.includes('json') ? r.json() : r;
+  });
+
+let info = { cameras: [], onair: '' }, cam = null, player = null, stillTimer = 0, liveTimer = 0;
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = `${T.error}: ${msg}`; t.classList.add('show');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 3500);
+}
+const call = (p) => p.catch((e) => toast(e.message));
+
+function texts() {
+  document.documentElement.lang = info.lang in TEXT ? info.lang : 'he';
+  document.documentElement.dir = document.documentElement.lang === 'he' ? 'rtl' : 'ltr';
+  document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T[el.dataset.t]; });
+}
+
+function chips() {
+  $('chips').replaceChildren(...info.cameras.map((c) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (cam && c.name === cam.name ? ' sel' : '');
+    if (c.name === info.onair) b.append(Object.assign(document.createElement('span'), { className: 'air' }));
+    b.append(c.name.trim());
+    b.onclick = () => select(c.name);
+    return b;
+  }));
+}
+
+function status(text, live) { $('status').textContent = text; $('dot').classList.toggle('on', !!live); }
+
+// video: MSE (H.265 where the phone decodes it), HLS on iPhones; a refreshing picture if neither plays
+function play() {
+  clearInterval(stillTimer); clearTimeout(liveTimer);
+  $('still').style.display = 'none';
+  if (player) player.remove();
+  player = document.createElement('video-stream');
+  player.mode = 'mse,hls';
+  player.background = false;
+  $('video').prepend(player);
+  player.src = new URL('api/ws?src=' + encodeURIComponent(cam.name), location.href);
+  status(T.connecting, false);
+  const v = () => player.querySelector('video');
+  const onPlay = () => { clearTimeout(liveTimer); status(T.live, true); };
+  const watch = setInterval(() => { if (v()) { v().addEventListener('playing', onPlay); clearInterval(watch); } }, 200);
+  liveTimer = setTimeout(() => { if (!v() || v().readyState < 2) stills(); }, 12000);
+}
+
+function stills() {
+  if (player) { player.remove(); player = null; }
+  const img = $('still'); img.style.display = 'block';
+  const load = () => { img.src = 'api/xiaomi-cam/snapshot?' + new URLSearchParams({ camera: cam.name, width: 1280, t: Date.now() }); };
+  img.onload = () => status(T.still, true);
+  load(); stillTimer = setInterval(load, 1500);
+}
+
+async function select(name) {
+  cam = info.cameras.find((c) => c.name === name) || info.cameras[0];
+  if (!cam) return;
+  try { localStorage.setItem('xc-camera', cam.name); } catch {}
+  chips(); play();
+  $('ptzCard').classList.toggle('hidden', !cam.ptz);
+  $('nightCard').classList.toggle('hidden', !cam.night_modes?.length);
+  $('pointsCard').classList.toggle('hidden', !cam.points);
+  air();
+  if (cam.night_modes?.length) {
+    $('night').replaceChildren(...cam.night_modes.map((m) => {
+      const b = document.createElement('button'); b.textContent = m.name; b.dataset.id = m.id;
+      b.onclick = () => call(api('night-mode', { camera: cam.name, mode: m.id }, 'POST').then(() => mark(m.id)));
+      return b;
+    }));
+    call(api('state', { camera: cam.name }).then((s) => mark(s.night_mode)));
+  }
+  if (cam.points) {
+    call(api('points', { camera: cam.name }).then((ps) => {
+      $('points').replaceChildren(...ps.filter((p) => p.defined).map((p) => {
+        const b = document.createElement('button'); b.textContent = p.name || `${T.point} ${p.point}`;
+        b.onclick = () => call(api('points/goto', { camera: cam.name, point: p.point }, 'POST'));
+        return b;
+      }));
+      $('pointsCard').classList.toggle('hidden', !$('points').children.length);
+    }));
+  }
+}
+const mark = (id) => $('night').querySelectorAll('button').forEach((b) => b.classList.toggle('sel', b.dataset.id === id));
+
+function air() {
+  const on = cam && cam.name === info.onair;
+  $('airTag').style.display = on ? 'inline-block' : 'none';
+  $('air').disabled = on;
+  $('air').textContent = on ? T.isAir : T.toAir;
+}
+$('air').onclick = () => call(api('onair', { camera: cam.name }, 'POST').then((r) => { info.onair = r.camera; air(); chips(); }));
+
+// pan/tilt: held buttons send short moves back to back (one step = 100 ms of movement)
+let held = 0;
+$('pad').querySelectorAll('button').forEach((b) => {
+  const stop = () => { clearInterval(held); held = 0; b.classList.remove('held'); };
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); b.setPointerCapture(e.pointerId); b.classList.add('held');
+    const go = () => call(api('move', { camera: cam.name, direction: b.dataset.dir, steps: 3 }, 'POST'));
+    go(); clearInterval(held); held = setInterval(go, 280);
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => b.addEventListener(ev, stop));
+});
+
+$('shot').onclick = () => window.open('api/xiaomi-cam/snapshot?' + new URLSearchParams({ camera: cam.name, width: 1920 }), '_blank');
+$('full').onclick = () => {
+  const v = player?.querySelector('video');
+  if (v?.webkitEnterFullscreen && !document.fullscreenEnabled) v.webkitEnterFullscreen();
+  else $('video').requestFullscreen?.();
+};
+
+async function load() {
+  try {
+    info = await fetch('phone/info').then((r) => r.json());
+  } catch (e) { toast(e.message); return; }
+  T = TEXT[info.lang] || TEXT.he;
+  texts();
+  const empty = !info.cameras.length;
+  $('main').classList.toggle('hidden', empty); $('empty').classList.toggle('hidden', !empty);
+  let last = ''; try { last = localStorage.getItem('xc-camera') || ''; } catch {}
+  if (!empty) select(last || info.onair || info.cameras[0].name);
+}
+load();
+</script>
+</body>
+</html>

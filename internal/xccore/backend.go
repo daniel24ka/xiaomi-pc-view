@@ -20,6 +20,9 @@ import (
 	"time"
 
 	"github.com/AlexxIT/go2rtc/internal/api"
+	"github.com/AlexxIT/go2rtc/internal/hls"
+	"github.com/AlexxIT/go2rtc/internal/mp4"
+	"github.com/AlexxIT/go2rtc/internal/api/ws"
 	"github.com/AlexxIT/go2rtc/internal/app"
 	"github.com/AlexxIT/go2rtc/internal/dvrip"
 	gohttp "github.com/AlexxIT/go2rtc/internal/http"
@@ -65,8 +68,11 @@ func Start(dir string) error {
 	os.Args = []string{os.Args[0], "-config", cfg}
 	app.Init()
 	api.Init()
+	ws.Init()  // MSE and HLS over WebSocket for browsers (the phone page)
 	streams.Init()
 	rtsp.Init()
+	mp4.Init() // api/ws mse, api/stream.mp4
+	hls.Init() // api/stream.m3u8 (iPhones without MSE)
 	xiaomi.Init()
 	gohttp.Init()
 	onvif.Init()

@@ -423,6 +423,20 @@ history, the snapshot comes from the recording being played.
 The embedded go2rtc also serves the camera stream as RTSP:
 `rtsp://127.0.0.1:18554/<camera name>`.
 
+### Phone page
+
+`http://127.0.0.1:11985` is a small page for a phone browser: live video of the cameras
+(MSE, so H.265 plays where the phone decodes it; HLS on iPhones; a refreshing picture
+otherwise), pan/tilt (hold the arrows), night mode, camera points, a snapshot and "Put on
+air". The page follows the app language (Hebrew, English, Polish).
+
+It listens on localhost only. To open it from the phone anywhere without opening router ports,
+publish it to your own devices with [Tailscale](https://tailscale.com): install it on the PC
+and the phone with the same account, then on the PC `tailscale serve --bg 11985` – the phone
+opens `https://<pc-name>.<tailnet>.ts.net`. Only the page goes out: an allowlist in front of
+the local go2rtc API lets through the cameras' video and those controls; the config (the Mi
+token), the other API calls and streams of any other source answer 403.
+
 ### On air (OBS)
 
 `rtsp://127.0.0.1:18554/__xc_onair` always shows the camera chosen in Settings → General →
