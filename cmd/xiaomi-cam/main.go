@@ -6,6 +6,8 @@
 package main
 
 import (
+	"strings"
+	"path/filepath"
 	"errors"
 	"fmt"
 	"github.com/AlexxIT/go2rtc/internal/xccore"
@@ -99,6 +101,7 @@ type ui struct {
 	activity   *spinner // spinner next to the status line: an action in progress
 	busyCount  int      // actions in progress (busy.go)
 	snapButton *ptrButton
+	enhButton  *ptrButton // the enhanced photo (photo.go)
 	picWait    *pictureWait // sound on/off: waiting for the new decoder's picture
 	night      *ptrSelect   // night vision mode
 	nightList  []nightMode  // the night modes of the selected camera (the options of night)
@@ -160,6 +163,7 @@ type ui struct {
 	gotFrame                             bool   // first frame of the current playback arrived
 	decodeW                              int    // width the video is decoded to (tier, see decodeSize)
 	zoomCam                              string // the camera the digital zoom belongs to
+	decodeEnhanced                       bool   // the decoder sharpens/denoises (zoomed: enhance.go)
 	decodeStable                         int    // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
@@ -405,6 +409,7 @@ func (u *ui) build() {
 	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
 	u.recButton = newButton(T("Nagraj"), recordIcon, u.toggleRecording)
 	u.snapButton = newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)"))
+	u.enhButton = newButton("", lucide("scan"), u.enhancedSnapshot).withTip(T("Zdjęcie ulepszone (E): 15 klatek połączonych w jedno – mniej szumu, bez wymyślania szczegółów; przy zoomie także powiększony fragment"))
 	// tooltips of the named controls
 	u.camera.tip = T("Wybór kamery")
 	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD (kamera IP: strumień główny lub podgląd)")
@@ -428,6 +433,7 @@ func (u *ui) build() {
 		u.hist.button,
 		u.recButton,
 		u.snapButton,
+		u.enhButton,
 		// app: settings; cameras, language, help in the menu
 		newButton("", theme.SettingsIcon(), u.showSettings).withTip(T("Ustawienia: nagrywanie, foldery, zadania AI, powiadomienia")),
 		u.menuButton,
@@ -613,6 +619,8 @@ func (u *ui) build() {
 			u.toggleFullScreen()
 		case 's', 'S':
 			u.snapshot()
+		case 'e', 'E':
+			u.enhancedSnapshot()
 		}
 	})
 
@@ -715,6 +723,7 @@ func (u *ui) restart() {
 	u.video.clear(T("Łączenie z kamerą…"), true)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
+	u.setEnhance()
 	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
 }
 
@@ -766,6 +775,7 @@ func (u *ui) refresh() {
 	q := currentQuality(name)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
+	u.setEnhance()
 	go u.player.switchTo(rtspURL(name), w, h, u.sound.Checked)
 }
 
@@ -917,6 +927,48 @@ func (u *ui) setProp(p miotProp, value any, w fyne.Disableable) {
 
 // snapshot saves a full resolution JPEG from the camera stream (the window shows a
 // downscaled picture) to the snapshots folder from the settings.
+// enhancedSnapshot saves the enhanced photo (photo.go): the merged frames, the zoomed part
+// enlarged from the full resolution and, with Real-ESRGAN installed, its AI version.
+func (u *ui) enhancedSnapshot() {
+	name := u.camera.Selected
+	if name == "" || u.enhButton.isBusy() {
+		return
+	}
+	var crop *[4]float64
+	if f := u.video.frame; f != nil && u.video.zoomed() {
+		b := f.Bounds()
+		r := u.video.dz.cropRect(b.Dx(), b.Dy())
+		crop = &[4]float64{float64(r.Min.X) / float64(b.Dx()), float64(r.Min.Y) / float64(b.Dy()),
+			float64(r.Dx()) / float64(b.Dx()), float64(r.Dy()) / float64(b.Dy())}
+	}
+	u.status.SetText(T("Łączę 15 klatek w ulepszone zdjęcie…"))
+	done := u.busy(u.enhButton)
+	go func() {
+		files, err := enhancedPhoto(name, crop)
+		if err == nil && crop != nil && hasAIEnhance() {
+			fyne.Do(func() { u.status.SetText(T("Powiększanie AI (Real-ESRGAN)…")) })
+			if ai, aerr := aiEnhance(files[len(files)-1]); aerr == nil {
+				files = append(files, ai)
+			} else {
+				err = aerr
+			}
+		}
+		fyne.Do(func() {
+			done()
+			if err != nil {
+				dialog.ShowError(err, u.win)
+			}
+			if len(files) > 0 {
+				names := make([]string, len(files))
+				for i, f := range files {
+					names[i] = filepath.Base(f)
+				}
+				u.status.SetText(TJ("Zapisano ", strings.Join(names, ", ")))
+			}
+		})
+	}()
+}
+
 func (u *ui) snapshot() {
 	name := u.camera.Selected
 	if name == "" || u.snapButton.isBusy() {
@@ -1189,6 +1241,12 @@ func (u *ui) zoomAt(delta float64, pos *fyne.Position) {
 	u.decodeStable = 1 // a sharper decode tier soon (checkDecodeSize)
 }
 
+// setEnhance: the next decoder sharpens and denoises while the digital zoom is on.
+func (u *ui) setEnhance() {
+	u.decodeEnhanced = u.video.zoomed()
+	u.player.enhance.Store(u.decodeEnhanced)
+}
+
 // zoomReset: back to the whole picture (camera zoom 1x, no digital zoom).
 func (u *ui) zoomReset() {
 	u.video.setDigitalZoom(1, nil)
@@ -1267,7 +1325,7 @@ func (u *ui) checkDecodeSize() {
 		return
 	}
 	q := currentQuality(u.camera.Selected)
-	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW {
+	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW || u.video.zoomed() != u.decodeEnhanced {
 		u.decodeStable++
 		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished
 			u.decodeStable = 0

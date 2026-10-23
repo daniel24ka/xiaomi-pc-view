@@ -29,12 +29,15 @@ type player struct {
 
 	onFrame  func(img *image.RGBA, gen int64)
 	onStatus func(text string)
+
+	enhance atomic.Bool // the next playback sharpens and denoises (digital zoom: enhance.go)
 }
 
 type playback struct {
-	gen    int64
-	cancel context.CancelFunc
-	done   chan struct{}
+	gen     int64
+	cancel  context.CancelFunc
+	done    chan struct{}
+	enhance bool
 }
 
 func (pb *playback) stop() {
@@ -64,7 +67,7 @@ func (p *player) begin(url string, w, h int, audio, seamless bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.mu.Lock()
 	p.seq++
-	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{})}
+	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{}), enhance: p.enhance.Load()}
 	oldPending := p.pending
 	p.pending = nil
 	if seamless {
@@ -133,6 +136,12 @@ func (p *player) stop() {
 }
 
 func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *playback) error {
+	var input []string
+	var enhance string
+	gpu := false
+	if pb.enhance {
+		input, enhance, gpu = enhanceArgs()
+	}
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
@@ -141,11 +150,14 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		// a short stream analysis: the picture ~1-2 s sooner (the codecs are in the RTSP SDP);
 		// 30 s timeout: finding an SD card recording can take a while
 		"-analyzeduration", "500000", "-probesize", "500000",
+	}
+	args = append(args, input...)
+	args = append(args,
 		"-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url,
 		// the picture is fitted in w x h (IP cameras: the size may not be known yet)
-		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h),
+		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2%s", w, h, w, h, enhance),
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
-	}
+	)
 	if audio {
 		args = append(args, "-map", "0:a:0?", "-f", "pulse", "-name", "Xiaomi Cam", "default")
 	}
@@ -180,6 +192,9 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		p.frame(pb, frames[i])
 	}
 	_ = cmd.Wait()
+	if gpu && first && ctx.Err() == nil {
+		gpuFailed() // the GPU sharpen didn't give a picture: the CPU one from the next try
+	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		if lines := strings.Split(msg, "\n"); len(lines) > 0 {
 			return fmt.Errorf("%s", lines[len(lines)-1])

@@ -30,6 +30,7 @@ import (
 //	POST /api/xiaomi-cam/siren?on=true
 //	POST /api/xiaomi-cam/night-mode?mode=auto         auto/auto-color/smart-color/on/color/off
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
+//	POST /api/xiaomi-cam/snapshot/enhanced           saves the enhanced photo (15 frames merged, PNG)
 //	POST /api/xiaomi-cam/record/start?duration=60&mode=each&cameras=a,b  MP4 (H.265); mode: selected/each/grid
 //	POST /api/xiaomi-cam/record/stop                 stops all recordings
 //	GET  /api/xiaomi-cam/record                      recording status
@@ -221,6 +222,14 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			return nil, err
 		}
 		return map[string]any{"night_mode": m.ID}, nil
+	})
+
+	handle("snapshot/enhanced", "POST", func(r *http.Request, name string) (any, error) {
+		files, err := enhancedPhoto(name, nil)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"files": files}, nil
 	})
 
 	handle("snapshot/save", "POST", func(r *http.Request, name string) (any, error) {
