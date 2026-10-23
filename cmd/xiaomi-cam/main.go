@@ -157,9 +157,10 @@ type ui struct {
 	pointButtons                         [presetSlots]*ptrButton
 	pointNames                           [presetSlots]*canvas.Text // the names under the numbers
 	pointWraps                           [presetSlots]*fyne.Container
-	gotFrame                             bool // first frame of the current playback arrived
-	decodeW                              int  // width the video is decoded to (tier, see decodeSize)
-	decodeStable                         int  // seconds the window has needed another decode size
+	gotFrame                             bool   // first frame of the current playback arrived
+	decodeW                              int    // width the video is decoded to (tier, see decodeSize)
+	zoomCam                              string // the camera the digital zoom belongs to
+	decodeStable                         int    // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -318,11 +319,11 @@ func (u *ui) build() {
 	u.onVideoMouse = u.pictureControlsActive
 	u.video.onCameraDrag = u.cameraDrag
 	u.video.onCameraDragEnd = u.cameraDragEnd
-	u.video.onScroll = func(up bool) {
+	u.video.onScroll = func(up bool, pos fyne.Position) {
 		if up {
-			u.zoomBy(zoomStep)
+			u.zoomAt(zoomStep, &pos)
 		} else {
-			u.zoomBy(-zoomStep)
+			u.zoomAt(-zoomStep, &pos)
 		}
 	}
 	u.zoomLabel = widget.NewLabel(fmt.Sprintf("%.1f×", u.camZoom))
@@ -508,10 +509,10 @@ func (u *ui) build() {
 		ptz(theme.NavigateNextIcon(), motorRight),
 	}
 	zoom := container.NewHBox(
-		overlayButton(theme.ZoomOutIcon(), T("Oddal – zoom kamery (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
+		overlayButton(theme.ZoomOutIcon(), T("Oddal (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
 		u.zoomLabel,
-		overlayButton(theme.ZoomInIcon(), T("Przybliż – zoom kamery do 9× (+, kółko myszy)"), func() { u.zoomBy(zoomStep) }),
-		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), func() { u.zoomBy(-maxZoom) }))
+		overlayButton(theme.ZoomInIcon(), T("Przybliż (+, kółko myszy): zoom kamery, potem cyfrowy z pełnej rozdzielczości; przeciągnij obraz, żeby się po nim przesuwać"), func() { u.zoomBy(zoomStep) }),
+		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), u.zoomReset))
 	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
 	u.camControls = u.cameraControlsButton()
 	u.camControls.Importance = widget.LowImportance
@@ -603,7 +604,7 @@ func (u *ui) build() {
 		case '-':
 			u.zoomBy(-zoomStep)
 		case '0':
-			u.zoomBy(-maxZoom)
+			u.zoomReset()
 		case '1', '2', '3':
 			u.pointPressed(int(r - '0'))
 		case 'h', 'H':
@@ -702,6 +703,10 @@ func (u *ui) restart() {
 		u.player.stop()
 		u.video.clear(T("Brak kamery – kliknij „Dodaj”"), false)
 		return
+	}
+	if name != u.zoomCam { // another camera: the whole picture again
+		u.zoomCam = name
+		u.video.setDigitalZoom(1, nil)
 	}
 	q := u.syncControls(name)
 	u.gotFrame = false
@@ -1148,13 +1153,50 @@ const (
 	maxZoom  = 9.0 // hlCameraVideoMaxZoomScale in the Mi Home plugin
 )
 
-// zoomBy changes the camera zoom. Only the last value is sent after a short pause,
+// zoomBy zooms in (delta > 0) or out around the centre of the picture.
+func (u *ui) zoomBy(delta float64) { u.zoomAt(delta, nil) }
+
+// zoomAt: the camera's own zoom first (sharp: the camera does it), then the digital zoom
+// on top of it; zooming out undoes them in the reverse order. pos - keep this point of the
+// picture under the mouse (wheel). Only the last camera value is sent after a short pause,
 // so scrolling the wheel doesn't flood the camera with commands.
-func (u *ui) zoomBy(delta float64) {
-	if !u.caps.Zoom {
+func (u *ui) zoomAt(delta float64, pos *fyne.Position) {
+	if u.grid { // the tiles: the camera's own zoom only
+		if u.caps.Zoom {
+			u.setZoom(u.camZoom + delta)
+		}
 		return
 	}
-	u.setZoom(u.camZoom + delta)
+	dz := u.video.dz.z
+	if u.caps.Zoom && ((delta > 0 && u.camZoom < maxZoom) || (delta < 0 && dz <= 1.001)) {
+		u.setZoom(u.camZoom + delta)
+		return
+	}
+	limit := maxDigital
+	if u.caps.Zoom {
+		limit = maxDigitalHybrid
+	}
+	if delta > 0 {
+		dz *= digitalStep
+	} else {
+		dz /= digitalStep
+	}
+	if dz < 1.05 {
+		dz = 1
+	}
+	u.video.setDigitalZoom(min(dz, limit), pos)
+	u.showZoom(u.camZoom)
+	u.decodeStable = 1 // a sharper decode tier soon (checkDecodeSize)
+}
+
+// zoomReset: back to the whole picture (camera zoom 1x, no digital zoom).
+func (u *ui) zoomReset() {
+	u.video.setDigitalZoom(1, nil)
+	if u.caps.Zoom {
+		u.setZoom(1)
+	} else {
+		u.showZoom(1)
+	}
 }
 
 // setZoom sets the camera zoom; only the last value is sent after a short pause.
@@ -1179,9 +1221,14 @@ func (u *ui) setZoom(z float64) {
 	})
 }
 
-// showZoom updates the zoom label and the video-only zoom slider.
+// showZoom updates the zoom label (the whole zoom: camera × digital) and the video-only
+// zoom slider (the camera's zoom).
 func (u *ui) showZoom(z float64) {
-	u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+	if dz := u.video.dz.z; dz > 1.001 {
+		u.zoomLabel.SetText(TJ("cyfrowy ", fmt.Sprintf("%.1f×", z*dz)))
+	} else {
+		u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+	}
 	if u.zoomSlider != nil {
 		u.zoomSlider.SetValue(z)
 	}
@@ -1195,7 +1242,8 @@ var decodeTiers = []int{1280, 1920, 2560}
 // decodeSize returns the smallest tier not smaller than the picture on the screen
 // (in pixels), limited by the stream size w x h.
 func (u *ui) decodeSize(w, h int) (int, int) {
-	px := int(u.video.Size().Width * u.win.Canvas().Scale())
+	// zoomed in digitally: the crop has to be as sharp as the picture, so a larger tier
+	px := int(u.video.Size().Width * u.win.Canvas().Scale() * float32(u.video.dz.z))
 	if px <= 0 {
 		px = 1280
 	}

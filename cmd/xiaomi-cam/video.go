@@ -201,6 +201,7 @@ type videoView struct {
 
 	frame *image.RGBA
 	small bool // a grid tile: smaller minimum size
+	dz    digitalZoom
 
 	onDoubleTap     func()
 	onTap           func() // click: select the tile in the grid
@@ -208,7 +209,7 @@ type videoView struct {
 	onMouseMove     func()
 	onCameraDrag    func(dx, dy float32) // dragging the picture moves the camera
 	onCameraDragEnd func()               // mouse released: stop the camera
-	onScroll        func(up bool)        // mouse wheel - camera zoom
+	onScroll        func(up bool, pos fyne.Position) // mouse wheel - zoom (camera, then digital)
 
 	// window resize by edges (window without frame)
 	canResize   func() bool
@@ -287,6 +288,7 @@ func newVideoView() *videoView {
 	v.status = canvas.NewText("", color.Gray{Y: 200})
 	v.status.Alignment = fyne.TextAlignCenter
 	v.spinner = newSpinner(videoSpinnerFrames)
+	v.dz.init()
 	v.ExtendBaseWidget(v)
 	return v
 }
@@ -333,13 +335,28 @@ func (v *videoView) updateImage() {
 	if v.frame == nil {
 		return
 	}
-	v.img.Image = v.frame
+	if !v.zoomed() {
+		v.img.Image = v.frame
+		v.img.Refresh()
+		if v.dz.mini.Visible() {
+			v.dz.showMini(false)
+		}
+		return
+	}
+	v.img.Image = v.dz.crop(v.frame)
 	v.img.Refresh()
+	// the overview: a few times a second is enough (each update uploads the whole frame)
+	if v.dz.miniTick++; v.dz.miniTick%6 == 0 || !v.dz.mini.Visible() {
+		v.dz.mini.Image = v.frame
+		v.dz.mini.Refresh()
+	}
+	v.dz.showMini(true)
+	v.layoutMini()
 }
 
 func (v *videoView) Scrolled(e *fyne.ScrollEvent) {
 	if v.onScroll != nil && e.Scrolled.DY != 0 {
-		v.onScroll(e.Scrolled.DY > 0)
+		v.onScroll(e.Scrolled.DY > 0, e.Position)
 	}
 }
 
@@ -362,6 +379,10 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 		return
 	case wmBottomRight:
 		v.onResize(dx, dy)
+		return
+	}
+	if v.zoomed() && (dx != 0 || dy != 0) {
+		v.panBy(dx, dy) // zoomed in: the drag moves around the picture
 		return
 	}
 	if v.onCameraDrag != nil && (dx != 0 || dy != 0) {
@@ -420,6 +441,7 @@ func (r *videoRenderer) Layout(size fyne.Size) {
 	const sp = 32
 	r.v.spinner.Resize(fyne.NewSize(sp, sp))
 	r.v.spinner.Move(fyne.NewPos((size.Width-sp)/2, size.Height/2-20-sp))
+	r.v.layoutMini()
 }
 
 func (r *videoRenderer) MinSize() fyne.Size {
@@ -431,5 +453,5 @@ func (r *videoRenderer) MinSize() fyne.Size {
 func (r *videoRenderer) Refresh() { canvas.Refresh(r.v) }
 func (r *videoRenderer) Destroy() {}
 func (r *videoRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.spinner, r.v.status}
+	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.dz.mini, r.v.dz.miniFrame, r.v.dz.miniBox, r.v.spinner, r.v.status}
 }
