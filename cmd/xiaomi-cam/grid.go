@@ -228,7 +228,7 @@ func (u *ui) updateGridButton() {
 
 // camerasChanged - cameras were added, renamed or removed.
 func (u *ui) camerasChanged() {
-	xccore.EnsureOnAir()
+	xccore.OffAirIfRemoved()
 	u.camera.Options = cameraNames()
 	u.camera.Refresh()
 	u.updateGridButton()
