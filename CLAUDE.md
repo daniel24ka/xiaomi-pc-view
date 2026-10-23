@@ -18,7 +18,7 @@ Workflow per change: commit (message ends with `Co-Authored-By: Claude …` trai
 `vX.Y.Z`, `make install` + `make release`, `git push origin main --tags`, relaunch the app:
 `(setsid nohup ~/.local/bin/xiaomi-cam >/dev/null 2>&1 &)`.
 
-GitHub releases: v1.0.0–v1.30.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
+GitHub releases: v1.0.0–v1.31.0 published; from v1.23.0 also the APKs (`make apk`: universal, arm64-v8a, armeabi-v7a) (gh logged in as genosajd). For a new version:
 `gh release create vX.Y.Z --title "Xiaomi Cam vX.Y.Z" --notes-file <notes> --latest dist/<3 files>`;
 notes must list the changes since the previous tag (English) and the 3 downloads.
 
@@ -162,15 +162,15 @@ language, layout). Relaunch the user's app afterwards. Clean up test files in ~/
 
 ## In progress (update after each step; for the next session)
 
-State 2026-10-23: **v1.30.0 released** = merged PR #2 (daniel24ka, Windows 11 + C200 user, OBS
+State 2026-10-23: **v1.31.0 released** = merged PRs #3–#6 (daniel24ka, follow-ups to the #2 review): phone page same-origin only (`phoneAllowed`: Host local or *.ts.net, Origin = Host, Sec-Fetch-Site same-origin/none) and off by default (pref `phone_page`, Settings → General → Phone); `__xc_onair` only from Settings/API (`OffAirIfRemoved` replaces `EnsureOnAir`); PC archive switch (pref `archive`, off by default); libplacebo without fit_mode (Vulkan path now works on the local ffmpeg 8.0.1), GPU checks in the background at start (`probeGPU`, a player waits max 3 s).
+**v1.30.0** = merged PR #2 (daniel24ka, Windows 11 + C200 user, OBS
 broadcast): Hebrew UI (`i18n_he.go`, `bidi.go` visual order, `TJ`/`TM`/`TN`), camera model table
 `internal/xccore/models.go` (700sa ids mapped per model; no entry = video only; C200 mapped;
 qualities per model, non-EU regions without p2p=server), on-air RTSP `__xc_onair` for OBS
 (`onair.go`; EnsureOnAir writes it to go2rtc.yaml at start), phone page `phone.go` on
-127.0.0.1:11985 (allowlist proxy to the API; it strips Origin, so any web page in a local
-browser can open api/ws of a camera: open review point), portable `config` folder next to the
+127.0.0.1:11985 (allowlist proxy to the API; same-origin check since v1.31.0), portable `config` folder next to the
 exe, digital zoom `digizoom.go` (after the camera zoom; decode width = view width rounded to
-64), GPU paths `enhance.go` (probes fail on the local ffmpeg 8.0.1: libplacebo has no fit_mode),
+64), GPU paths `enhance.go`,
 enhanced photo `photo.go` (key E), PC archive `archive.go` (external "cam-archive" service on
 :8114, not public), producer dial without the lock (`internal/streams/producer.go`). Our fix:
 `GetProps` matches the cloud answer by siid/piid – the cloud answers missing properties first
