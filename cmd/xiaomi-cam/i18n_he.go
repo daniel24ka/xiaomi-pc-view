@@ -455,4 +455,7 @@ var hebrew = map[string]string{
 	"● Connecting to the cameras…":                         "● מתחבר למצלמות…",
 	"● Recording %s (%d files)":                            "● מקליט %s (%d קבצים)",
 	"● Recording %s":                                       "● מקליט %s",
+	"Recordings of the cam-archive service (a separate program that records the camera on this computer) in the history bar: a week back without connecting to the camera.": "הקלטות של שירות cam-archive (תוכנה נפרדת שמקליטה את המצלמה במחשב הזה) בסרגל ההיסטוריה: שבוע אחורה בלי להתחבר למצלמה.",
+	"PC archive":                           "ארכיון במחשב",
+	"Play the history from the PC archive": "ניגון ההיסטוריה מהארכיון במחשב",
 }

@@ -101,6 +101,22 @@ func (u *ui) showSettings() {
 	}).withTip(T("Aplikacja startuje po zalogowaniu i czeka w zasobniku – zadania AI i powiadomienia działają od razu"))
 	autostart.SetChecked(autostartEnabled())
 
+	// the PC archive (archive.go): off until switched on here
+	archive := newCheck(T("Odtwarzaj historię z archiwum na komputerze"), func(on bool) {
+		u.app.Preferences().SetBool(prefArchive, on)
+	})
+	archive.SetChecked(u.app.Preferences().Bool(prefArchive))
+	archiveAddr := widget.NewEntry()
+	archiveAddr.SetPlaceHolder(archiveDefault)
+	archiveAddr.SetText(u.app.Preferences().String(prefArchiveURL))
+	archiveAddr.OnChanged = func(s string) {
+		u.app.Preferences().SetString(prefArchiveURL, strings.TrimSpace(s))
+	}
+	archiveHelp := widget.NewLabel(T("Nagrania usługi cam-archive (osobny program, który nagrywa kamerę na tym komputerze) w pasku historii: tydzień wstecz bez łączenia z kamerą."))
+	archiveHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(archiveHelp)
+	archiveHelp.Importance = widget.LowImportance
+
 	startViews := []struct{ name, id string }{
 		{"Siatka wszystkich kamer", ""},
 		{"Ostatni widok (kamera albo siatka)", "last"},
@@ -153,6 +169,7 @@ func (u *ui) showSettings() {
 		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),
 		widget.NewFormItem(T("Nagrania"), folderRow(prefRecordingsDir, recordingsDir)),
 		widget.NewFormItem(T("Zdjęcia"), folderRow(prefSnapshotsDir, snapshotsDir)),
+		widget.NewFormItem(T("Archiwum na komputerze"), container.NewVBox(archive, archiveAddr, archiveHelp)),
 	)
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon(T("Ogólne"), theme.SettingsIcon(), container.NewVBox(form)),

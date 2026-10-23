@@ -550,4 +550,7 @@ Closing the window hides the app to the tray`,
 	"Ostatni widok (kamera albo siatka)": "The last view (a camera or the grid)",
 	"Co pokazuje okno po uruchomieniu aplikacji (siatka – przy 2 i więcej kamerach)": "What the window shows when the app starts (the grid – with 2 or more cameras)",
 	"Widok na starcie": "View at start",
+	"Nagrania usługi cam-archive (osobny program, który nagrywa kamerę na tym komputerze) w pasku historii: tydzień wstecz bez łączenia z kamerą.": "Recordings of the cam-archive service (a separate program that records the camera on this computer) in the history bar: a week back without connecting to the camera.",
+	"Archiwum na komputerze":                      "PC archive",
+	"Odtwarzaj historię z archiwum na komputerze": "Play the history from the PC archive",
 }
