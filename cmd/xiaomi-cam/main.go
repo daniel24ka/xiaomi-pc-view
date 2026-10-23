@@ -12,8 +12,10 @@ import (
 	"image"
 	"image/jpeg"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -41,8 +43,6 @@ var devHook func(u *ui)
 
 // version is set at build time: -ldflags "-X main.version=v1.0.0"
 var version = "dev"
-
-var qualities = xccore.XiaomiQualities
 
 // quality - a picture quality of a camera: name in the list and picture size
 type quality struct {
@@ -73,7 +73,7 @@ func cameraQualities(name string) ([]quality, int) {
 		return qs, min(max(c.Quality, 0), len(qs)-1)
 	}
 	var qs []quality
-	for _, q := range qualities {
+	for _, q := range xccore.CameraQualities(name) {
 		qs = append(qs, quality{q.Name, q.W, q.H})
 	}
 	return qs, xccore.XiaomiQuality(name)
@@ -101,6 +101,7 @@ type ui struct {
 	activity   *spinner // spinner next to the status line: an action in progress
 	busyCount  int      // actions in progress (busy.go)
 	snapButton *ptrButton
+	enhButton  *ptrButton   // the enhanced photo (photo.go)
 	picWait    *pictureWait // sound on/off: waiting for the new decoder's picture
 	night      *ptrSelect   // night vision mode
 	nightList  []nightMode  // the night modes of the selected camera (the options of night)
@@ -138,6 +139,8 @@ type ui struct {
 	light        *ptrCheck
 	brightness   *ptrSlider
 	siren        *ptrCheck
+	wdr          *ptrCheck // picture settings of some models (models.go)
+	lowLight     *ptrCheck
 	sound        *ptrCheck
 	bars         []fyne.CanvasObject
 	exitView     *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
@@ -159,9 +162,11 @@ type ui struct {
 	pointButtons                         [presetSlots]*ptrButton
 	pointNames                           [presetSlots]*canvas.Text // the names under the numbers
 	pointWraps                           [presetSlots]*fyne.Container
-	gotFrame                             bool // first frame of the current playback arrived
-	decodeW                              int  // width the video is decoded to (tier, see decodeSize)
-	decodeStable                         int  // seconds the window has needed another decode size
+	gotFrame                             bool   // first frame of the current playback arrived
+	decodeW                              int    // width the video is decoded to (tier, see decodeSize)
+	zoomCam                              string // the camera the digital zoom belongs to
+	decodeEnhanced                       bool   // the decoder sharpens/denoises (zoomed: enhance.go)
+	decodeStable                         int    // seconds the window has needed another decode size
 
 	camZoom    float64 // camera zoom 1.0-9.0
 	zoomTimer  *time.Timer
@@ -198,10 +203,13 @@ func main() {
 		return
 	}
 	prepareOpenGL() // Windows without a GPU driver: software OpenGL (gl_windows.go)
+	raisePriority()
 	if err := startBackend(); err != nil {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
 	}
+	xccore.EnsureOnAir() // the broadcast address always has a camera
+	startPhoneServer()   // phone.go
 	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)
@@ -209,14 +217,14 @@ func main() {
 	a := fyneapp.NewWithID("pl.lawinski.xiaomi-cam")
 	a.SetIcon(appIcon)
 	a.Settings().SetTheme(appTheme{})
-	lang = a.Preferences().StringWithFallback(prefLanguage, "pl")
+	lang = a.Preferences().StringWithFallback(prefLanguage, defaultLanguage())
 	appPrefs = a.Preferences()
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
 	u.caps = allCaps
 	u.camZoom = 1
 	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
-		fyne.Do(func() { u.status.SetText(T("Obrót: ") + err.Error()) })
+		fyne.Do(func() { u.status.SetText(TJ("Obrót: ", err.Error())) })
 	})
 	u.build()
 	xccore.OnZoomState = func(name string, z float64) {
@@ -317,11 +325,11 @@ func (u *ui) build() {
 	u.onVideoMouse = u.pictureControlsActive
 	u.video.onCameraDrag = u.cameraDrag
 	u.video.onCameraDragEnd = u.cameraDragEnd
-	u.video.onScroll = func(up bool) {
+	u.video.onScroll = func(up bool, pos fyne.Position) {
 		if up {
-			u.zoomBy(zoomStep)
+			u.zoomAt(zoomStep, &pos)
 		} else {
-			u.zoomBy(-zoomStep)
+			u.zoomAt(-zoomStep, &pos)
 		}
 	}
 	u.zoomLabel = widget.NewLabel(fmt.Sprintf("%.1f×", u.camZoom))
@@ -345,12 +353,13 @@ func (u *ui) build() {
 					u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
 				}
 			}
-			u.historyFrame()
+			u.historyFrame(gen)
 			u.video.setFrame(img)
 			u.captureThumb(img)
 			u.pictureShown(&u.player, gen)
 		})
 	}
+	u.player.onEnd = u.archiveEnded
 	u.player.onStatus = func(s string) {
 		fyne.Do(func() {
 			if u.grid {
@@ -390,7 +399,7 @@ func (u *ui) build() {
 		if i := u.quality.SelectedIndex(); ipCam(u.camera.Selected) != nil {
 			u.changeIPQuality(i)
 		} else {
-			u.changeSource(map[string]string{"subtype": qualities[i].Subtype})
+			u.changeSource(map[string]string{"subtype": xccore.CameraQualities(u.camera.Selected)[i].Subtype})
 		}
 	})
 	u.connection = newSelect(cNames, func(string) {
@@ -403,6 +412,7 @@ func (u *ui) build() {
 	u.gridButton = newButton("", theme.GridIcon(), func() { u.setGrid(!u.grid) })
 	u.recButton = newButton(T("Nagraj"), recordIcon, u.toggleRecording)
 	u.snapButton = newButton("", theme.MediaPhotoIcon(), u.snapshot).withTip(T("Zdjęcie w pełnej rozdzielczości do folderu zdjęć (S)"))
+	u.enhButton = newButton("", lucide("scan"), u.enhancedSnapshot).withTip(T("Zdjęcie ulepszone (E): 15 klatek połączonych w jedno – mniej szumu, bez wymyślania szczegółów; przy zoomie także powiększony fragment"))
 	// tooltips of the named controls
 	u.camera.tip = T("Wybór kamery")
 	u.quality.tip = T("Jakość obrazu z kamery: 2.5K, 720p lub SD (kamera IP: strumień główny lub podgląd)")
@@ -426,6 +436,7 @@ func (u *ui) build() {
 		u.hist.button,
 		u.recButton,
 		u.snapButton,
+		u.enhButton,
 		// app: settings; cameras, language, help in the menu
 		newButton("", theme.SettingsIcon(), u.showSettings).withTip(T("Ustawienia: nagrywanie, foldery, zadania AI, powiadomienia")),
 		u.menuButton,
@@ -472,6 +483,18 @@ func (u *ui) build() {
 			}
 		}, u.win)
 	})
+	u.wdr = newCheck(T("WDR – jasne niebo i cień jednocześnie"), func(on bool) {
+		u.win.Canvas().Unfocus()
+		if !u.syncing {
+			u.setProp(propWDR, on, u.wdr)
+		}
+	})
+	u.lowLight = newCheck(T("Kolor przy słabym świetle"), func(on bool) {
+		u.win.Canvas().Unfocus()
+		if !u.syncing {
+			u.setProp(propLowLightColor, on, u.lowLight)
+		}
+	})
 	u.night = newSelect(nil, func(string) {
 		u.win.Canvas().Unfocus()
 		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 && i < len(u.nightList) {
@@ -497,6 +520,8 @@ func (u *ui) build() {
 	u.light.tip = T("Reflektor kamery (białe światło)")
 	u.brightness.tip = T("Jasność reflektora")
 	u.siren.tip = T("Syrena alarmowa kamery (z potwierdzeniem)")
+	u.wdr.tip = T("Szeroki zakres dynamiki: jasne niebo nie jest przepalone, a cienie nie są czarne")
+	u.lowLight.tip = T("Kolorowy obraz o zmierzchu i przy słabym świetle, bez reflektora (w ciemności nadal podczerwień)")
 	u.sound.tip = T("Dźwięk z kamery")
 	// groups of controls on the picture (overlay.go), hidden when the selected camera doesn't
 	// have the feature (caps.go)
@@ -507,10 +532,10 @@ func (u *ui) build() {
 		ptz(theme.NavigateNextIcon(), motorRight),
 	}
 	zoom := container.NewHBox(
-		overlayButton(theme.ZoomOutIcon(), T("Oddal – zoom kamery (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
+		overlayButton(theme.ZoomOutIcon(), T("Oddal (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
 		u.zoomLabel,
-		overlayButton(theme.ZoomInIcon(), T("Przybliż – zoom kamery do 9× (+, kółko myszy)"), func() { u.zoomBy(zoomStep) }),
-		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), func() { u.zoomBy(-maxZoom) }))
+		overlayButton(theme.ZoomInIcon(), T("Przybliż (+, kółko myszy): zoom kamery, potem cyfrowy z pełnej rozdzielczości; przeciągnij obraz, żeby się po nim przesuwać"), func() { u.zoomBy(zoomStep) }),
+		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), u.zoomReset))
 	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
 	u.camControls = u.cameraControlsButton()
 	u.camControls.Importance = widget.LowImportance
@@ -585,6 +610,14 @@ func (u *ui) build() {
 	arrows := map[fyne.KeyName]int{fyne.KeyLeft: motorLeft, fyne.KeyRight: motorRight, fyne.KeyUp: motorUp, fyne.KeyDown: motorDown}
 	if dc, ok := u.win.Canvas().(desktop.Canvas); ok {
 		dc.SetOnKeyDown(func(e *fyne.KeyEvent) {
+			if u.hist.on && u.hist.pc && (e.Name == fyne.KeyLeft || e.Name == fyne.KeyRight) {
+				d := 10 * time.Second // the PC archive: the arrows move the playback
+				if e.Name == fyne.KeyLeft {
+					d = -d
+				}
+				u.seekArchive(d)
+				return
+			}
 			if op, ok := arrows[e.Name]; ok && u.caps.PTZ {
 				u.mover.Press(op)
 			}
@@ -602,7 +635,7 @@ func (u *ui) build() {
 		case '-':
 			u.zoomBy(-zoomStep)
 		case '0':
-			u.zoomBy(-maxZoom)
+			u.zoomReset()
 		case '1', '2', '3':
 			u.pointPressed(int(r - '0'))
 		case 'h', 'H':
@@ -611,6 +644,10 @@ func (u *ui) build() {
 			u.toggleFullScreen()
 		case 's', 'S':
 			u.snapshot()
+		case 'e', 'E':
+			u.enhancedSnapshot()
+		case ' ':
+			u.toggleArchivePause()
 		}
 	})
 
@@ -633,10 +670,10 @@ func (u *ui) setupTray() {
 	if !ok {
 		return
 	}
-	show := fyne.NewMenuItem(T("Pokaż"), u.show)
-	hide := fyne.NewMenuItem(T("Ukryj do zasobnika"), u.hide)
-	u.wallpaperItem = fyne.NewMenuItem(T("Tryb tapety (obraz w tle pulpitu)"), func() { u.setWallpaper(!u.wallpaper) })
-	quit := fyne.NewMenuItem(T("Zakończ"), u.app.Quit)
+	show := fyne.NewMenuItem(TN("Pokaż"), u.show)
+	hide := fyne.NewMenuItem(TN("Ukryj do zasobnika"), u.hide)
+	u.wallpaperItem = fyne.NewMenuItem(TN("Tryb tapety (obraz w tle pulpitu)"), func() { u.setWallpaper(!u.wallpaper) })
+	quit := fyne.NewMenuItem(TN("Zakończ"), u.app.Quit)
 	quit.IsQuit = true
 	u.trayMenu = fyne.NewMenu("Xiaomi Cam", show, hide, u.wallpaperItem, fyne.NewMenuItemSeparator(), quit)
 	desk.SetSystemTrayMenu(u.trayMenu)
@@ -702,6 +739,10 @@ func (u *ui) restart() {
 		u.video.clear(T("Brak kamery – kliknij „Dodaj”"), false)
 		return
 	}
+	if name != u.zoomCam { // another camera: the whole picture again
+		u.zoomCam = name
+		u.video.setDigitalZoom(1, nil)
+	}
 	q := u.syncControls(name)
 	u.gotFrame = false
 	u.setLive(false)
@@ -709,6 +750,7 @@ func (u *ui) restart() {
 	u.video.clear(T("Łączenie z kamerą…"), true)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
+	u.setEnhance()
 	go u.player.start(rtspURL(name), w, h, u.sound.Checked)
 }
 
@@ -760,6 +802,7 @@ func (u *ui) refresh() {
 	q := currentQuality(name)
 	w, h := u.decodeSize(q.w, q.h)
 	u.decodeW = w
+	u.setEnhance()
 	go u.player.switchTo(rtspURL(name), w, h, u.sound.Checked)
 }
 
@@ -768,28 +811,38 @@ func (u *ui) changeSource(params map[string]string) {
 	if name == "" {
 		return
 	}
-	u.player.stop() // close camera session, it will be redialed with new params
-	if t := u.tileOf(name); t != nil {
-		t.player.stop()
-	}
-	time.Sleep(300 * time.Millisecond)
-	if err := setSourceParams(name, params); err != nil {
-		dialog.ShowError(err, u.win)
-	}
-	u.restart()
+	u.switchSource(name, func() error { return setSourceParams(name, params) })
 }
 
 // changeIPQuality switches an IP camera to its main (0) or sub (1) stream.
 func (u *ui) changeIPQuality(q int) {
 	name := u.camera.Selected
-	u.player.stop()
+	u.switchSource(name, func() error { return setIPQuality(name, q) })
+}
+
+// switchSource stops the players of the camera, changes its source off the UI thread (the
+// change can wait on a camera that is slow to answer: the window froze) and restarts the
+// video. The quality and connection controls are off meanwhile.
+func (u *ui) switchSource(name string, change func() error) {
+	u.player.stop() // close camera session, it will be redialed with new params
 	if t := u.tileOf(name); t != nil {
 		t.player.stop()
 	}
-	if err := setIPQuality(name, q); err != nil {
-		dialog.ShowError(err, u.win)
-	}
-	u.restart()
+	u.status.SetText(T("Łączenie z kamerą…"))
+	done := u.busy(nil, u.quality, u.connection)
+	go func() {
+		time.Sleep(300 * time.Millisecond) // the camera closes the old session
+		err := change()
+		fyne.Do(func() {
+			done()
+			if err != nil {
+				dialog.ShowError(err, u.win)
+			}
+			if name == u.camera.Selected {
+				u.restart()
+			}
+		})
+	}()
 }
 
 func (u *ui) loadCameraState() {
@@ -798,9 +851,9 @@ func (u *ui) loadCameraState() {
 		u.loadIPState(name)
 		return
 	}
-	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
+	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor)
 	if err != nil {
-		fyne.Do(func() { u.status.SetText("Nie udało się odczytać stanu kamery: " + err.Error()) })
+		fyne.Do(func() { u.status.SetText(TJ("Nie udało się odczytać stanu kamery: ", err.Error())) })
 		return
 	}
 	fyne.Do(func() {
@@ -820,6 +873,12 @@ func (u *ui) loadCameraState() {
 			case p.Siid == propSiren.Siid && p.Piid == propSiren.Piid:
 				on, _ := p.Value.(bool)
 				u.siren.SetChecked(on)
+			case p.Same(propWDR):
+				on, _ := p.Value.(bool)
+				u.wdr.SetChecked(on)
+			case p.Same(propLowLightColor):
+				on, _ := p.Value.(bool)
+				u.lowLight.SetChecked(on)
 			case p.Siid == propNightShot.Siid && p.Piid == propNightShot.Piid && p.Code == 0:
 				v, _ := p.Value.(float64)
 				u.showNight(int(v))
@@ -901,6 +960,48 @@ func (u *ui) setProp(p miotProp, value any, w fyne.Disableable) {
 
 // snapshot saves a full resolution JPEG from the camera stream (the window shows a
 // downscaled picture) to the snapshots folder from the settings.
+// enhancedSnapshot saves the enhanced photo (photo.go): the merged frames, the zoomed part
+// enlarged from the full resolution and, with Real-ESRGAN installed, its AI version.
+func (u *ui) enhancedSnapshot() {
+	name := u.camera.Selected
+	if name == "" || u.enhButton.isBusy() {
+		return
+	}
+	var crop *[4]float64
+	if f := u.video.frame; f != nil && u.video.zoomed() {
+		b := f.Bounds()
+		r := u.video.dz.cropRect(b.Dx(), b.Dy())
+		crop = &[4]float64{float64(r.Min.X) / float64(b.Dx()), float64(r.Min.Y) / float64(b.Dy()),
+			float64(r.Dx()) / float64(b.Dx()), float64(r.Dy()) / float64(b.Dy())}
+	}
+	u.status.SetText(T("Łączę 15 klatek w ulepszone zdjęcie…"))
+	done := u.busy(u.enhButton)
+	go func() {
+		files, err := enhancedPhoto(name, crop)
+		if err == nil && crop != nil && hasAIEnhance() {
+			fyne.Do(func() { u.status.SetText(T("Powiększanie AI (Real-ESRGAN)…")) })
+			if ai, aerr := aiEnhance(files[len(files)-1]); aerr == nil {
+				files = append(files, ai)
+			} else {
+				err = aerr
+			}
+		}
+		fyne.Do(func() {
+			done()
+			if err != nil {
+				dialog.ShowError(err, u.win)
+			}
+			if len(files) > 0 {
+				names := make([]string, len(files))
+				for i, f := range files {
+					names[i] = filepath.Base(f)
+				}
+				u.status.SetText(TJ("Zapisano ", strings.Join(names, ", ")))
+			}
+		})
+	}()
+}
+
 func (u *ui) snapshot() {
 	name := u.camera.Selected
 	if name == "" || u.snapButton.isBusy() {
@@ -916,7 +1017,7 @@ func (u *ui) snapshot() {
 				dialog.ShowError(err, u.win)
 				return
 			}
-			u.status.SetText(T("Zapisano ") + path)
+			u.status.SetText(TJ("Zapisano ", path))
 		})
 	}()
 }
@@ -1137,13 +1238,56 @@ const (
 	maxZoom  = 9.0 // hlCameraVideoMaxZoomScale in the Mi Home plugin
 )
 
-// zoomBy changes the camera zoom. Only the last value is sent after a short pause,
+// zoomBy zooms in (delta > 0) or out around the centre of the picture.
+func (u *ui) zoomBy(delta float64) { u.zoomAt(delta, nil) }
+
+// zoomAt: the camera's own zoom first (sharp: the camera does it), then the digital zoom
+// on top of it; zooming out undoes them in the reverse order. pos - keep this point of the
+// picture under the mouse (wheel). Only the last camera value is sent after a short pause,
 // so scrolling the wheel doesn't flood the camera with commands.
-func (u *ui) zoomBy(delta float64) {
-	if !u.caps.Zoom {
+func (u *ui) zoomAt(delta float64, pos *fyne.Position) {
+	if u.grid { // the tiles: the camera's own zoom only
+		if u.caps.Zoom {
+			u.setZoom(u.camZoom + delta)
+		}
 		return
 	}
-	u.setZoom(u.camZoom + delta)
+	dz := u.video.dz.z
+	if u.caps.Zoom && ((delta > 0 && u.camZoom < maxZoom) || (delta < 0 && dz <= 1.001)) {
+		u.setZoom(u.camZoom + delta)
+		return
+	}
+	limit := maxDigital
+	if u.caps.Zoom {
+		limit = maxDigitalHybrid
+	}
+	if delta > 0 {
+		dz *= digitalStep
+	} else {
+		dz /= digitalStep
+	}
+	if dz < 1.05 {
+		dz = 1
+	}
+	u.video.setDigitalZoom(min(dz, limit), pos)
+	u.showZoom(u.camZoom)
+	u.decodeStable = 1 // a sharper decode tier soon (checkDecodeSize)
+}
+
+// setEnhance: the next decoder sharpens and denoises while the digital zoom is on.
+func (u *ui) setEnhance() {
+	u.decodeEnhanced = u.video.zoomed()
+	u.player.enhance.Store(u.decodeEnhanced)
+}
+
+// zoomReset: back to the whole picture (camera zoom 1x, no digital zoom).
+func (u *ui) zoomReset() {
+	u.video.setDigitalZoom(1, nil)
+	if u.caps.Zoom {
+		u.setZoom(1)
+	} else {
+		u.showZoom(1)
+	}
 }
 
 // setZoom sets the camera zoom; only the last value is sent after a short pause.
@@ -1168,34 +1312,39 @@ func (u *ui) setZoom(z float64) {
 	})
 }
 
-// showZoom updates the zoom label and the video-only zoom slider.
+// showZoom updates the zoom label (the whole zoom: camera × digital) and the video-only
+// zoom slider (the camera's zoom).
 func (u *ui) showZoom(z float64) {
-	u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+	if dz := u.video.dz.z; dz > 1.001 {
+		u.zoomLabel.SetText(TJ("cyfrowy ", fmt.Sprintf("%.1f×", z*dz)))
+	} else {
+		u.zoomLabel.SetText(fmt.Sprintf("%.1f×", z))
+	}
 	if u.zoomSlider != nil {
 		u.zoomSlider.SetValue(z)
 	}
 }
 
-// decodeTiers - widths the video is decoded to. Decoding to the size shown on the screen
-// instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done by the
-// camera, so no detail is lost).
-var decodeTiers = []int{1280, 1920, 2560}
-
-// decodeSize returns the smallest tier not smaller than the picture on the screen
-// (in pixels), limited by the stream size w x h.
+// decodeSize returns the size the video is decoded to: the width of the picture on the
+// screen in pixels (rounded up to 64), limited by the stream size w x h. Decoding to the
+// size shown instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done
+// by the camera, so no detail is lost); ffmpeg scales with a good filter and the GPU then
+// shows the frame 1:1 (videoView.setScaleMode).
 func (u *ui) decodeSize(w, h int) (int, int) {
-	px := int(u.video.Size().Width * u.win.Canvas().Scale())
+	// zoomed in digitally: the crop has to be as sharp as the picture, so a larger frame
+	_, _, sw, _ := u.video.shownRect()
+	px := int(sw * u.win.Canvas().Scale() * float32(u.video.dz.z))
 	if px <= 0 {
 		px = 1280
 	}
-	dw := w
-	for _, t := range decodeTiers {
-		if t >= px {
-			dw = min(t, w)
-			break
-		}
-	}
-	return dw, dw * h / w
+	dw := min((px+63)/64*64, w)
+	return dw, dw * h / w &^ 1
+}
+
+// decodeOff reports whether a decoder of width have is too far from the width wanted: too
+// small (a blurred picture) or more than 1.25x larger (CPU, and the GPU's bilinear scaling).
+func decodeOff(have, want int) bool {
+	return have < want || have*4 > want*5
 }
 
 // checkDecodeSize restarts live video when the window was resized to another tier
@@ -1208,7 +1357,7 @@ func (u *ui) checkDecodeSize() {
 		return
 	}
 	q := currentQuality(u.camera.Selected)
-	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW {
+	if w, _ := u.decodeSize(q.w, q.h); decodeOff(u.decodeW, w) || u.video.zoomed() != u.decodeEnhanced {
 		u.decodeStable++
 		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished
 			u.decodeStable = 0

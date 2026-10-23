@@ -168,6 +168,7 @@ func (*ptrSelect) Cursor() desktop.Cursor { return desktop.PointerCursor }
 func newSelect(options []string, changed func(string)) *ptrSelect {
 	s := &ptrSelect{}
 	s.Options, s.OnChanged = options, changed
+	s.PlaceHolder = T("(wybierz)")
 	s.ExtendBaseWidget(s)
 	return s
 }

@@ -52,8 +52,15 @@ func NightModeByID(id string) (NightMode, error) {
 // vision modes of the Imou cloud or the IR cut filter modes over ONVIF, once detected; nil -
 // none).
 func CameraNightModes(name string) []NightMode {
-	if CameraSource(name) != "" {
-		return NightModes
+	if src := CameraSource(name); src != "" {
+		spec := specOf(src)
+		var modes []NightMode
+		for _, m := range NightModes {
+			if spec.hasValue(PropNightShot, m.Value) {
+				modes = append(modes, m)
+			}
+		}
+		return modes
 	}
 	if c := imouCached(name); c != nil && len(c.nightModes()) > 0 {
 		return c.nightModes()

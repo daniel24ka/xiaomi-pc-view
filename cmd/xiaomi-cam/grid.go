@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
 // Grid view: all cameras at once. Click a tile to select the camera (all controls work on
@@ -227,6 +228,7 @@ func (u *ui) updateGridButton() {
 
 // camerasChanged - cameras were added, renamed or removed.
 func (u *ui) camerasChanged() {
+	xccore.EnsureOnAir()
 	u.camera.Options = cameraNames()
 	u.camera.Refresh()
 	u.updateGridButton()

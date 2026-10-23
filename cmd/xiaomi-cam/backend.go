@@ -28,8 +28,15 @@ func showRunningInstance() bool {
 }
 
 // startBackend runs the embedded go2rtc (xccore) with the config in
-// ~/.config/xiaomi-cam-viewer.
+// ~/.config/xiaomi-cam-viewer, or in a "config" folder next to the program when there is
+// one (portable: on Windows a packaged parent app, e.g. a process manager started from it,
+// can see another %APPDATA% than the user's, and the cameras would be gone).
 func startBackend() error {
+	if exe, err := os.Executable(); err == nil {
+		if dir := filepath.Join(filepath.Dir(exe), "config"); fileExists(dir) {
+			return xccore.Start(dir)
+		}
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return err

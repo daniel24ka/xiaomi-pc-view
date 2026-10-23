@@ -25,12 +25,18 @@ type timeline struct {
 	pos    time.Time     // the playback position (zero: none)
 	hover  time.Time     // the time under the mouse (zero: none)
 
-	files    func(from, to time.Time) [][2]time.Time // known recordings in the range
+	files    func(from, to time.Time) []tlSpan       // known recordings in the range
 	events   func(from, to time.Time) []xccore.Event // known events in the range (events.go)
 	onPick   func(t time.Time)                       // a time chosen (click, drag released)
 	onHover  func(t time.Time, x float32)            // the mouse over the axis (zero t: left)
 	dragging bool
 	browsed  bool // the user moved or zoomed the range: it doesn't follow the playback
+}
+
+// tlSpan - a recording on the timeline; dim: lower quality (the PC archive's overview)
+type tlSpan struct {
+	from, to time.Time
+	dim      bool
 }
 
 const (
@@ -216,9 +222,13 @@ func (r *timelineRenderer) rebuild(size fyne.Size) {
 	// the known recordings
 	if t.files != nil {
 		for _, f := range t.files(t.from(), t.from().Add(t.span)) {
-			x0, x1 := max(t.xAt(f[0]), 0), min(t.xAt(f[1]), size.Width)
+			x0, x1 := max(t.xAt(f.from), 0), min(t.xAt(f.to), size.Width)
 			if x1 > x0 {
-				seg := canvas.NewRectangle(alpha(palette.live, 0x70))
+				a := uint8(0x70)
+				if f.dim {
+					a = 0x30
+				}
+				seg := canvas.NewRectangle(alpha(palette.live, a))
 				seg.Move(fyne.NewPos(x0, barY+3))
 				seg.Resize(fyne.NewSize(x1-x0, barH-6))
 				r.objs = append(r.objs, seg)

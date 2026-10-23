@@ -18,7 +18,8 @@ import (
 	"github.com/AlexxIT/go2rtc/pkg/xiaomi/miss"
 )
 
-// History - playback of SD card recordings, like the timeline in Mi Home.
+// History - playback of SD card recordings, like the timeline in Mi Home, or of the PC
+// archive (archive.go) when it records the camera.
 // The camera records ~1 min files; playback starts at the beginning of the file with the
 // chosen time (up to a minute earlier), the date/time printed by the camera is exact.
 
@@ -41,6 +42,12 @@ type history struct {
 
 	kinds     map[eventKind]bool  // the shown events (nil: all)
 	eventBtns []fyne.CanvasObject // the event filter and jumps (cameras with events)
+
+	pc     bool                // playing the PC archive, not the SD card
+	arch   archive             // the PC archive (archive.go)
+	source *ptrButton          // switches between the two (when the camera has both)
+	pause  *ptrButton          // the PC archive: pause / play
+	pcOnly []fyne.CanvasObject // the controls of the PC archive
 }
 
 func (u *ui) buildHistory() {
@@ -52,6 +59,9 @@ func (u *ui) buildHistory() {
 	})
 
 	h.date.recorded = func(month time.Time) (map[int]bool, time.Time) {
+		if h.pc {
+			return h.arch.days(month)
+		}
 		did := cameraDid(cameraSource(u.camera.Selected))
 		oldest, _, ok := miss.RecordingsSpan(did)
 		if !ok {
@@ -68,10 +78,13 @@ func (u *ui) buildHistory() {
 
 	h.tl = newTimeline()
 	h.label = widget.NewLabel("")
-	h.tl.files = func(from, to time.Time) [][2]time.Time {
-		var out [][2]time.Time
+	h.tl.files = func(from, to time.Time) []tlSpan {
+		if h.pc {
+			return h.arch.spans(from, to)
+		}
+		var out []tlSpan
 		for _, f := range miss.RecordingsBetween(cameraDid(cameraSource(u.camera.Selected)), from.Unix(), to.Unix()) {
-			out = append(out, [2]time.Time{time.Unix(f.Start, 0), time.Unix(f.Start+f.Duration, 0)})
+			out = append(out, tlSpan{from: time.Unix(f.Start, 0), to: time.Unix(f.Start+f.Duration, 0)})
 		}
 		return out
 	}
@@ -89,7 +102,11 @@ func (u *ui) buildHistory() {
 	}
 	h.speed = newSelect(names, func(string) {
 		if h.on {
-			u.playHistory(u.historyTime())
+			from := u.historyPosition() // on from what is being played
+			if from.IsZero() {
+				from = u.historyTime()
+			}
+			u.playHistory(from)
 		}
 	})
 	h.speed.SetSelectedIndex(0)
@@ -110,8 +127,19 @@ func (u *ui) buildHistory() {
 	prevEv := newButton("", lucide("step-back"), func() { u.jumpEvent(-1) }).withTip(T("Poprzednie zdarzenie"))
 	nextEv := newButton("", lucide("step-forward"), func() { u.jumpEvent(1) }).withTip(T("Następne zdarzenie"))
 	h.eventBtns = []fyne.CanvasObject{filter, prevEv, nextEv}
+	h.source = newButton("", theme.ComputerIcon(), func() {
+		u.setHistorySource(!h.pc)
+		u.playHistory(u.historyTime())
+	})
+	h.source.Hide()
+	h.pause = newButton("", theme.MediaPauseIcon(), u.toggleArchivePause).withTip(T("Pauza / odtwarzaj (spacja)"))
+	var save *ptrButton
+	save = newButton("", theme.DownloadIcon(), func() { u.showArchiveMenu(save) }).
+		withTip(T("Zapisz tę chwilę: plik MP4, pełna jakość na tydzień, zdjęcie klatki"))
+	h.pcOnly = []fyne.CanvasObject{h.pause, save}
 	h.bar = container.NewBorder(nil, nil,
 		container.NewHBox(
+			h.source,
 			h.date.btn,
 			filter,
 			newButton("", theme.MediaFastRewindIcon(), step(-10*time.Minute)).withTip(T("10 minut wstecz")),
@@ -124,6 +152,8 @@ func (u *ui) buildHistory() {
 			newButton("", theme.MediaSkipNextIcon(), step(time.Minute)).withTip(T("1 minuta do przodu")),
 			newButton("", theme.MediaFastForwardIcon(), step(10*time.Minute)).withTip(T("10 minut do przodu")),
 			h.speed,
+			h.pause,
+			save,
 		),
 		h.tl,
 	)
@@ -169,15 +199,25 @@ func (u *ui) showHistoryPreview(t time.Time, x float32) {
 		p.box.Hide()
 		return
 	}
+	p.lastT, p.lastX = t, x
 	p.label.Text = t.Format("15:04:05")
 	if e, ok := u.eventAt(t); ok {
 		p.label.Text += " · " + eventName(e.Kind)
 		p.label.Color = eventColor(e.Kind)
+		if l := u.hist.arch.markLabel(t); u.hist.pc && l != "" {
+			if r := []rune(l); len(r) > 48 {
+				l = string(r[:47]) + "…"
+			}
+			p.label.Text += " · " + l
+		}
 	} else {
 		p.label.Color = palette.text
 	}
 	p.label.Refresh()
 	path := thumbNear(cameraDid(cameraSource(u.camera.Selected)), t, 2)
+	if path == "" && u.hist.pc {
+		u.archiveThumb(t) // the archive makes it; the preview is shown again when it comes
+	}
 	if path != p.path {
 		p.path = path
 		if path == "" {
@@ -207,6 +247,8 @@ type histPreview struct {
 	img   *canvas.Image
 	label *canvas.Text
 	path  string
+	lastT time.Time // the last time shown (the archive's thumbnail comes later)
+	lastX float32
 }
 
 func (u *ui) buildHistoryPreview() fyne.CanvasObject {
@@ -248,6 +290,9 @@ func (u *ui) captureThumb(img *image.RGBA) {
 // (playback starts there) plus the time played (zero: no picture yet).
 func (u *ui) historyPosition() time.Time {
 	h := &u.hist
+	if h.on && h.pc {
+		return u.archivePosition()
+	}
 	if !h.on || h.firstFrame.IsZero() {
 		return time.Time{}
 	}
@@ -272,10 +317,20 @@ func (u *ui) openHistory() {
 	h.button.Refresh()
 	u.quality.Disable()
 	u.connection.Disable()
-	u.playHistory(time.Now().Add(-5 * time.Minute))
+	u.video.setStatus(T("Wczytuję nagranie…"))
+	u.openArchiveHistory(time.Now().Add(-5 * time.Minute)) // the PC archive or the SD card
 }
 
 func (u *ui) playHistory(t time.Time) {
+	if u.hist.pc {
+		u.playArchive(t)
+	} else {
+		u.playSD(t)
+	}
+}
+
+// playSD plays the SD card of the camera from t (the camera's session switches to it).
+func (u *ui) playSD(t time.Time) {
 	h := &u.hist
 	if !h.on || u.camera.Selected == "" {
 		return
@@ -314,16 +369,22 @@ func (u *ui) goLive() {
 	u.quality.Enable()
 	u.connection.Enable()
 	u.player.stop()
-	_ = setPlayback(u.current.Load().(string), 0, 0)
+	if !h.pc { // the PC archive never took the camera's session
+		_ = setPlayback(u.current.Load().(string), 0, 0)
+	}
+	h.arch.paused = false
 	u.restart()
 }
 
 // historyFrame is called for every frame (UI thread)
-func (u *ui) historyFrame() {
+func (u *ui) historyFrame(gen int64) {
 	h := &u.hist
+	if h.on && h.pc && h.arch.active && gen != h.arch.oldGen {
+		h.arch.frames++ // frames of the clip just started (not of the one it replaces)
+	}
 	if h.on && h.firstFrame.IsZero() {
 		h.firstFrame = time.Now()
-		if !h.listed && !h.listing {
+		if !h.listed && !h.listing && !h.pc {
 			h.listing = true
 			go u.listSDFiles(u.camera.Selected)
 		}
@@ -382,7 +443,12 @@ func (u *ui) loadHistoryEvents(name string) {
 
 // historyEvents - the shown events of the selected camera (the filter of the history bar)
 func (u *ui) historyEvents(from, to time.Time) []xccore.Event {
-	list := evStore.between(cameraDid(cameraSource(u.camera.Selected)), from, to)
+	var list []xccore.Event
+	if u.hist.pc {
+		list = u.hist.arch.events(from, to)
+	} else {
+		list = evStore.between(cameraDid(cameraSource(u.camera.Selected)), from, to)
+	}
 	if u.hist.kinds == nil {
 		return list
 	}
@@ -432,13 +498,17 @@ func (u *ui) jumpEvent(dir int) {
 // showEventFilter - the menu of the event kinds shown on the timeline
 func (u *ui) showEventFilter(b fyne.CanvasObject) {
 	h := &u.hist
-	all := fyne.NewMenuItem(T("Wszystkie zdarzenia"), func() {
+	all := fyne.NewMenuItem(TM("Wszystkie zdarzenia"), func() {
 		h.kinds = nil
 		h.tl.Refresh()
 	})
 	all.Checked = h.kinds == nil
 	items := []*fyne.MenuItem{all, fyne.NewMenuItemSeparator()}
-	for _, k := range cameraEvents(u.camera.Selected) {
+	kinds := cameraEvents(u.camera.Selected)
+	if h.pc {
+		kinds = archiveKinds
+	}
+	for _, k := range kinds {
 		k := k
 		it := fyne.NewMenuItem(eventName(k), func() {
 			if h.kinds == nil {
@@ -466,9 +536,36 @@ func (u *ui) historyStatus() {
 		return
 	}
 	speed := playbackSpeeds[max(h.speed.SelectedIndex(), 0)]
+	if h.pc {
+		if h.arch.paused {
+			return
+		}
+		if time.Since(h.arch.loaded) > 30*time.Second { // new marks and recordings
+			h.arch.loaded = time.Now()
+			go func() {
+				if h.arch.refresh() == nil {
+					fyne.Do(h.tl.Refresh)
+				}
+			}()
+		}
+	}
 	pos := u.historyPosition()
+	if h.pc && pos.IsZero() {
+		return // a clip is loading (or there is none)
+	}
 	h.tl.setPos(pos)
 	h.label.SetText(pos.Format("15:04:05"))
+	if h.pc {
+		if time.Now().Before(h.arch.noteUntil) {
+			return // a message is shown (saved, kept)
+		}
+		tier := T("pełna jakość")
+		if h.arch.tier != "full" {
+			tier = T("przegląd 720p")
+		}
+		u.status.SetText(fmt.Sprintf(T("Nagranie z komputera: %s (%d×, %s)"), pos.Format("02.01 15:04:05"), speed, tier))
+		return
+	}
 	u.status.SetText(fmt.Sprintf(T("Historia: %s (%d×)"), pos.Format("02.01 15:04:05"), speed))
 }
 

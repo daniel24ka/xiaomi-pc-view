@@ -56,6 +56,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 	channel.SetText("0")
 	hint := widget.NewLabel("")
 	hint.Wrapping = fyne.TextWrapWord
+	rtlAlign(hint)
 	hint.TextStyle.Italic = true
 
 	// Imou cloud (optional): the light, siren, night mode and camera points of Imou cameras
@@ -208,6 +209,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 
 	status := widget.NewLabel("")
 	status.Wrapping = fyne.TextWrapWord
+	rtlAlign(status)
 	spin := newSpinner(spinnerFrames)
 	var test, add, cancel *ptrButton
 	setBusy := func(on bool, text string) {
@@ -261,7 +263,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 			fyne.Do(func() {
 				setBusy(false, "")
 				if err != nil {
-					status.SetText(T("Błąd: ") + err.Error())
+					status.SetText(TJ("Błąd: ", err.Error()))
 					return
 				}
 				status.SetText(describe(c))
@@ -293,7 +295,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 					err = save(n, c)
 				}
 				if err != nil {
-					status.SetText(T("Błąd: ") + err.Error())
+					status.SetText(TJ("Błąd: ", err.Error()))
 					return
 				}
 				d.Hide()
@@ -316,7 +318,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 			fyne.Do(func() {
 				setBusy(false, "")
 				if err != nil {
-					status.SetText(T("Błąd: ") + err.Error())
+					status.SetText(TJ("Błąd: ", err.Error()))
 					return
 				}
 				if len(devs) == 0 {
@@ -338,7 +340,7 @@ func showAddIPCamera(w fyne.Window, prefill *ipForm, edit string, save func(name
 			fyne.Do(func() {
 				setBusy(false, "")
 				if err != nil {
-					status.SetText(T("Błąd: ") + err.Error())
+					status.SetText(TJ("Błąd: ", err.Error()))
 					return
 				}
 				if len(devices) == 0 {

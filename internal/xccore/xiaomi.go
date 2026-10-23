@@ -26,15 +26,48 @@ var XiaomiQualities = []Quality{
 	{"SD", "sd", 1280, 720},
 }
 
+// OlderQualities - cameras without the 2.5K stream (e.g. Mi 360° 1080p, 2K Pro, C200):
+// videoquality 3 is broken on some of them, so only the camera's HD and SD.
+var OlderQualities = []Quality{
+	{"HD", "", 1920, 1080},
+	{"SD", "sd", 640, 360},
+}
+
+// models2K - cameras whose 2.5K stream is videoquality 3 (Hualai CW400 / CW700S family)
+var models2K = map[string]bool{
+	"isa.camera.700sa":  true, // Outdoor Camera CW700S
+	"isa.camera.hlzoom": true, // CW400 Pro
+	"isa.camera.hlc8":   true, // CW400
+}
+
+// QualitiesForModel returns the picture qualities of a Xiaomi camera model.
+func QualitiesForModel(model string) []Quality {
+	if models2K[model] {
+		return XiaomiQualities
+	}
+	return OlderQualities
+}
+
+// CameraQualities returns the picture qualities of a Xiaomi camera of the app.
+func CameraQualities(name string) []Quality {
+	return QualitiesForModel(SourceParam(CameraSource(name), "model"))
+}
+
 // XiaomiQuality returns the index of the selected quality of a Xiaomi camera.
 func XiaomiQuality(name string) int {
+	qs := CameraQualities(name)
 	sub := SourceParam(CameraSource(name), "subtype")
-	for i, q := range XiaomiQualities {
+	for i, q := range qs {
 		if q.Subtype == sub {
 			return i
 		}
 	}
-	return 1
+	for i, q := range qs {
+		if q.Subtype == "" {
+			return i
+		}
+	}
+	return 0
 }
 
 // --- Mi account login (the go2rtc API, the same flow as go2rtc WebUI)
@@ -118,8 +151,20 @@ func UniqueName(name string) string {
 }
 
 // AddXiaomiCamera adds a camera of the account (a Device URL) under a unique name and
-// returns the name. p2p=server works from any network; subtype=3 - 2.5K (2560x1440).
+// returns the name. p2p=server works from any network (EU CS2 cameras; TUTK and legacy
+// ones connect in the LAN anyway); subtype=3 - 2.5K (2560x1440) on the cameras that have it.
 func AddXiaomiCamera(name, deviceURL string) (string, error) {
 	name = UniqueName(name)
-	return name, AddCamera(name, deviceURL+"&p2p=server&subtype=3")
+	var params string
+	// the CS2 servers (pkg/xiaomi/miss/cs2) are the EU ones: cameras of other regions
+	// connect in the LAN (p2p=server = the Xiaomi servers, from any network)
+	if u, err := url.Parse(deviceURL); err == nil {
+		if region, _ := u.User.Password(); region == "de" {
+			params = "&p2p=server"
+		}
+	}
+	if models2K[SourceParam(deviceURL, "model")] {
+		params += "&subtype=3"
+	}
+	return name, AddCamera(name, deviceURL+params)
 }

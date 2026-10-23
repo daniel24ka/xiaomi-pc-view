@@ -22,6 +22,7 @@ import (
 func helpLabel(s string) *widget.Label {
 	l := widget.NewLabel(s)
 	l.Wrapping = fyne.TextWrapWord
+	rtlAlign(l)
 	l.Importance = widget.LowImportance
 	return l
 }
@@ -487,6 +488,7 @@ func (u *ui) eventsSettings() fyne.CanvasObject {
 
 	state := widget.NewLabel("")
 	state.Wrapping = fyne.TextWrapWord
+	rtlAlign(state)
 	showState := func() {
 		watch.mu.Lock()
 		defer watch.mu.Unlock()

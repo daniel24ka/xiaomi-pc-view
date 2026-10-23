@@ -14,6 +14,7 @@ import (
 
 	"github.com/AlexxIT/go2rtc/internal/api"
 	"github.com/AlexxIT/go2rtc/internal/streams"
+	"github.com/AlexxIT/go2rtc/internal/xccore"
 )
 
 // Local HTTP API for scripts and AI (the MCP server uses it). Listens only on
@@ -22,13 +23,15 @@ import (
 //
 //	GET  /api/xiaomi-cam/cameras
 //	GET  /api/xiaomi-cam/snapshot?width=1280          image/jpeg
-//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, night mode, zoom
+//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, night mode, zoom, picture settings
+//	POST /api/xiaomi-cam/picture?wdr=true&low_light_color=false  picture settings (models that have them)
 //	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step = 0.1 s of movement
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
 //	POST /api/xiaomi-cam/night-mode?mode=auto         auto/auto-color/smart-color/on/color/off
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
+//	POST /api/xiaomi-cam/snapshot/enhanced           saves the enhanced photo (15 frames merged, PNG)
 //	POST /api/xiaomi-cam/record/start?duration=60&mode=each&cameras=a,b  MP4 (H.265); mode: selected/each/grid
 //	POST /api/xiaomi-cam/record/stop                 stops all recordings
 //	GET  /api/xiaomi-cam/record                      recording status
@@ -36,6 +39,8 @@ import (
 //	POST /api/xiaomi-cam/points/goto?point=1         turn to a point (number or name)
 //	POST /api/xiaomi-cam/points/save?point=1&name=auto  save the current position
 //	GET  /api/xiaomi-cam/events?hours=24             camera events (motion, person, car, fence)
+//	GET  /api/xiaomi-cam/onair                       the camera on air and the RTSP address for OBS
+//	POST /api/xiaomi-cam/onair?camera=name           put a camera on air
 func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 	handle := func(path, method string, f func(r *http.Request, name string) (any, error)) {
 		api.HandleFunc("api/xiaomi-cam/"+path, func(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +73,27 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		})
 	}
 
+	api.HandleFunc("api/xiaomi-cam/onair", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+		case "POST":
+			name := r.URL.Query().Get("camera")
+			if !cameraExists(name) {
+				http.Error(w, fmt.Sprintf("no camera %q", name), http.StatusNotFound)
+				return
+			}
+			if err := xccore.SetOnAir(name); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		default:
+			http.Error(w, "GET or POST", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"camera": xccore.OnAirCamera(), "rtsp": xccore.OnAirURL()})
+	})
+
 	api.HandleFunc("api/xiaomi-cam/cameras", func(w http.ResponseWriter, r *http.Request) {
 		type camera struct {
 			Name  string `json:"name"`
@@ -98,7 +124,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 			return state, nil
 		}
-		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
+		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor)
 		if err != nil {
 			return nil, err
 		}
@@ -108,6 +134,14 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		}
 		for _, p := range props {
 			if p.Code != 0 {
+				continue
+			}
+			switch {
+			case p.Same(propWDR):
+				state["wdr"] = p.Value
+				continue
+			case p.Same(propLowLightColor):
+				state["low_light_color"] = p.Value
 				continue
 			}
 			switch p.Piid {
@@ -188,6 +222,18 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		return map[string]any{"ok": true}, nil
 	})
 
+	handle("picture", "POST", func(r *http.Request, name string) (any, error) {
+		q := r.URL.Query()
+		for key, p := range map[string]miotProp{"wdr": propWDR, "low_light_color": propLowLightColor} {
+			if v := q.Get(key); v != "" {
+				if err := setProp(name, p, v == "true" || v == "1"); err != nil {
+					return nil, fmt.Errorf("%s: %w", key, err)
+				}
+			}
+		}
+		return map[string]any{"ok": true}, nil
+	})
+
 	handle("night-mode", "POST", func(r *http.Request, name string) (any, error) {
 		m, err := nightModeByID(r.URL.Query().Get("mode"))
 		if err != nil {
@@ -197,6 +243,14 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			return nil, err
 		}
 		return map[string]any{"night_mode": m.ID}, nil
+	})
+
+	handle("snapshot/enhanced", "POST", func(r *http.Request, name string) (any, error) {
+		files, err := enhancedPhoto(name, nil)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"files": files}, nil
 	})
 
 	handle("snapshot/save", "POST", func(r *http.Request, name string) (any, error) {

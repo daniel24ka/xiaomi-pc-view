@@ -133,7 +133,7 @@ func Qualities(name string) string {
 			sel = min(max(c.Quality, 0), 1)
 		}
 	} else {
-		for _, q := range xccore.XiaomiQualities {
+		for _, q := range xccore.CameraQualities(name) {
 			names = append(names, q.Name)
 			sizes = append(sizes, [2]int{q.W, q.H})
 			codecs = append(codecs, "hevc") // isa.camera.700sa: H.265 in every quality
@@ -148,10 +148,11 @@ func SetQuality(name string, i int) error {
 	if xccore.IPCam(name) != nil {
 		return xccore.SetIPQuality(name, i)
 	}
-	if i < 0 || i >= len(xccore.XiaomiQualities) {
+	qs := xccore.CameraQualities(name)
+	if i < 0 || i >= len(qs) {
 		return errors.New("no such quality")
 	}
-	return xccore.SetSourceParams(name, map[string]string{"subtype": xccore.XiaomiQualities[i].Subtype})
+	return xccore.SetSourceParams(name, map[string]string{"subtype": qs[i].Subtype})
 }
 
 // --- pan/tilt and zoom

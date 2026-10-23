@@ -29,13 +29,28 @@ type player struct {
 
 	onFrame  func(img *image.RGBA, gen int64)
 	onStatus func(text string)
+	onEnd    func(gen int64, err error) // a file played to its end or failed (startFile)
+
+	enhance atomic.Bool // the next playback sharpens and denoises (digital zoom: enhance.go)
 }
 
 type playback struct {
-	gen    int64
-	cancel context.CancelFunc
-	done   chan struct{}
+	gen     int64
+	cancel  context.CancelFunc
+	done    chan struct{}
+	enhance bool
+	file    *fileOpts // a recording (archive.go), nil: the live stream
 }
+
+// fileOpts - where and how fast a recording plays.
+type fileOpts struct {
+	seek float64 // seconds from the file start
+	rate float64 // 1: real time
+}
+
+// fileFPS - the frames a second shown from a recording (played faster, the rest are dropped
+// by ffmpeg: 16x of a 20 fps camera would be 320 frames a second).
+const fileFPS = 20
 
 func (pb *playback) stop() {
 	pb.cancel()
@@ -47,7 +62,14 @@ func (pb *playback) stop() {
 // stream source changes, e.g. quality).
 func (p *player) start(url string, w, h int, audio bool) {
 	p.stop()
-	p.begin(url, w, h, audio, false)
+	p.begin(url, w, h, audio, false, nil)
+}
+
+// startFile plays a recording (an MP4 over HTTP) once, from seek seconds, rate times faster
+// than real time; at its end onEnd is called instead of reconnecting.
+func (p *player) startFile(url string, seek, rate float64, w, h int) {
+	p.stop()
+	p.begin(url, w, h, false, false, &fileOpts{seek: seek, rate: max(rate, 1)})
 }
 
 // switchTo starts a new playback while the current one keeps running and replaces it
@@ -57,14 +79,14 @@ func (p *player) switchTo(url string, w, h int, audio bool) {
 	p.mu.Lock()
 	running := p.cur != nil
 	p.mu.Unlock()
-	p.begin(url, w, h, audio, running)
+	p.begin(url, w, h, audio, running, nil)
 }
 
-func (p *player) begin(url string, w, h int, audio, seamless bool) {
+func (p *player) begin(url string, w, h int, audio, seamless bool, file *fileOpts) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.mu.Lock()
 	p.seq++
-	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{})}
+	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{}), enhance: p.enhance.Load(), file: file}
 	oldPending := p.pending
 	p.pending = nil
 	if seamless {
@@ -86,9 +108,19 @@ func (p *player) begin(url string, w, h int, audio, seamless bool) {
 	go func() {
 		defer close(pb.done)
 		for ctx.Err() == nil {
-			status(T("Łączenie z kamerą…"))
+			if file != nil {
+				status(T("Wczytuję nagranie…"))
+			} else {
+				status(T("Łączenie z kamerą…"))
+			}
 			err := p.run(ctx, url, w, h, audio, pb)
 			if ctx.Err() != nil {
+				return
+			}
+			if file != nil { // played once: the caller goes on (the next part, an error)
+				if p.onEnd != nil {
+					p.onEnd(pb.gen, err)
+				}
 				return
 			}
 			status(fmt.Sprintf(T("Rozłączono (%v) – ponawiam za 3 s…"), err))
@@ -133,6 +165,7 @@ func (p *player) stop() {
 }
 
 func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *playback) error {
+	input, filter, gpu := videoArgs(w, h, pb.enhance)
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
@@ -141,11 +174,21 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		// a short stream analysis: the picture ~1-2 s sooner (the codecs are in the RTSP SDP);
 		// 30 s timeout: finding an SD card recording can take a while
 		"-analyzeduration", "500000", "-probesize", "500000",
-		"-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url,
-		// the picture is fitted in w x h (IP cameras: the size may not be known yet)
-		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2", w, h, w, h),
-		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
 	}
+	args = append(args, input...)
+	if f := pb.file; f != nil {
+		// read at the playback speed from the position; faster: fewer frames shown
+		args = append(args, "-readrate", fmt.Sprintf("%g", f.rate), "-ss", fmt.Sprintf("%.3f", f.seek), "-i", url)
+		// a constant frame rate out (faster: frames dropped): each frame is rate/fileFPS
+		// seconds of the recording, so the frames shown count the position exactly
+		filter = fmt.Sprintf("setpts=PTS/%g,fps=%d,", f.rate, fileFPS) + filter
+	} else {
+		args = append(args, "-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url)
+	}
+	args = append(args,
+		"-map", "0:v:0", "-vf", filter,
+		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
+	)
 	if audio {
 		args = append(args, "-map", "0:a:0?", "-f", "pulse", "-name", "Xiaomi Cam", "default")
 	}
@@ -180,6 +223,14 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		p.frame(pb, frames[i])
 	}
 	_ = cmd.Wait()
+	if first && ctx.Err() == nil && gpuError(stderr.String()) {
+		for _, g := range gpu {
+			g.failed() // the GPU didn't give a picture: the CPU from the next try
+		}
+	}
+	if pb.file != nil && !first {
+		return nil // a recording played to its end (stderr: only the decoder's warnings)
+	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		if lines := strings.Split(msg, "\n"); len(lines) > 0 {
 			return fmt.Errorf("%s", lines[len(lines)-1])
@@ -201,14 +252,15 @@ type videoView struct {
 
 	frame *image.RGBA
 	small bool // a grid tile: smaller minimum size
+	dz    digitalZoom
 
 	onDoubleTap     func()
 	onTap           func() // click: select the tile in the grid
 	onSecondary     func()
 	onMouseMove     func()
-	onCameraDrag    func(dx, dy float32) // dragging the picture moves the camera
-	onCameraDragEnd func()               // mouse released: stop the camera
-	onScroll        func(up bool)        // mouse wheel - camera zoom
+	onCameraDrag    func(dx, dy float32)             // dragging the picture moves the camera
+	onCameraDragEnd func()                           // mouse released: stop the camera
+	onScroll        func(up bool, pos fyne.Position) // mouse wheel - zoom (camera, then digital)
 
 	// window resize by edges (window without frame)
 	canResize   func() bool
@@ -287,6 +339,7 @@ func newVideoView() *videoView {
 	v.status = canvas.NewText("", color.Gray{Y: 200})
 	v.status.Alignment = fyne.TextAlignCenter
 	v.spinner = newSpinner(videoSpinnerFrames)
+	v.dz.init()
 	v.ExtendBaseWidget(v)
 	return v
 }
@@ -333,13 +386,45 @@ func (v *videoView) updateImage() {
 	if v.frame == nil {
 		return
 	}
-	v.img.Image = v.frame
+	if !v.zoomed() {
+		v.img.Image = v.frame
+		v.setScaleMode(v.frame.Rect.Dx())
+		v.img.Refresh()
+		if v.dz.mini.Visible() {
+			v.dz.showMini(false)
+		}
+		return
+	}
+	v.img.Image = v.dz.crop(v.frame)
+	v.setScaleMode(v.img.Image.Bounds().Dx())
 	v.img.Refresh()
+	// the overview: a few times a second is enough (each update uploads the whole frame)
+	if v.dz.miniTick++; v.dz.miniTick%6 == 0 || !v.dz.mini.Visible() {
+		v.dz.mini.Image = v.frame
+		v.dz.mini.Refresh()
+	}
+	v.dz.showMini(true)
+	v.layoutMini()
+}
+
+// setScaleMode picks who scales a frame w pixels wide to the screen. Fyne's smooth mode
+// scales every frame on the CPU (Catmull-Rom, then a copy into RGBA: ~0.7 of a core for
+// 1080p at 20 fps); the fastest mode uploads the frame as it is and the GPU scales it
+// (bilinear). The video is decoded at the size shown (decodeSize), so the GPU nearly always
+// shows it 1:1; only a frame much larger than the view (a grid tile, a window shrinking
+// before the decoder follows) keeps the CPU filter, which bilinear would alias.
+func (v *videoView) setScaleMode(w int) {
+	mode := canvas.ImageScaleFastest
+	_, _, sw, _ := v.shownRect()
+	if c := fyne.CurrentApp().Driver().CanvasForObject(v); c != nil && float32(w) > sw*c.Scale()*1.3 {
+		mode = canvas.ImageScaleSmooth
+	}
+	v.img.ScaleMode = mode
 }
 
 func (v *videoView) Scrolled(e *fyne.ScrollEvent) {
 	if v.onScroll != nil && e.Scrolled.DY != 0 {
-		v.onScroll(e.Scrolled.DY > 0)
+		v.onScroll(e.Scrolled.DY > 0, e.Position)
 	}
 }
 
@@ -362,6 +447,10 @@ func (v *videoView) Dragged(e *fyne.DragEvent) {
 		return
 	case wmBottomRight:
 		v.onResize(dx, dy)
+		return
+	}
+	if v.zoomed() && (dx != 0 || dy != 0) {
+		v.panBy(dx, dy) // zoomed in: the drag moves around the picture
 		return
 	}
 	if v.onCameraDrag != nil && (dx != 0 || dy != 0) {
@@ -420,6 +509,7 @@ func (r *videoRenderer) Layout(size fyne.Size) {
 	const sp = 32
 	r.v.spinner.Resize(fyne.NewSize(sp, sp))
 	r.v.spinner.Move(fyne.NewPos((size.Width-sp)/2, size.Height/2-20-sp))
+	r.v.layoutMini()
 }
 
 func (r *videoRenderer) MinSize() fyne.Size {
@@ -431,5 +521,5 @@ func (r *videoRenderer) MinSize() fyne.Size {
 func (r *videoRenderer) Refresh() { canvas.Refresh(r.v) }
 func (r *videoRenderer) Destroy() {}
 func (r *videoRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.spinner, r.v.status}
+	return []fyne.CanvasObject{r.v.bg, r.v.img, r.v.dz.mini, r.v.dz.miniFrame, r.v.dz.miniBox, r.v.spinner, r.v.status}
 }

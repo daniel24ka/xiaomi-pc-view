@@ -35,6 +35,9 @@ var eventNames = map[eventKind]string{
 	xccore.EventPet:      "Zwierzę",
 	xccore.EventBabyCry:  "Płacz dziecka",
 	xccore.EventAI:       "Zdarzenie AI",
+	eventSiren:           "Syrena w okolicy",
+	eventSky:             "Wykrycie na niebie",
+	eventPinned:          "Zachowane ręcznie",
 }
 
 func eventName(k eventKind) string {
@@ -61,6 +64,12 @@ func eventColor(k eventKind) color.NRGBA {
 		return hex(0x75DF6E)
 	case xccore.EventBabyCry:
 		return hex(0x9B91FF)
+	case eventSiren:
+		return hex(0xEF4444)
+	case eventSky:
+		return hex(0xFF7A1A)
+	case eventPinned:
+		return hex(0x60A5FA)
 	}
 	return hex(0xFDC541) // motion
 }
