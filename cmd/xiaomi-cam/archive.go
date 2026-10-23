@@ -33,8 +33,12 @@ import (
 //
 // The service API: GET /api/range?from&to (coverage + marks), /api/clip?t&dur (an MP4 of
 // the segments from t, copied), /api/thumb?t, /api/export?from&to, POST /api/pin.
+//
+// It is off until switched on in the settings (Settings -> General -> PC archive): without
+// it the app never asks the service.
 
 const (
+	prefArchive    = "archive" // the PC archive is used (off by default)
 	prefArchiveURL = "archive_url"
 	archiveClipLen = 600                // seconds asked per clip; the next one follows at its end
 	archiveWeek    = 8 * 24 * time.Hour // what the timeline loads
@@ -54,7 +58,13 @@ var archiveKindOf = map[string]eventKind{"siren": eventSiren, "event": eventSky,
 
 var archiveKinds = []eventKind{eventSiren, eventSky, eventPinned}
 
+const archiveDefault = "http://127.0.0.1:8114" // the service on this computer
+
 var archiveHTTP = &http.Client{Timeout: 90 * time.Second}
+
+var errArchiveOff = errors.New("the PC archive is off")
+
+func archiveOn() bool { return appPrefs != nil && appPrefs.Bool(prefArchive) }
 
 func archiveURL() string {
 	if appPrefs != nil {
@@ -62,7 +72,7 @@ func archiveURL() string {
 			return strings.TrimRight(s, "/")
 		}
 	}
-	return "http://127.0.0.1:8114"
+	return archiveDefault
 }
 
 func archiveGet(path string, q url.Values) (*http.Response, error) {
@@ -269,7 +279,10 @@ func (u *ui) setHistorySource(pc bool) {
 func (u *ui) openArchiveHistory(t time.Time) {
 	name := u.camera.Selected
 	go func() {
-		err := u.hist.arch.refresh()
+		err := errArchiveOff // the SD card only
+		if archiveOn() {
+			err = u.hist.arch.refresh()
+		}
 		fyne.Do(func() {
 			h := &u.hist
 			if !h.on || name != u.camera.Selected {

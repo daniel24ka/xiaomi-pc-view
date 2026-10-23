@@ -45,6 +45,8 @@ func init() {
 			u.setGrid(false)
 			u.win.Resize(fyne.NewSize(1280, 760))
 		})
+		on := appPrefs.Bool(prefArchive) // the archive is off by default
+		appPrefs.SetBool(prefArchive, true)
 		time.Sleep(8 * time.Second)
 		fyne.DoAndWait(u.openHistory)
 		time.Sleep(7 * time.Second)
@@ -107,6 +109,7 @@ func init() {
 		fyne.DoAndWait(u.goLive)
 		time.Sleep(6 * time.Second)
 		fyne.DoAndWait(func() { fmt.Printf("live: hist=%v status=%q\n", u.hist.on, u.status.Text) })
+		appPrefs.SetBool(prefArchive, on)
 		fyne.Do(u.app.Quit)
 	}
 }
