@@ -20,12 +20,12 @@ import (
 	"time"
 
 	"github.com/AlexxIT/go2rtc/internal/api"
-	"github.com/AlexxIT/go2rtc/internal/hls"
-	"github.com/AlexxIT/go2rtc/internal/mp4"
 	"github.com/AlexxIT/go2rtc/internal/api/ws"
 	"github.com/AlexxIT/go2rtc/internal/app"
 	"github.com/AlexxIT/go2rtc/internal/dvrip"
+	"github.com/AlexxIT/go2rtc/internal/hls"
 	gohttp "github.com/AlexxIT/go2rtc/internal/http"
+	"github.com/AlexxIT/go2rtc/internal/mp4"
 	"github.com/AlexxIT/go2rtc/internal/onvif"
 	"github.com/AlexxIT/go2rtc/internal/rtsp"
 	"github.com/AlexxIT/go2rtc/internal/streams"
@@ -68,7 +68,7 @@ func Start(dir string) error {
 	os.Args = []string{os.Args[0], "-config", cfg}
 	app.Init()
 	api.Init()
-	ws.Init()  // MSE and HLS over WebSocket for browsers (the phone page)
+	ws.Init() // MSE and HLS over WebSocket for browsers (the phone page)
 	streams.Init()
 	rtsp.Init()
 	mp4.Init() // api/ws mse, api/stream.mp4
@@ -327,7 +327,7 @@ func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 	spec := specOf(src)
 	out := make([]MiotProp, len(props)) // the 700sa ids, in the order asked (models.go)
 	var params []map[string]any
-	var asked []int // index in out of each cloud request param
+	asked := map[propID]int{} // the model's property id -> index in out
 	for i, p := range props {
 		out[i] = MiotProp{Siid: p.Siid, Piid: p.Piid, Code: codeNoProp}
 		mp, ok := spec.mapProp(p)
@@ -335,7 +335,7 @@ func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 			continue // the model has no such property: never asked, never written
 		}
 		params = append(params, map[string]any{"did": CameraDid(src), "siid": mp.Siid, "piid": mp.Piid})
-		asked = append(asked, i)
+		asked[propID{mp.Siid, mp.Piid}] = i
 	}
 	if len(params) == 0 {
 		return out, nil
@@ -349,12 +349,12 @@ func GetProps(name string, props ...MiotProp) ([]MiotProp, error) {
 	if err = json.Unmarshal(res, &got); err != nil {
 		return nil, err
 	}
-	for j, g := range got {
-		if j >= len(asked) {
-			break
+	// matched by id, not by position: the cloud answers the missing properties
+	// (code -704040003) first, before the others
+	for _, g := range got {
+		if i, ok := asked[propID{g.Siid, g.Piid}]; ok {
+			out[i].Code, out[i].Value = g.Code, spec.fromModel(props[i], g.Value)
 		}
-		i := asked[j]
-		out[i].Code, out[i].Value = g.Code, spec.fromModel(props[i], g.Value)
 	}
 	return out, nil
 }
