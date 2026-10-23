@@ -87,6 +87,20 @@ func saveThumb(did string, minute int64, frame *image.RGBA) {
 	}()
 }
 
+// addThumbFile stores a ready JPEG thumbnail of the minute (from the PC archive).
+func addThumbFile(did string, minute int64, data []byte) {
+	dir := thumbDir(did)
+	if dir == "" || len(data) == 0 {
+		return
+	}
+	_ = os.MkdirAll(dir, 0o700)
+	if os.WriteFile(filepath.Join(dir, strconv.FormatInt(minute, 10)+".jpg"), data, 0o600) == nil {
+		thumbs.Lock()
+		thumbIndex(did)[minute] = true
+		thumbs.Unlock()
+	}
+}
+
 // thumbNear returns the file of the thumbnail nearest to t (at most max minutes away).
 func thumbNear(did string, t time.Time, max int64) string {
 	m := t.Unix() / 60

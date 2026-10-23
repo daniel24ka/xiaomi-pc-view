@@ -29,6 +29,7 @@ type player struct {
 
 	onFrame  func(img *image.RGBA, gen int64)
 	onStatus func(text string)
+	onEnd    func(gen int64, err error) // a file played to its end or failed (startFile)
 
 	enhance atomic.Bool // the next playback sharpens and denoises (digital zoom: enhance.go)
 }
@@ -38,7 +39,18 @@ type playback struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 	enhance bool
+	file    *fileOpts // a recording (archive.go), nil: the live stream
 }
+
+// fileOpts - where and how fast a recording plays.
+type fileOpts struct {
+	seek float64 // seconds from the file start
+	rate float64 // 1: real time
+}
+
+// fileFPS - the frames a second shown from a recording (played faster, the rest are dropped
+// by ffmpeg: 16x of a 20 fps camera would be 320 frames a second).
+const fileFPS = 20
 
 func (pb *playback) stop() {
 	pb.cancel()
@@ -50,7 +62,14 @@ func (pb *playback) stop() {
 // stream source changes, e.g. quality).
 func (p *player) start(url string, w, h int, audio bool) {
 	p.stop()
-	p.begin(url, w, h, audio, false)
+	p.begin(url, w, h, audio, false, nil)
+}
+
+// startFile plays a recording (an MP4 over HTTP) once, from seek seconds, rate times faster
+// than real time; at its end onEnd is called instead of reconnecting.
+func (p *player) startFile(url string, seek, rate float64, w, h int) {
+	p.stop()
+	p.begin(url, w, h, false, false, &fileOpts{seek: seek, rate: max(rate, 1)})
 }
 
 // switchTo starts a new playback while the current one keeps running and replaces it
@@ -60,14 +79,14 @@ func (p *player) switchTo(url string, w, h int, audio bool) {
 	p.mu.Lock()
 	running := p.cur != nil
 	p.mu.Unlock()
-	p.begin(url, w, h, audio, running)
+	p.begin(url, w, h, audio, running, nil)
 }
 
-func (p *player) begin(url string, w, h int, audio, seamless bool) {
+func (p *player) begin(url string, w, h int, audio, seamless bool, file *fileOpts) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.mu.Lock()
 	p.seq++
-	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{}), enhance: p.enhance.Load()}
+	pb := &playback{gen: p.seq, cancel: cancel, done: make(chan struct{}), enhance: p.enhance.Load(), file: file}
 	oldPending := p.pending
 	p.pending = nil
 	if seamless {
@@ -89,9 +108,19 @@ func (p *player) begin(url string, w, h int, audio, seamless bool) {
 	go func() {
 		defer close(pb.done)
 		for ctx.Err() == nil {
-			status(T("Łączenie z kamerą…"))
+			if file != nil {
+				status(T("Wczytuję nagranie…"))
+			} else {
+				status(T("Łączenie z kamerą…"))
+			}
 			err := p.run(ctx, url, w, h, audio, pb)
 			if ctx.Err() != nil {
+				return
+			}
+			if file != nil { // played once: the caller goes on (the next part, an error)
+				if p.onEnd != nil {
+					p.onEnd(pb.gen, err)
+				}
 				return
 			}
 			status(fmt.Sprintf(T("Rozłączono (%v) – ponawiam za 3 s…"), err))
@@ -147,8 +176,16 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		"-analyzeduration", "500000", "-probesize", "500000",
 	}
 	args = append(args, input...)
+	if f := pb.file; f != nil {
+		// read at the playback speed from the position; faster: fewer frames shown
+		args = append(args, "-readrate", fmt.Sprintf("%g", f.rate), "-ss", fmt.Sprintf("%.3f", f.seek), "-i", url)
+		// a constant frame rate out (faster: frames dropped): each frame is rate/fileFPS
+		// seconds of the recording, so the frames shown count the position exactly
+		filter = fmt.Sprintf("setpts=PTS/%g,fps=%d,", f.rate, fileFPS) + filter
+	} else {
+		args = append(args, "-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url)
+	}
 	args = append(args,
-		"-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url,
 		"-map", "0:v:0", "-vf", filter,
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
 	)
@@ -191,6 +228,9 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 			g.failed() // the GPU didn't give a picture: the CPU from the next try
 		}
 	}
+	if pb.file != nil && !first {
+		return nil // a recording played to its end (stderr: only the decoder's warnings)
+	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		if lines := strings.Split(msg, "\n"); len(lines) > 0 {
 			return fmt.Errorf("%s", lines[len(lines)-1])
@@ -218,8 +258,8 @@ type videoView struct {
 	onTap           func() // click: select the tile in the grid
 	onSecondary     func()
 	onMouseMove     func()
-	onCameraDrag    func(dx, dy float32) // dragging the picture moves the camera
-	onCameraDragEnd func()               // mouse released: stop the camera
+	onCameraDrag    func(dx, dy float32)             // dragging the picture moves the camera
+	onCameraDragEnd func()                           // mouse released: stop the camera
 	onScroll        func(up bool, pos fyne.Position) // mouse wheel - zoom (camera, then digital)
 
 	// window resize by edges (window without frame)

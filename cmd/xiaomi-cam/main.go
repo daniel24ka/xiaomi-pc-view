@@ -6,16 +6,16 @@
 package main
 
 import (
-	"strings"
-	"path/filepath"
 	"errors"
 	"fmt"
 	"github.com/AlexxIT/go2rtc/internal/xccore"
 	"image"
 	"image/jpeg"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -101,7 +101,7 @@ type ui struct {
 	activity   *spinner // spinner next to the status line: an action in progress
 	busyCount  int      // actions in progress (busy.go)
 	snapButton *ptrButton
-	enhButton  *ptrButton // the enhanced photo (photo.go)
+	enhButton  *ptrButton   // the enhanced photo (photo.go)
 	picWait    *pictureWait // sound on/off: waiting for the new decoder's picture
 	night      *ptrSelect   // night vision mode
 	nightList  []nightMode  // the night modes of the selected camera (the options of night)
@@ -353,12 +353,13 @@ func (u *ui) build() {
 					u.status.SetText(fmt.Sprintf(T("Na żywo (%s)"), u.quality.Selected))
 				}
 			}
-			u.historyFrame()
+			u.historyFrame(gen)
 			u.video.setFrame(img)
 			u.captureThumb(img)
 			u.pictureShown(&u.player, gen)
 		})
 	}
+	u.player.onEnd = u.archiveEnded
 	u.player.onStatus = func(s string) {
 		fyne.Do(func() {
 			if u.grid {
@@ -609,6 +610,14 @@ func (u *ui) build() {
 	arrows := map[fyne.KeyName]int{fyne.KeyLeft: motorLeft, fyne.KeyRight: motorRight, fyne.KeyUp: motorUp, fyne.KeyDown: motorDown}
 	if dc, ok := u.win.Canvas().(desktop.Canvas); ok {
 		dc.SetOnKeyDown(func(e *fyne.KeyEvent) {
+			if u.hist.on && u.hist.pc && (e.Name == fyne.KeyLeft || e.Name == fyne.KeyRight) {
+				d := 10 * time.Second // the PC archive: the arrows move the playback
+				if e.Name == fyne.KeyLeft {
+					d = -d
+				}
+				u.seekArchive(d)
+				return
+			}
 			if op, ok := arrows[e.Name]; ok && u.caps.PTZ {
 				u.mover.Press(op)
 			}
@@ -637,6 +646,8 @@ func (u *ui) build() {
 			u.snapshot()
 		case 'e', 'E':
 			u.enhancedSnapshot()
+		case ' ':
+			u.toggleArchivePause()
 		}
 	})
 
