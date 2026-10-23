@@ -37,7 +37,7 @@ func init() {
 			}
 		})
 		time.Sleep(8 * time.Second)
-		fmt.Println("zoom", u.video.dz.z, "decode", u.decodeW, "enhanced", u.decodeEnhanced, "gpu", openclSharpen())
+		fmt.Println("zoom", u.video.dz.z, "decode", u.decodeW, "enhanced", u.decodeEnhanced, "gpu", openclSharpen.available())
 		fyne.DoAndWait(func() {
 			if f, err := os.Create(filepath.Join(dir, "live-zoom.png")); err == nil {
 				_ = png.Encode(f, u.win.Canvas().Capture())

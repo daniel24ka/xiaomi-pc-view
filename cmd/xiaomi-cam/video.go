@@ -136,12 +136,7 @@ func (p *player) stop() {
 }
 
 func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *playback) error {
-	var input []string
-	var enhance string
-	gpu := false
-	if pb.enhance {
-		input, enhance, gpu = enhanceArgs()
-	}
+	input, filter, gpu := videoArgs(w, h, pb.enhance)
 	args := []string{
 		"-hide_banner", "-loglevel", "error", "-nostdin",
 		"-fflags", "nobuffer", "-flags", "low_delay",
@@ -154,8 +149,7 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 	args = append(args, input...)
 	args = append(args,
 		"-rtsp_transport", "tcp", "-timeout", "30000000", "-i", url,
-		// the picture is fitted in w x h (IP cameras: the size may not be known yet)
-		"-map", "0:v:0", "-vf", fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2%s", w, h, w, h, enhance),
+		"-map", "0:v:0", "-vf", filter,
 		"-pix_fmt", "rgba", "-f", "rawvideo", "pipe:1",
 	)
 	if audio {
@@ -192,8 +186,10 @@ func (p *player) run(ctx context.Context, url string, w, h int, audio bool, pb *
 		p.frame(pb, frames[i])
 	}
 	_ = cmd.Wait()
-	if gpu && first && ctx.Err() == nil {
-		gpuFailed() // the GPU sharpen didn't give a picture: the CPU one from the next try
+	if first && ctx.Err() == nil && gpuError(stderr.String()) {
+		for _, g := range gpu {
+			g.failed() // the GPU didn't give a picture: the CPU from the next try
+		}
 	}
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		if lines := strings.Split(msg, "\n"); len(lines) > 0 {
