@@ -204,6 +204,7 @@ func main() {
 	}
 	prepareOpenGL() // Windows without a GPU driver: software OpenGL (gl_windows.go)
 	raisePriority()
+	probeGPU() // enhance.go, in the background
 	if err := startBackend(); err != nil {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
