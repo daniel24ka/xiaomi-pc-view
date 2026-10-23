@@ -34,6 +34,13 @@ type Producer struct {
 	state    state
 	mu       sync.Mutex
 	workerID int
+
+	// dialMu: one dial at a time (a Xiaomi camera takes one session). The network part of a
+	// dial runs without mu, so SetSource, stop and the info calls never wait for a camera
+	// that is slow to answer (the app's UI froze for the length of a dial). gen counts the
+	// stops and source changes: a dial that finishes after one is thrown away.
+	dialMu sync.Mutex
+	gen    int
 }
 
 const SourceTemplate = "{input}"
@@ -57,6 +64,9 @@ func (p *Producer) SetSource(s string) {
 	p.mu.Lock()
 	changed := p.url != s
 	p.url = s
+	if changed {
+		p.gen++
+	}
 	p.mu.Unlock()
 	if changed {
 		p.stop()
@@ -64,19 +74,33 @@ func (p *Producer) SetSource(s string) {
 }
 
 func (p *Producer) Dial() error {
+	p.dialMu.Lock()
+	defer p.dialMu.Unlock()
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	if p.state != stateNone {
+		p.mu.Unlock()
+		return nil
+	}
+	url, gen := p.url, p.gen
+	p.mu.Unlock()
 
-	if p.state == stateNone {
-		conn, err := GetProducer(p.url)
-		if err != nil {
-			return err
-		}
-
-		p.conn = conn
-		p.state = stateMedias
+	conn, err := GetProducer(url) // the network part: without mu
+	if err != nil {
+		return err
 	}
 
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.gen != gen || p.state != stateNone {
+		_ = conn.Stop() // stopped or another source meanwhile
+		if p.gen != gen {
+			return errors.New("streams: source changed while dialing")
+		}
+		return nil
+	}
+	p.conn = conn
+	p.state = stateMedias
 	return nil
 }
 
@@ -184,16 +208,29 @@ func (p *Producer) worker(conn core.Producer, workerID int) {
 
 func (p *Producer) reconnect(workerID, retry int) {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.workerID != workerID {
 		log.Trace().Msgf("[streams] stop reconnect url=%s", p.url)
+		p.mu.Unlock()
 		return
 	}
+	url, gen := p.url, p.gen
+	p.mu.Unlock()
 
-	log.Debug().Msgf("[streams] retry=%d to url=%s", retry, p.url)
+	log.Debug().Msgf("[streams] retry=%d to url=%s", retry, url)
 
-	conn, err := GetProducer(p.url)
+	p.dialMu.Lock()
+	conn, err := GetProducer(url) // the network part: without mu (see Producer.dialMu)
+	p.dialMu.Unlock()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.workerID != workerID || p.gen != gen {
+		if conn != nil {
+			_ = conn.Stop() // stopped or another source meanwhile
+		}
+		return
+	}
 	if err != nil {
 		log.Debug().Msgf("[streams] producer=%s", err)
 
@@ -254,6 +291,8 @@ func (p *Producer) reconnect(workerID, retry int) {
 func (p *Producer) stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	p.gen++ // a dial running now is thrown away when it finishes
 
 	switch p.state {
 	case stateExternal:

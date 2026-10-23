@@ -8,6 +8,7 @@ var hebrew = map[string]string{
 	"%s – %d events, the last %s":       "%s – %d אירועים, האחרון %s",
 	"(choose)":                          "(בחירה)",
 	"On air (OBS)":                      "בשידור (OBS)",
+	"Please wait…":                      "רק רגע…",
 	"Copy":                              "העתקה",
 	"Address copied":                    "הכתובת הועתקה",
 	"The camera OBS shows at a fixed address (video only, no microphone)": "המצלמה ש-OBS מציג בכתובת קבועה (וידאו בלבד, בלי מיקרופון)",

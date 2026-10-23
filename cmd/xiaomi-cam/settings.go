@@ -126,9 +126,11 @@ func (u *ui) showSettings() {
 	onAir := newSelect(onAirNames, nil)
 	onAir.SetSelected(xccore.OnAirCamera())
 	onAir.OnChanged = func(name string) {
-		if err := xccore.SetOnAir(name); err != nil {
-			dialog.ShowError(err, u.win)
-		}
+		go func() {
+			if err := xccore.SetOnAir(name); err != nil {
+				fyne.Do(func() { dialog.ShowError(err, u.win) })
+			}
+		}()
 	}
 	onAir.tip = T("Kamera, którą OBS pokazuje pod stałym adresem (tylko obraz, bez mikrofonu)")
 	onAirURL := widget.NewEntry()

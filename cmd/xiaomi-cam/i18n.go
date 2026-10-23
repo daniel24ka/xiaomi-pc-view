@@ -78,6 +78,7 @@ var english = map[string]string{
 	"Wybierz datę":      "Choose a date",
 	"(wybierz)":         "(choose)",
 	"Na antenie (OBS)":  "On air (OBS)",
+	"Proszę czekać…":    "Please wait…",
 	"Kopiuj":            "Copy",
 	"Adres skopiowany":  "Address copied",
 	"Kamera, którą OBS pokazuje pod stałym adresem (tylko obraz, bez mikrofonu)": "The camera OBS shows at a fixed address (video only, no microphone)",

@@ -196,6 +196,7 @@ func main() {
 		return
 	}
 	prepareOpenGL() // Windows without a GPU driver: software OpenGL (gl_windows.go)
+	raisePriority()
 	if err := startBackend(); err != nil {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
@@ -768,28 +769,38 @@ func (u *ui) changeSource(params map[string]string) {
 	if name == "" {
 		return
 	}
-	u.player.stop() // close camera session, it will be redialed with new params
-	if t := u.tileOf(name); t != nil {
-		t.player.stop()
-	}
-	time.Sleep(300 * time.Millisecond)
-	if err := setSourceParams(name, params); err != nil {
-		dialog.ShowError(err, u.win)
-	}
-	u.restart()
+	u.switchSource(name, func() error { return setSourceParams(name, params) })
 }
 
 // changeIPQuality switches an IP camera to its main (0) or sub (1) stream.
 func (u *ui) changeIPQuality(q int) {
 	name := u.camera.Selected
-	u.player.stop()
+	u.switchSource(name, func() error { return setIPQuality(name, q) })
+}
+
+// switchSource stops the players of the camera, changes its source off the UI thread (the
+// change can wait on a camera that is slow to answer: the window froze) and restarts the
+// video. The quality and connection controls are off meanwhile.
+func (u *ui) switchSource(name string, change func() error) {
+	u.player.stop() // close camera session, it will be redialed with new params
 	if t := u.tileOf(name); t != nil {
 		t.player.stop()
 	}
-	if err := setIPQuality(name, q); err != nil {
-		dialog.ShowError(err, u.win)
-	}
-	u.restart()
+	u.status.SetText(T("Łączenie z kamerą…"))
+	done := u.busy(nil, u.quality, u.connection)
+	go func() {
+		time.Sleep(300 * time.Millisecond) // the camera closes the old session
+		err := change()
+		fyne.Do(func() {
+			done()
+			if err != nil {
+				dialog.ShowError(err, u.win)
+			}
+			if name == u.camera.Selected {
+				u.restart()
+			}
+		})
+	}()
 }
 
 func (u *ui) loadCameraState() {
@@ -800,7 +811,7 @@ func (u *ui) loadCameraState() {
 	}
 	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
 	if err != nil {
-		fyne.Do(func() { u.status.SetText("Nie udało się odczytać stanu kamery: " + err.Error()) })
+		fyne.Do(func() { u.status.SetText(TJ("Nie udało się odczytać stanu kamery: ", err.Error())) })
 		return
 	}
 	fyne.Do(func() {

@@ -5,7 +5,15 @@ package main
 import (
 	"os/exec"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
+
+// raisePriority: above normal, so the window keeps answering while the PC is busy
+// (encoding a broadcast, batch jobs); the video work itself is in ffmpeg processes.
+func raisePriority() {
+	_ = windows.SetPriorityClass(windows.CurrentProcess(), windows.ABOVE_NORMAL_PRIORITY_CLASS)
+}
 
 const (
 	createNoWindow        = 0x08000000

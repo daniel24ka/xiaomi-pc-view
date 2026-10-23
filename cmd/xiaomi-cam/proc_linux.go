@@ -9,6 +9,8 @@ import (
 
 func hideConsole(*exec.Cmd) {}
 
+func raisePriority() {} // Windows only
+
 // detach keeps the process running after this one exits (its own session).
 func detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
 

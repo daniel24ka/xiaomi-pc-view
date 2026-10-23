@@ -19,12 +19,38 @@ import (
 
 var regions = xccore.Regions
 
-// showAddCamera: login to Mi account (via embedded go2rtc API) and add selected cameras.
-func showAddCamera(w fyne.Window, onAdded func(name string)) {
+// inBackground runs work off the UI thread behind a "please wait" dialog, then then on the
+// UI thread. The Mi cloud can take seconds to answer (more from another region), and on the
+// UI thread the whole window froze meanwhile.
+func inBackground(w fyne.Window, work func(), then func()) {
+	d := dialog.NewCustomWithoutButtons(T("Proszę czekać…"), widget.NewProgressBarInfinite(), w)
+	d.Resize(fyne.NewSize(320, 0))
+	d.Show()
+	go func() {
+		work()
+		fyne.Do(func() {
+			d.Hide()
+			then()
+		})
+	}()
+}
+
+// miAccounts lists the Mi accounts logged in (the go2rtc API; call it off the UI thread).
+func miAccounts() []string {
 	var accounts []string
 	if b, code, err := apiCall("GET", "/api/xiaomi", nil, nil); err == nil && code == http.StatusOK {
 		_ = json.Unmarshal(b, &accounts)
 	}
+	return accounts
+}
+
+// showAddCamera: login to Mi account (via embedded go2rtc API) and add selected cameras.
+func showAddCamera(w fyne.Window, onAdded func(name string)) {
+	var accounts []string
+	inBackground(w, func() { accounts = miAccounts() }, func() { showAddCameraFor(w, accounts, onAdded) })
+}
+
+func showAddCameraFor(w fyne.Window, accounts []string, onAdded func(name string)) {
 	if len(accounts) > 0 {
 		dialog.ShowCustomConfirm(T("Dodaj kamerę"), T("Wybierz kamery"), T("Zaloguj inne konto"),
 			widget.NewLabel(T("Masz już zalogowane konto Mi Home.")), func(useExisting bool) {
@@ -65,7 +91,16 @@ func showLogin(w fyne.Window, onAdded func(string)) {
 
 // showLoginQR: a QR code scanned with the phone (no password, no e-mail code).
 func showLoginQR(w fyne.Window, onAdded func(string)) {
-	b, code, err := apiCall("POST", "/api/xiaomi", nil, url.Values{"qr": {"start"}})
+	var (
+		b    []byte
+		code int
+		err  error
+	)
+	inBackground(w, func() { b, code, err = apiCall("POST", "/api/xiaomi", nil, url.Values{"qr": {"start"}}) },
+		func() { showLoginQRCode(w, b, code, err, onAdded) })
+}
+
+func showLoginQRCode(w fyne.Window, b []byte, code int, err error, onAdded func(string)) {
 	var ch struct {
 		QR string `json:"qr"`
 	}
@@ -103,6 +138,10 @@ func showLoginQR(w fyne.Window, onAdded func(string)) {
 			if err == nil && code == http.StatusUnauthorized {
 				continue // not scanned yet
 			}
+			var accounts []string
+			if err == nil && code == http.StatusOK {
+				accounts = miAccounts() // here, not on the UI thread
+			}
 			fyne.Do(func() {
 				select {
 				case <-done:
@@ -120,10 +159,6 @@ func showLoginQR(w fyne.Window, onAdded func(string)) {
 					status.SetText(msg)
 				default:
 					d.Hide()
-					var accounts []string
-					if b, _, err := apiCall("GET", "/api/xiaomi", nil, nil); err == nil {
-						_ = json.Unmarshal(b, &accounts)
-					}
 					showDevices(w, accounts, onAdded)
 				}
 			})
@@ -133,7 +168,21 @@ func showLoginQR(w fyne.Window, onAdded func(string)) {
 }
 
 func loginStep(w fyne.Window, form url.Values, onAdded func(string)) {
-	b, code, err := apiCall("POST", "/api/xiaomi", nil, form)
+	var (
+		b        []byte
+		code     int
+		err      error
+		accounts []string
+	)
+	inBackground(w, func() {
+		b, code, err = apiCall("POST", "/api/xiaomi", nil, form)
+		if err == nil && code == http.StatusOK {
+			accounts = miAccounts()
+		}
+	}, func() { loginResult(w, form, b, code, err, accounts, onAdded) })
+}
+
+func loginResult(w fyne.Window, form url.Values, b []byte, code int, err error, accounts []string, onAdded func(string)) {
 	switch {
 	case err != nil:
 		dialog.ShowError(err, w)
@@ -156,10 +205,6 @@ func loginStep(w fyne.Window, form url.Values, onAdded func(string)) {
 	case code != http.StatusOK:
 		dialog.ShowError(fmt.Errorf(T("logowanie nieudane: %s"), strings.TrimSpace(string(b))), w)
 	default:
-		var accounts []string
-		if b, _, err = apiCall("GET", "/api/xiaomi", nil, nil); err == nil {
-			_ = json.Unmarshal(b, &accounts)
-		}
 		showDevices(w, accounts, onAdded)
 	}
 }
@@ -218,18 +263,33 @@ func showDevices(w fyne.Window, accounts []string, onAdded func(string)) {
 	var found []source
 	checks := container.NewVBox()
 	info := widget.NewLabel("")
+	var showFound func(b []byte, status int, err error)
+	seq := 0
 	load := func() {
 		checks.RemoveAll()
 		found = nil
+		seq++
+		mine := seq
 		code := regions[region.SelectedIndex()].Code
-		b, status, err := apiCall("GET", "/api/xiaomi", url.Values{"id": {account.Selected}, "region": {code}}, nil)
+		info.SetText(T("Proszę czekać…"))
+		acc := account.Selected
+		go func() {
+			b, status, err := apiCall("GET", "/api/xiaomi", url.Values{"id": {acc}, "region": {code}}, nil)
+			fyne.Do(func() {
+				if mine == seq {
+					showFound(b, status, err)
+				}
+			})
+		}()
+	}
+	showFound = func(b []byte, status int, err error) {
 		switch {
 		case err != nil:
-			info.SetText("Błąd: " + err.Error())
+			info.SetText(TJ("Błąd: ", err.Error()))
 		case status == http.StatusNotFound:
 			info.SetText(T("Brak kamer w tym regionie – wybierz inny."))
 		case status != http.StatusOK:
-			info.SetText("Błąd: " + strings.TrimSpace(string(b)))
+			info.SetText(TJ("Błąd: ", strings.TrimSpace(string(b))))
 		default:
 			var res struct {
 				Sources []source `json:"sources"`
