@@ -3,10 +3,12 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/AlexxIT/go2rtc/internal/xccore"
 	"github.com/AlexxIT/go2rtc/www"
@@ -18,12 +20,17 @@ import (
 // allowlist stands in front of the local go2rtc API, which must never be reachable from
 // outside as a whole: its config holds the Mi account token, and api/ws or api/stream.m3u8
 // with an unknown src would create a stream from any source (exec: included). So only the
-// cameras' video and a few controls go through.
+// cameras' video and a few controls go through. It is off until switched on in the settings,
+// and it answers only its own page (phoneAllowed): a web page from elsewhere in a browser on
+// this computer can't open the cameras through it.
 
 //go:embed phone.html
 var phoneHTML []byte
 
-const PhoneAddr = "127.0.0.1:11985"
+const (
+	PhoneAddr     = "127.0.0.1:11985"
+	prefPhonePage = "phone_page" // the phone page is on (off by default)
+)
 
 // phoneAPI - the app API calls the page may make (path → methods)
 var phoneAPI = map[string]string{
@@ -44,14 +51,42 @@ var phoneAPI = map[string]string{
 	"api/hls/segment.m4s":   "GET",
 }
 
-func startPhoneServer() {
+var phoneServer struct {
+	mu  sync.Mutex
+	srv *http.Server
+}
+
+// setPhonePage starts or stops the phone page.
+func setPhonePage(on bool) error {
+	phoneServer.mu.Lock()
+	defer phoneServer.mu.Unlock()
+	if !on {
+		if phoneServer.srv != nil {
+			_ = phoneServer.srv.Close()
+			phoneServer.srv = nil
+		}
+		return nil
+	}
+	if phoneServer.srv != nil {
+		return nil
+	}
+	ln, err := net.Listen("tcp", PhoneAddr)
+	if err != nil {
+		return err
+	}
+	phoneServer.srv = &http.Server{Handler: phoneHandler()}
+	go func(srv *http.Server) { _ = srv.Serve(ln) }(phoneServer.srv)
+	return nil
+}
+
+func phoneHandler() http.Handler {
 	target := &url.URL{Scheme: "http", Host: xccore.APIAddr}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	direct := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		direct(r)
 		r.Host = target.Host
-		r.Header.Del("Origin") // the allowlist is the gate; go2rtc's WebSocket checks the origin
+		r.Header.Del("Origin") // checked by phoneAllowed; go2rtc's WebSocket compares it with its own address
 	}
 
 	mux := http.NewServeMux()
@@ -91,7 +126,42 @@ func startPhoneServer() {
 		}
 		proxy.ServeHTTP(w, r)
 	})
-	go func() { _ = http.ListenAndServe(PhoneAddr, mux) }()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !phoneAllowed(r) {
+			http.Error(w, "only the phone page itself", http.StatusForbidden)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+// phoneAllowed: the request comes from the phone page itself (same origin), opened at this
+// computer's address or its Tailscale name (`tailscale serve` keeps the Host). Another name
+// is a DNS rebinding page; another origin or Sec-Fetch-Site is a page of another site
+// (also another port of localhost) that would use the cameras. Requests without the browser
+// headers come from programs, which can reach the local API anyway.
+func phoneAllowed(r *http.Request) bool {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	switch {
+	case host == "127.0.0.1", host == "localhost", host == "::1", strings.HasSuffix(host, ".ts.net"):
+	default:
+		return false
+	}
+	if o := r.Header.Get("Origin"); o != "" {
+		u, err := url.Parse(o)
+		if err != nil || !strings.EqualFold(u.Host, r.Host) {
+			return false
+		}
+	}
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none": // none: opened from the address bar or a bookmark
+		return true
+	}
+	return false
 }
 
 // phoneStream: only the app's cameras and the on-air stream (never a source URL)

@@ -428,9 +428,12 @@ The embedded go2rtc also serves the camera stream as RTSP:
 `http://127.0.0.1:11985` is a small page for a phone browser: live video of the cameras
 (MSE, so H.265 plays where the phone decodes it; HLS on iPhones; a refreshing picture
 otherwise), pan/tilt (hold the arrows), night mode, camera points, a snapshot and "Put on
-air". The page follows the app language (Hebrew, English, Polish).
+air". The page follows the app language (Hebrew, English, Polish). It is off until switched
+on in Settings → General → Phone.
 
-It listens on localhost only. To open it from the phone anywhere without opening router ports,
+It listens on localhost only and answers only its own page: the Host must be this computer or
+its Tailscale name, and a browser request from another site (Origin / Sec-Fetch-Site, also
+another localhost port) gets 403. To open it from the phone anywhere without opening router ports,
 publish it to your own devices with [Tailscale](https://tailscale.com): install it on the PC
 and the phone with the same account, then on the PC `tailscale serve --bg 11985` – the phone
 opens `https://<pc-name>.<tailnet>.ts.net`. Only the page goes out: an allowlist in front of

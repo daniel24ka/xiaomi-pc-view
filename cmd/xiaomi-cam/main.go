@@ -210,7 +210,6 @@ func main() {
 		os.Exit(1)
 	}
 	xccore.EnsureOnAir() // the broadcast address always has a camera
-	startPhoneServer()   // phone.go
 	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)
@@ -220,6 +219,11 @@ func main() {
 	a.Settings().SetTheme(appTheme{})
 	lang = a.Preferences().StringWithFallback(prefLanguage, defaultLanguage())
 	appPrefs = a.Preferences()
+	if appPrefs.Bool(prefPhonePage) {
+		if err := setPhonePage(true); err != nil { // phone.go
+			fmt.Fprintln(os.Stderr, "xiaomi-cam: phone page:", err)
+		}
+	}
 	u := &ui{app: a, win: a.NewWindow("Xiaomi Cam")}
 	u.current.Store("")
 	u.caps = allCaps
