@@ -440,7 +440,8 @@ token), the other API calls and streams of any other source answer 403.
 ### On air (OBS)
 
 `rtsp://127.0.0.1:18554/__xc_onair` always shows the camera chosen in Settings → General →
-On air (or `POST /api/xiaomi-cam/onair?camera=…`). Add it once in OBS as a Media Source
+On air (or `POST /api/xiaomi-cam/onair?camera=…`); the address exists once a camera is
+chosen there, and goes away when that camera is removed. Add it once in OBS as a Media Source
 (untick "Local File"); switching the broadcast camera later never touches the OBS scene. It
 is video only (the camera microphone is never on air) and re-streams the camera's own
 stream, so the app and OBS share one camera session. Recommended Media Source settings:

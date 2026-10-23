@@ -208,8 +208,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "xiaomi-cam:", err)
 		os.Exit(1)
 	}
-	xccore.EnsureOnAir() // the broadcast address always has a camera
-	startPhoneServer()   // phone.go
+	startPhoneServer() // phone.go
 	startDebug("backend started")
 
 	loadRecordings() // SD card files found before (history.go)

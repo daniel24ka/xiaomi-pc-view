@@ -11,7 +11,8 @@ import (
 // On air: one RTSP address for a broadcast app (OBS) that always shows the camera chosen
 // here, so switching the broadcast camera never touches OBS. Video only: the camera
 // microphone is never on air. It re-streams the camera's own stream, so the app and OBS
-// share one camera session.
+// share one camera session. The stream (and its go2rtc.yaml entry) is made when a camera
+// is first put on air, not at start.
 
 const OnAirStream = HiddenPrefix + "onair"
 
@@ -55,18 +56,20 @@ func SetOnAir(name string) error {
 	return app.PatchConfig([]string{"streams", OnAirStream}, []string{src})
 }
 
-// EnsureOnAir puts the first camera on air when nothing (or a removed camera) is.
-func EnsureOnAir() {
+// OffAirIfRemoved takes the broadcast address away when its camera was removed. Nothing is
+// put on air by itself: the address exists once a camera is chosen (Settings or the API).
+func OffAirIfRemoved() {
 	cur := OnAirCamera()
-	names := CameraNames()
-	for _, n := range names {
+	if cur == "" {
+		return
+	}
+	for _, n := range CameraNames() {
 		if n == cur {
 			return
 		}
 	}
-	if len(names) > 0 {
-		_ = SetOnAir(names[0])
-	}
+	streams.Delete(OnAirStream)
+	_ = app.PatchConfig([]string{"streams", OnAirStream}, nil)
 }
 
 // RenameOnAir keeps the broadcast on a renamed camera.
