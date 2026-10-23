@@ -4,6 +4,10 @@ package main
 // visual() (bidi.go): Fyne has no right-to-left paragraphs.
 
 var hebrew = map[string]string{
+	"Phone":      "טלפון",
+	"Phone page": "דף לטלפון",
+	"Live view and camera controls in a phone browser": "צפייה ושליטה במצלמות מדפדפן הטלפון",
+	"The address http://127.0.0.1:11985 works on this computer only. For a phone: Tailscale (tailscale serve --bg 11985) – no router ports opened.": "הכתובת http://127.0.0.1:11985 עובדת רק במחשב הזה. לטלפון: Tailscale (tailscale serve --bg 11985) – בלי לפתוח פורטים בראוטר.",
 	"%d min":                      "%d דק׳",
 	"%s – %d events, the last %s": "%s – %d אירועים, האחרון %s",
 	"(choose)":                    "(בחירה)",

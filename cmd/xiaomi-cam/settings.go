@@ -145,9 +145,26 @@ func (u *ui) showSettings() {
 	rtlAlign(onAirHelp)
 	onAirHelp.Importance = widget.LowImportance
 
+	// the phone page (phone.go): off until switched on here
+	var phone *ptrCheck
+	phone = newCheck(T("Strona dla telefonu"), func(on bool) {
+		if err := setPhonePage(on); err != nil {
+			dialog.ShowError(err, u.win)
+			phone.SetChecked(false)
+			return
+		}
+		u.app.Preferences().SetBool(prefPhonePage, on)
+	}).withTip(T("Podgląd i sterowanie kamer w przeglądarce telefonu"))
+	phone.SetChecked(u.app.Preferences().Bool(prefPhonePage))
+	phoneHelp := widget.NewLabel(T("Adres http://127.0.0.1:11985 działa tylko na tym komputerze. Do telefonu: Tailscale (tailscale serve --bg 11985) – bez otwierania portów w routerze."))
+	phoneHelp.Wrapping = fyne.TextWrapWord
+	rtlAlign(phoneHelp)
+	phoneHelp.Importance = widget.LowImportance
+
 	form := widget.NewForm(
 		widget.NewFormItem(T("Na antenie (OBS)"), container.NewVBox(onAir,
 			container.NewBorder(nil, nil, nil, copyURL, onAirURL), onAirHelp)),
+		widget.NewFormItem(T("Telefon"), container.NewVBox(phone, phoneHelp)),
 		widget.NewFormItem(T("Start"), autostart),
 		widget.NewFormItem(T("Widok na starcie"), startView),
 		widget.NewFormItem(T("Tryb nagrywania"), container.NewVBox(mode, camLabel, camChecks, modeHelp)),

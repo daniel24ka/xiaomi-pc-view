@@ -75,6 +75,10 @@ func translate(pl string) (string, bool) {
 }
 
 var english = map[string]string{
+	"Telefon":             "Phone",
+	"Strona dla telefonu": "Phone page",
+	"Podgląd i sterowanie kamer w przeglądarce telefonu": "Live view and camera controls in a phone browser",
+	"Adres http://127.0.0.1:11985 działa tylko na tym komputerze. Do telefonu: Tailscale (tailscale serve --bg 11985) – bez otwierania portów w routerze.": "The address http://127.0.0.1:11985 works on this computer only. For a phone: Tailscale (tailscale serve --bg 11985) – no router ports opened.",
 	"Wybierz datę":     "Choose a date",
 	"(wybierz)":        "(choose)",
 	"Na antenie (OBS)": "On air (OBS)",
