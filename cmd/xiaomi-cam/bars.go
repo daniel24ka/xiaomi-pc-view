@@ -64,6 +64,8 @@ func (u *ui) cameraControlsButton() *ptrButton {
 			container.NewGridWrap(fyne.NewSize(300, u.capLight.MinSize().Height), u.capLight),
 			u.siren,
 			u.capNight,
+			u.wdr,
+			u.lowLight,
 		)
 		pop := widget.NewPopUp(container.NewPadded(panel), c)
 		// above the button, kept inside the window
@@ -71,6 +73,6 @@ func (u *ui) cameraControlsButton() *ptrButton {
 		size := pop.MinSize()
 		x := min(pos.X, c.Size().Width-size.Width)
 		pop.ShowAtPosition(fyne.NewPos(max(x, 0), max(pos.Y-size.Height-4, 0)))
-	}).withTip(T("Reflektor, jasność, syrena i tryb nocny kamery"))
+	}).withTip(T("Reflektor, jasność, syrena, tryb nocny i ustawienia obrazu kamery"))
 	return b
 }

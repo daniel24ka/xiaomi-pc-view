@@ -352,6 +352,7 @@ func (v *videoView) updateImage() {
 	}
 	if !v.zoomed() {
 		v.img.Image = v.frame
+		v.setScaleMode(v.frame.Rect.Dx())
 		v.img.Refresh()
 		if v.dz.mini.Visible() {
 			v.dz.showMini(false)
@@ -359,6 +360,7 @@ func (v *videoView) updateImage() {
 		return
 	}
 	v.img.Image = v.dz.crop(v.frame)
+	v.setScaleMode(v.img.Image.Bounds().Dx())
 	v.img.Refresh()
 	// the overview: a few times a second is enough (each update uploads the whole frame)
 	if v.dz.miniTick++; v.dz.miniTick%6 == 0 || !v.dz.mini.Visible() {
@@ -367,6 +369,21 @@ func (v *videoView) updateImage() {
 	}
 	v.dz.showMini(true)
 	v.layoutMini()
+}
+
+// setScaleMode picks who scales a frame w pixels wide to the screen. Fyne's smooth mode
+// scales every frame on the CPU (Catmull-Rom, then a copy into RGBA: ~0.7 of a core for
+// 1080p at 20 fps); the fastest mode uploads the frame as it is and the GPU scales it
+// (bilinear). The video is decoded at the size shown (decodeSize), so the GPU nearly always
+// shows it 1:1; only a frame much larger than the view (a grid tile, a window shrinking
+// before the decoder follows) keeps the CPU filter, which bilinear would alias.
+func (v *videoView) setScaleMode(w int) {
+	mode := canvas.ImageScaleFastest
+	_, _, sw, _ := v.shownRect()
+	if c := fyne.CurrentApp().Driver().CanvasForObject(v); c != nil && float32(w) > sw*c.Scale()*1.3 {
+		mode = canvas.ImageScaleSmooth
+	}
+	v.img.ScaleMode = mode
 }
 
 func (v *videoView) Scrolled(e *fyne.ScrollEvent) {

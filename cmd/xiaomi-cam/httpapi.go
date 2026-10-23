@@ -23,7 +23,8 @@ import (
 //
 //	GET  /api/xiaomi-cam/cameras
 //	GET  /api/xiaomi-cam/snapshot?width=1280          image/jpeg
-//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, night mode, zoom
+//	GET  /api/xiaomi-cam/state                       spotlight, brightness, siren, night mode, zoom, picture settings
+//	POST /api/xiaomi-cam/picture?wdr=true&low_light_color=false  picture settings (models that have them)
 //	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step = 0.1 s of movement
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
@@ -123,7 +124,7 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 			return state, nil
 		}
-		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
+		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor)
 		if err != nil {
 			return nil, err
 		}
@@ -133,6 +134,14 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		}
 		for _, p := range props {
 			if p.Code != 0 {
+				continue
+			}
+			switch {
+			case p.Same(propWDR):
+				state["wdr"] = p.Value
+				continue
+			case p.Same(propLowLightColor):
+				state["low_light_color"] = p.Value
 				continue
 			}
 			switch p.Piid {
@@ -208,6 +217,18 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 		if on := q.Get("on"); on != "" {
 			if err := setProp(name, propLight, on == "true" || on == "1"); err != nil {
 				return nil, err
+			}
+		}
+		return map[string]any{"ok": true}, nil
+	})
+
+	handle("picture", "POST", func(r *http.Request, name string) (any, error) {
+		q := r.URL.Query()
+		for key, p := range map[string]miotProp{"wdr": propWDR, "low_light_color": propLowLightColor} {
+			if v := q.Get(key); v != "" {
+				if err := setProp(name, p, v == "true" || v == "1"); err != nil {
+					return nil, fmt.Errorf("%s: %w", key, err)
+				}
 			}
 		}
 		return map[string]any{"ok": true}, nil

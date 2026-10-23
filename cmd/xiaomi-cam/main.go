@@ -139,6 +139,8 @@ type ui struct {
 	light        *ptrCheck
 	brightness   *ptrSlider
 	siren        *ptrCheck
+	wdr          *ptrCheck // picture settings of some models (models.go)
+	lowLight     *ptrCheck
 	sound        *ptrCheck
 	bars         []fyne.CanvasObject
 	exitView     *fyne.Container // video-only overlay: exit/move buttons (top right), pan/tilt (bottom left)
@@ -480,6 +482,18 @@ func (u *ui) build() {
 			}
 		}, u.win)
 	})
+	u.wdr = newCheck(T("WDR – jasne niebo i cień jednocześnie"), func(on bool) {
+		u.win.Canvas().Unfocus()
+		if !u.syncing {
+			u.setProp(propWDR, on, u.wdr)
+		}
+	})
+	u.lowLight = newCheck(T("Kolor przy słabym świetle"), func(on bool) {
+		u.win.Canvas().Unfocus()
+		if !u.syncing {
+			u.setProp(propLowLightColor, on, u.lowLight)
+		}
+	})
 	u.night = newSelect(nil, func(string) {
 		u.win.Canvas().Unfocus()
 		if i := u.night.SelectedIndex(); !u.syncing && i >= 0 && i < len(u.nightList) {
@@ -505,6 +519,8 @@ func (u *ui) build() {
 	u.light.tip = T("Reflektor kamery (białe światło)")
 	u.brightness.tip = T("Jasność reflektora")
 	u.siren.tip = T("Syrena alarmowa kamery (z potwierdzeniem)")
+	u.wdr.tip = T("Szeroki zakres dynamiki: jasne niebo nie jest przepalone, a cienie nie są czarne")
+	u.lowLight.tip = T("Kolorowy obraz o zmierzchu i przy słabym świetle, bez reflektora (w ciemności nadal podczerwień)")
 	u.sound.tip = T("Dźwięk z kamery")
 	// groups of controls on the picture (overlay.go), hidden when the selected camera doesn't
 	// have the feature (caps.go)
@@ -824,7 +840,7 @@ func (u *ui) loadCameraState() {
 		u.loadIPState(name)
 		return
 	}
-	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot)
+	props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor)
 	if err != nil {
 		fyne.Do(func() { u.status.SetText(TJ("Nie udało się odczytać stanu kamery: ", err.Error())) })
 		return
@@ -846,6 +862,12 @@ func (u *ui) loadCameraState() {
 			case p.Siid == propSiren.Siid && p.Piid == propSiren.Piid:
 				on, _ := p.Value.(bool)
 				u.siren.SetChecked(on)
+			case p.Same(propWDR):
+				on, _ := p.Value.(bool)
+				u.wdr.SetChecked(on)
+			case p.Same(propLowLightColor):
+				on, _ := p.Value.(bool)
+				u.lowLight.SetChecked(on)
 			case p.Siid == propNightShot.Siid && p.Piid == propNightShot.Piid && p.Code == 0:
 				v, _ := p.Value.(float64)
 				u.showNight(int(v))
@@ -1292,27 +1314,26 @@ func (u *ui) showZoom(z float64) {
 	}
 }
 
-// decodeTiers - widths the video is decoded to. Decoding to the size shown on the screen
-// instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done by the
-// camera, so no detail is lost).
-var decodeTiers = []int{1280, 1920, 2560}
-
-// decodeSize returns the smallest tier not smaller than the picture on the screen
-// (in pixels), limited by the stream size w x h.
+// decodeSize returns the size the video is decoded to: the width of the picture on the
+// screen in pixels (rounded up to 64), limited by the stream size w x h. Decoding to the
+// size shown instead of the full 2560x1440 saves most of CPU and memory (camera zoom is done
+// by the camera, so no detail is lost); ffmpeg scales with a good filter and the GPU then
+// shows the frame 1:1 (videoView.setScaleMode).
 func (u *ui) decodeSize(w, h int) (int, int) {
-	// zoomed in digitally: the crop has to be as sharp as the picture, so a larger tier
-	px := int(u.video.Size().Width * u.win.Canvas().Scale() * float32(u.video.dz.z))
+	// zoomed in digitally: the crop has to be as sharp as the picture, so a larger frame
+	_, _, sw, _ := u.video.shownRect()
+	px := int(sw * u.win.Canvas().Scale() * float32(u.video.dz.z))
 	if px <= 0 {
 		px = 1280
 	}
-	dw := w
-	for _, t := range decodeTiers {
-		if t >= px {
-			dw = min(t, w)
-			break
-		}
-	}
-	return dw, dw * h / w
+	dw := min((px+63)/64*64, w)
+	return dw, dw * h / w &^ 1
+}
+
+// decodeOff reports whether a decoder of width have is too far from the width wanted: too
+// small (a blurred picture) or more than 1.25x larger (CPU, and the GPU's bilinear scaling).
+func decodeOff(have, want int) bool {
+	return have < want || have*4 > want*5
 }
 
 // checkDecodeSize restarts live video when the window was resized to another tier
@@ -1325,7 +1346,7 @@ func (u *ui) checkDecodeSize() {
 		return
 	}
 	q := currentQuality(u.camera.Selected)
-	if w, _ := u.decodeSize(q.w, q.h); w != u.decodeW || u.video.zoomed() != u.decodeEnhanced {
+	if w, _ := u.decodeSize(q.w, q.h); decodeOff(u.decodeW, w) || u.video.zoomed() != u.decodeEnhanced {
 		u.decodeStable++
 		if u.decodeStable >= 2 { // the same new size for 2 s - resizing has finished
 			u.decodeStable = 0

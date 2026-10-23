@@ -26,6 +26,16 @@ func TestModelSpecs(t *testing.T) {
 	if _, ok := c200.mapProp(PropSDStatus); !ok {
 		t.Error("C200 SD status")
 	}
+
+	// picture settings: only where a spec maps them, never the 700sa ids as they are
+	for _, p := range []MiotProp{PropWDR, PropLowLightColor} {
+		if _, ok := c200.mapProp(p); !ok {
+			t.Errorf("C200 has %d.%d", p.Siid, p.Piid)
+		}
+		if _, ok := cw700s.mapProp(p); ok {
+			t.Errorf("700sa has no %d.%d", p.Siid, p.Piid)
+		}
+	}
 	for canon, model := range map[int]int{2: 2, 1: 0, 0: 1} {
 		if v, ok := c200.toModel(PropNightShot, canon); !ok || v != model {
 			t.Errorf("C200 night %d -> %v", canon, v)

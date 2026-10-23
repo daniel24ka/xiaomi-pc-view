@@ -13,9 +13,12 @@ import (
 type Caps struct {
 	PTZ, Zoom, Light, Siren, Points, History, NightMode bool
 	Brightness                                          bool // of the light
+	WDR, LowLightColor                                  bool // picture settings (models.go)
 }
 
-var AllCaps = Caps{true, true, true, true, true, true, true, true}
+// AllCaps - the cloud didn't answer: don't hide the usual controls (the picture settings
+// stay hidden: only some models have them).
+var AllCaps = Caps{PTZ: true, Zoom: true, Light: true, Siren: true, Points: true, History: true, NightMode: true, Brightness: true}
 
 var zoomModels = map[string]bool{
 	"isa.camera.700sa":  true, // Outdoor Camera CW700S (CW400 Pro OverSea)
@@ -43,7 +46,8 @@ func CameraCaps(name string) Caps {
 		return c
 	}
 	c.Zoom = zoomModels[model]
-	props, err := GetProps(name, PropLight, PropSiren, PropMotorLocation, PropPresets, PropSDStatus, PropZoom, PropNightShot)
+	props, err := GetProps(name, PropLight, PropSiren, PropMotorLocation, PropPresets, PropSDStatus, PropZoom, PropNightShot,
+		PropWDR, PropLowLightColor)
 	if err != nil {
 		return AllCaps // the cloud didn't answer: don't hide anything, try again next time
 	}
@@ -64,6 +68,10 @@ func CameraCaps(name string) Caps {
 			c.Zoom = c.Zoom || ok
 		case p.Same(PropNightShot):
 			c.NightMode = ok
+		case p.Same(PropWDR):
+			c.WDR = ok
+		case p.Same(PropLowLightColor):
+			c.LowLightColor = ok
 		}
 	}
 	CapsCache.Store(name, c)

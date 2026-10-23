@@ -35,6 +35,8 @@ var (
 	propZoom          = xccore.PropZoom
 	propSDStatus      = xccore.PropSDStatus
 	propNightShot     = xccore.PropNightShot
+	propWDR           = xccore.PropWDR
+	propLowLightColor = xccore.PropLowLightColor
 	propMotorLocation = xccore.PropMotorLocation
 	propPresets       = xccore.PropPresets
 	propPresetActive  = xccore.PropPresetActive

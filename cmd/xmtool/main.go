@@ -17,6 +17,9 @@ import (
 func main() {
 	dir, _ := os.UserConfigDir()
 	cfg := filepath.Join(dir, "xiaomi-cam-viewer", "go2rtc.yaml")
+	if c := os.Getenv("XMTOOL_CONFIG"); c != "" { // the portable config next to the app (Windows)
+		cfg = c
+	}
 	b, err := os.ReadFile(cfg)
 	if err != nil {
 		panic(err)

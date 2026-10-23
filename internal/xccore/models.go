@@ -34,6 +34,8 @@ var modelSpecs = map[string]*ModelSpec{
 	"chuangmi.camera.046c04": {
 		Props: map[propID]propID{
 			{2, 3}: {2, 3}, // night-shot
+			{2, 5}: {2, 5}, // wdr-mode
+			{2, 6}: {2, 6}, // glimmer-full-color
 			{4, 1}: {4, 1}, // memory card status
 		},
 		Values: map[propID]map[int]int{
@@ -42,6 +44,16 @@ var modelSpecs = map[string]*ModelSpec{
 		PanTilt: true,
 	},
 }
+
+// Picture settings the 700sa doesn't have. The ids are the C200's (chuangmi.camera.046c04
+// 2.5 / 2.6); only a model whose spec maps them has them (mapProp), so a 700sa id that may
+// mean something else on another model is never written.
+var (
+	PropWDR           = MiotProp{Siid: 2, Piid: 5} // wide dynamic range: the bright sky and the shade both visible
+	PropLowLightColor = MiotProp{Siid: 2, Piid: 6} // glimmer-full-color: colour in low light without the spotlight
+)
+
+var modelOnly = map[propID]bool{{2, 5}: true, {2, 6}: true}
 
 // SpecForModel returns the spec of a camera model (nil - not supported: video only).
 func SpecForModel(model string) *ModelSpec {
@@ -58,7 +70,7 @@ func (s *ModelSpec) mapProp(p MiotProp) (MiotProp, bool) {
 		return p, false
 	}
 	if s.Props == nil {
-		return p, true
+		return p, !modelOnly[propID{p.Siid, p.Piid}]
 	}
 	to, ok := s.Props[propID{p.Siid, p.Piid}]
 	if !ok {
