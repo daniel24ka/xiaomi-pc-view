@@ -173,6 +173,7 @@ type ui struct {
 	zoomDone   func() // ends the busy indicator of the pending zoom command
 	zoomLabel  *widget.Label
 	zoomSlider *zoomSlider // vertical, over the picture in video-only mode
+	lens       *segmented  // wide | tele lens of a dual-lens camera (lens.go)
 
 	dragX, dragY float32      // accumulated mouse drag for camera moves
 	mover        *mover       // pan/tilt steps
@@ -539,7 +540,8 @@ func (u *ui) build() {
 		overlayButton(theme.ZoomOutIcon(), T("Oddal (−, kółko myszy)"), func() { u.zoomBy(-zoomStep) }),
 		u.zoomLabel,
 		overlayButton(theme.ZoomInIcon(), T("Przybliż (+, kółko myszy): zoom kamery, potem cyfrowy z pełnej rozdzielczości; przeciągnij obraz, żeby się po nim przesuwać"), func() { u.zoomBy(zoomStep) }),
-		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), u.zoomReset))
+		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), u.zoomReset),
+		container.NewCenter(u.buildLens()))
 	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
 	u.camControls = u.cameraControlsButton()
 	u.camControls.Importance = widget.LowImportance
@@ -579,7 +581,7 @@ func (u *ui) build() {
 	}
 	u.zoomSlider.onChangeEnded = func(v float64) {
 		u.showExitButton()
-		u.setZoom(v)
+		u.setZoom(snapTele(v, u.caps.Tele))
 	}
 	zoomBox := container.NewStack(canvas.NewRectangle(overlayBg),
 		container.New(layout.NewCustomPaddedLayout(4, 4, 4, 8), u.zoomSlider))
@@ -1252,13 +1254,13 @@ func (u *ui) zoomBy(delta float64) { u.zoomAt(delta, nil) }
 func (u *ui) zoomAt(delta float64, pos *fyne.Position) {
 	if u.grid { // the tiles: the camera's own zoom only
 		if u.caps.Zoom {
-			u.setZoom(u.camZoom + delta)
+			u.setZoom(nextZoom(u.camZoom, delta, u.caps.Tele))
 		}
 		return
 	}
 	dz := u.video.dz.z
 	if u.caps.Zoom && ((delta > 0 && u.camZoom < maxZoom) || (delta < 0 && dz <= 1.001)) {
-		u.setZoom(u.camZoom + delta)
+		u.setZoom(nextZoom(u.camZoom, delta, u.caps.Tele))
 		return
 	}
 	limit := maxDigital
@@ -1327,6 +1329,7 @@ func (u *ui) showZoom(z float64) {
 	if u.zoomSlider != nil {
 		u.zoomSlider.SetValue(z)
 	}
+	u.showLens(z)
 }
 
 // decodeSize returns the size the video is decoded to: the width of the picture on the

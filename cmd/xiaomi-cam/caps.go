@@ -38,6 +38,8 @@ func (u *ui) applyCaps() {
 	show(c.Points, u.capPoints)
 	show(true, u.capZoom) // the digital zoom works on every camera (digizoom.go)
 	show(c.Zoom, u.capOverlayZoom)
+	show(c.Tele > 0, u.lens)
+	u.showLens(u.camZoom)
 	show(c.Light, u.capLight)
 	show(c.Brightness, u.brightness)
 	show(c.Siren, u.siren)

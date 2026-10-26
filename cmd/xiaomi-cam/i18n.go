@@ -75,6 +75,11 @@ func translate(pl string) (string, bool) {
 }
 
 var english = map[string]string{
+	// the lens of a dual-lens camera (lens.go)
+	"Szeroki": "Wide",
+	"Tele":    "Tele",
+	"Obiektyw kamery: szeroki kąt albo teleobiektyw – ostre szczegóły z daleka. Kamera wysyła obraz jednego obiektywu naraz, więc widzą go wszyscy, którzy oglądają tę kamerę (OBS, inne programy)": "The camera's lens: wide angle or telephoto – sharp details far away. The camera sends one lens at a time, so everyone watching this camera sees it (OBS, other programs)",
+
 	"Telefon":             "Phone",
 	"Strona dla telefonu": "Phone page",
 	"Podgląd i sterowanie kamer w przeglądarce telefonu": "Live view and camera controls in a phone browser",

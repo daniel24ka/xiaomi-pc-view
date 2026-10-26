@@ -57,6 +57,7 @@ var (
 	cameraEvents     = xccore.CameraEvents
 	getDetection     = xccore.GetDetection
 	cameraZoom       = xccore.CameraZoom
+	teleZoom         = xccore.TeleZoom
 	currentZoom      = xccore.CurrentZoom
 	setZoomState     = xccore.SetZoomState
 	cameraDid        = xccore.CameraDid

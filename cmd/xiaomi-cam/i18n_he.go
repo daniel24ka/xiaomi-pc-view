@@ -4,6 +4,11 @@ package main
 // visual() (bidi.go): Fyne has no right-to-left paragraphs.
 
 var hebrew = map[string]string{
+	// the lens of a dual-lens camera (lens.go)
+	"Wide": "רחבה",
+	"Tele": "טלה",
+	"The camera's lens: wide angle or telephoto – sharp details far away. The camera sends one lens at a time, so everyone watching this camera sees it (OBS, other programs)": "עדשת המצלמה: רחבה או טלה – פרטים חדים מרחוק. המצלמה שולחת תמונה מעדשה אחת בכל רגע, ולכן כל מי שצופה במצלמה הזאת רואה אותה (OBS, תוכנות אחרות)",
+
 	// picture rotation (bars.go)
 	"Turn the picture 180° (camera hung upside down)":  "סיבוב התמונה ב-180° (מצלמה שתלויה הפוכה)",
 	"The camera did not say how its picture is turned": "המצלמה לא החזירה את סיבוב התמונה",

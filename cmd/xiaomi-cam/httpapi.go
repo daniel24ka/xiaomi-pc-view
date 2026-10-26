@@ -27,6 +27,7 @@ import (
 //	POST /api/xiaomi-cam/picture?wdr=true&low_light_color=false  picture settings (models that have them)
 //	POST /api/xiaomi-cam/move?direction=left&steps=5 left/right/up/down, 1 step = 0.1 s of movement
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
+//	POST /api/xiaomi-cam/lens?name=tele              wide/tele lens of a dual-lens camera (CW700S: tele = zoom 2.8)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
 //	POST /api/xiaomi-cam/rotation?deg=180            the camera turns its own picture (0/90/180/270)
@@ -131,6 +132,12 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			return nil, err
 		}
 		state := map[string]any{"camera": name, "zoom": currentZoom(name)}
+		if tele := teleZoom(name); tele > 0 {
+			state["lens"], state["tele_zoom"] = "wide", tele
+			if onTele(currentZoom(name), tele) {
+				state["lens"] = "tele"
+			}
+		}
 		if c := ipCam(name); c != nil { // Imou: the light, siren and night mode in the cloud
 			state = map[string]any{"camera": name, "type": kindName(c.Kind), "quality": currentQuality(name).name}
 		}
@@ -206,6 +213,33 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			zoomChanged(name, z)
 		}
 		return map[string]any{"zoom": z}, nil
+	})
+
+	// the lens of a dual-lens camera is the camera's zoom (lens.go)
+	handle("lens", "POST", func(r *http.Request, name string) (any, error) {
+		tele := teleZoom(name)
+		if tele == 0 {
+			return nil, errors.New("the camera has one lens")
+		}
+		lens, z := r.URL.Query().Get("name"), 1.0
+		switch lens {
+		case "tele":
+			z = tele
+		case "wide":
+		default:
+			return nil, errors.New("name must be wide or tele")
+		}
+		if err := ensureSession(name); err != nil {
+			return nil, err
+		}
+		if err := cameraZoom(name, z); err != nil {
+			return nil, err
+		}
+		setZoomState(name, z)
+		if zoomChanged != nil {
+			zoomChanged(name, z)
+		}
+		return map[string]any{"lens": lens, "zoom": z}, nil
 	})
 
 	handle("spotlight", "POST", func(r *http.Request, name string) (any, error) {

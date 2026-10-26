@@ -81,9 +81,20 @@ func runMCP() error {
 		cameraArg
 		Zoom float64 `json:"zoom" jsonschema:"camera zoom from 1.0 (wide) to 9.0"`
 	}
-	mcp.AddTool(server, &mcp.Tool{Name: "set_zoom", Description: "Set the camera zoom (done by the camera, sharp details)."},
+	mcp.AddTool(server, &mcp.Tool{Name: "set_zoom", Description: "Set the camera zoom (done by the camera, sharp details). " +
+		"A dual-lens camera (get_camera_state has tele_zoom) switches to its telephoto lens at tele_zoom: the sharpest far detail."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in zoomArgs) (*mcp.CallToolResult, any, error) {
 			return apiText("POST", "zoom", url.Values{"camera": {in.Camera}, "value": {strconv.FormatFloat(in.Zoom, 'f', 1, 64)}})
+		})
+
+	type lensArgs struct {
+		cameraArg
+		Lens string `json:"lens" jsonschema:"wide or tele"`
+	}
+	mcp.AddTool(server, &mcp.Tool{Name: "set_lens", Description: "Switch a dual-lens camera (CW700S) between its wide-angle and telephoto lens. " +
+		"The camera sends one lens at a time: everyone watching the camera sees the lens chosen."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in lensArgs) (*mcp.CallToolResult, any, error) {
+			return apiText("POST", "lens", url.Values{"camera": {in.Camera}, "name": {in.Lens}})
 		})
 
 	type spotlightArgs struct {
