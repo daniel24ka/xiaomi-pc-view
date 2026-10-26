@@ -175,6 +175,15 @@ type ui struct {
 	zoomSlider *zoomSlider // vertical, over the picture in video-only mode
 	lens       *segmented  // wide | tele lens of a dual-lens camera (lens.go)
 
+	// aiming in the picture, the overview of the wide lens, the way back (aimui.go, guard.go)
+	aimMode   bool
+	aimBtn    *ptrButton
+	backBtn   *ptrButton // back to the watch view, with the time left
+	backShown bool
+	guard     *watchGuard
+	wide      map[string]*wideView
+	camPos    map[string]xccore.Position // where each camera looks (as last read or aimed)
+
 	dragX, dragY float32      // accumulated mouse drag for camera moves
 	mover        *mover       // pan/tilt steps
 	current      atomic.Value // name of the selected camera (string), for background goroutines
@@ -228,10 +237,17 @@ func main() {
 	u.current.Store("")
 	u.caps = allCaps
 	u.camZoom = 1
-	u.mover = newMover(func() string { return u.current.Load().(string) }, func(err error) {
+	u.mover = newMover(func() string {
+		name := u.current.Load().(string)
+		if u.guard != nil {
+			u.guard.touch(name) // turning by hand: the way back to the watch view starts
+		}
+		return name
+	}, func(err error) {
 		fyne.Do(func() { u.status.SetText(TJ("Obrót: ", err.Error())) })
 	})
 	u.build()
+	u.initAim()
 	xccore.OnZoomState = func(name string, z float64) {
 		fyne.Do(func() {
 			if name == u.camera.Selected && z != u.camZoom {
@@ -321,6 +337,8 @@ var appStopped atomic.Bool
 func (u *ui) build() {
 	u.video = newVideoView()
 	u.video.onDoubleTap = u.toggleFullScreen
+	u.video.onAimTap = u.aimTap
+	u.video.onWideTap = u.aimAtWide
 	u.video.onSecondary = func() {
 		if u.viewOnly {
 			u.setViewOnly(false)
@@ -451,7 +469,7 @@ func (u *ui) build() {
 		b := newHoldButton(icon, func() {
 			u.pictureControlsActive()
 			u.mover.Press(op)
-		}, u.mover.Release).withTip(ptzTip(op))
+		}, u.release).withTip(ptzTip(op))
 		b.Importance = widget.LowImportance // on the pill's background
 		return b
 	}
@@ -541,7 +559,8 @@ func (u *ui) build() {
 		u.zoomLabel,
 		overlayButton(theme.ZoomInIcon(), T("Przybliż (+, kółko myszy): zoom kamery, potem cyfrowy z pełnej rozdzielczości; przeciągnij obraz, żeby się po nim przesuwać"), func() { u.zoomBy(zoomStep) }),
 		overlayButton(theme.ZoomFitIcon(), T("Zoom 1× (0)"), u.zoomReset),
-		container.NewCenter(u.buildLens()))
+		container.NewCenter(u.buildLens()),
+		u.buildAimButtons())
 	u.capLight = container.NewBorder(nil, nil, u.light, nil, u.brightness)
 	u.camControls = u.cameraControlsButton()
 	u.camControls.Importance = widget.LowImportance
@@ -562,7 +581,7 @@ func (u *ui) build() {
 		b := newHoldButton(icon, func() {
 			u.showExitButton()
 			u.mover.Press(op)
-		}, u.mover.Release)
+		}, u.release)
 		b.Importance = widget.LowImportance // no button background, only the light overlay one
 		return b.withTip(ptzTip(op))
 	}
@@ -605,7 +624,10 @@ func (u *ui) build() {
 		case fyne.KeyF11:
 			u.toggleFullScreen()
 		case fyne.KeyEscape:
-			if u.win.FullScreen() {
+			if u.aimMode {
+				u.setAimMode(false)
+				u.status.SetText("")
+			} else if u.win.FullScreen() {
 				u.toggleFullScreen()
 			} else if u.viewOnly {
 				u.setViewOnly(false)
@@ -630,7 +652,7 @@ func (u *ui) build() {
 		})
 		dc.SetOnKeyUp(func(e *fyne.KeyEvent) {
 			if _, ok := arrows[e.Name]; ok {
-				u.mover.Release()
+				u.release()
 			}
 		})
 	}
@@ -1147,7 +1169,13 @@ func (u *ui) cameraDrag(dx, dy float32) {
 
 func (u *ui) cameraDragEnd() {
 	u.dragX, u.dragY = 0, 0
+	u.release()
+}
+
+// release stops the camera turned by hand and reads where it stopped (the overview frame).
+func (u *ui) release() {
 	u.mover.Release()
+	u.refreshPosition(u.camera.Selected, 1500*time.Millisecond)
 }
 
 func abs32(v float32) float32 {
@@ -1304,6 +1332,9 @@ func (u *ui) setZoom(z float64) {
 		u.zoomDone() // the previous value wasn't sent
 	}
 	name, zoom := u.camera.Selected, u.camZoom
+	if u.guard != nil {
+		u.guard.touch(name)
+	}
 	setZoomState(name, zoom)
 	done := u.busy(nil)
 	u.zoomDone = done
@@ -1330,6 +1361,7 @@ func (u *ui) showZoom(z float64) {
 		u.zoomSlider.SetValue(z)
 	}
 	u.showLens(z)
+	u.showWide()
 }
 
 // decodeSize returns the size the video is decoded to: the width of the picture on the

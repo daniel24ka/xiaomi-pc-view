@@ -232,6 +232,11 @@ const (
 var ErrNotXiaomi = errors.New("this camera has no such control")
 
 func Motor(name string, op int) error {
+	if op == motorStop {
+		markMoving(name, movingSettle)
+	} else {
+		markMoving(name, 2*time.Second) // repeated every 200 ms while held; a lost stop: the camera stops by itself
+	}
 	if CameraSource(name) == "" {
 		c, err := ipControl(name)
 		if err != nil {
@@ -267,6 +272,7 @@ func CameraZoom(name string, zoom float64) error {
 		return ErrNotXiaomi
 	}
 	value := int(zoom*10 + 0.5)
+	markMoving(name, 2*time.Second+movingSettle) // the zoom runs ~1-2 s (and may change the lens)
 	if err := xiaomi.Command(name, cmdZoomSet, fmt.Sprintf(`{"value":%d}`, value)); err != nil {
 		return SetProp(name, PropZoom, value)
 	}

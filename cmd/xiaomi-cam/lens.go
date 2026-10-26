@@ -1,6 +1,10 @@
 package main
 
-import "math"
+import (
+	"math"
+
+	"github.com/AlexxIT/go2rtc/internal/xccore"
+)
 
 // The two lenses of a dual-lens camera (CW700S): wide-angle and telephoto. The camera
 // chooses the lens by its own zoom (caps.Tele, xccore.TeleZoom): below it the wide lens
@@ -12,6 +16,13 @@ import "math"
 func (u *ui) buildLens() *segmented {
 	u.lens = newSegmented(func(string) {
 		if u.lens.SelectedIndex() == 1 {
+			name := u.camera.Selected
+			u.keepWide(name) // the overview while on the telephoto lens (aimui.go)
+			go func() {
+				if p, err := xccore.MotorPosition(name); err == nil {
+					u.noteWidePos(name, p, xccore.PictureTurn(name))
+				}
+			}()
 			u.video.setDigitalZoom(1, nil) // the lens's own picture, not a crop of it
 			u.setZoom(u.caps.Tele)
 		} else {

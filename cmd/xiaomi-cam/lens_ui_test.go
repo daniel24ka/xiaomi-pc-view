@@ -39,17 +39,21 @@ func TestLensControlFollowsTheZoom(t *testing.T) {
 	if dir == "" {
 		return
 	}
+	aim := u.buildAimButtons()
 	for _, z := range []float64{1, 2.8} {
 		u.showLens(z)
 		label := widget.NewLabel("1.0×")
+		u.aimBtn.Show()
 		if z > 1 {
 			label.SetText("2.8×")
+			u.backBtn.SetText("2:45") // away from the watch view: the way back counts down
+			u.backBtn.Show()
 		}
 		bar := pill(container.NewHBox(
 			overlayButton(theme.ZoomOutIcon(), "", nil), label,
 			overlayButton(theme.ZoomInIcon(), "", nil),
 			overlayButton(theme.ZoomFitIcon(), "", nil),
-			container.NewCenter(lens)))
+			container.NewCenter(lens), aim))
 		w := test.NewWindow(container.NewCenter(bar))
 		w.Resize(fyne.NewSize(bar.MinSize().Width+40, bar.MinSize().Height+30))
 		f, err := os.Create(filepath.Join(dir, map[bool]string{false: "lens-wide.png", true: "lens-tele.png"}[z > 1]))

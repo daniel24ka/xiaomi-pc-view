@@ -4,6 +4,20 @@ package main
 // visual() (bidi.go): Fyne has no right-to-left paragraphs.
 
 var hebrew = map[string]string{
+	// aiming in the picture, back to the watch view (aimui.go, guard.go)
+	"Back to watching": "חזרה לתצפית",
+	"A camera turned or zoomed by hand (also through the API or AI) goes back by itself to where it looked before after these minutes without control – so the watching (sky detection, recording, the broadcast) doesn't stay blind": "מצלמה שסובבו או הגדילו ביד (גם דרך ה-API או AI) חוזרת לבד למקום שממנו צפתה קודם, אחרי הדקות האלה בלי שליטה – כדי שהתצפית (זיהוי בשמיים, הקלטה, השידור) לא תישאר עיוורת",
+	"Back to the watch view now – the camera goes back by itself in %s": "חזרה לתצפית עכשיו – המצלמה תחזור לבד בעוד %s",
+	"Going back to the watch view…":                                     "חוזר לתצפית…",
+	"The camera is back on the watch view":                              "המצלמה חזרה לתצפית",
+	"Back to watching: ":                                                "חזרה לתצפית: ",
+	"Aim: click a point of the picture – the camera turns to it and switches to the telephoto lens (or Ctrl+click on the picture)": "כיוון: לחיצה על נקודה בתמונה – המצלמה תסתובב אליה ותעבור לעדשת הטלה (או Ctrl+לחיצה על התמונה)",
+	"Aiming the camera…":  "מכוון את המצלמה…",
+	"The camera is aimed": "המצלמה מכוונת",
+	"Aiming: ":            "כיוון: ",
+	"Click the point of the picture the camera should turn to (Esc – cancel)":                            "לחץ על הנקודה בתמונה שאליה המצלמה תסתובב (Esc – ביטול)",
+	"The camera is still turning and its picture comes about a second late – click when it stands still": "המצלמה עוד מסתובבת והתמונה מגיעה באיחור של כשנייה – לחץ כשהיא נעצרת",
+
 	// the lens of a dual-lens camera (lens.go)
 	"Wide": "רחבה",
 	"Tele": "טלה",
