@@ -4,6 +4,10 @@ package main
 // visual() (bidi.go): Fyne has no right-to-left paragraphs.
 
 var hebrew = map[string]string{
+	// picture rotation (bars.go)
+	"Turn the picture 180° (camera hung upside down)":  "סיבוב התמונה ב-180° (מצלמה שתלויה הפוכה)",
+	"The camera did not say how its picture is turned": "המצלמה לא החזירה את סיבוב התמונה",
+
 	"Phone":      "טלפון",
 	"Phone page": "דף לטלפון",
 	"Live view and camera controls in a phone browser": "צפייה ושליטה במצלמות מדפדפן הטלפון",

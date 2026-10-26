@@ -313,6 +313,10 @@ var (
 	PropSiren      = MiotProp{Siid: 6, Piid: 10} // hl-audible-alarm
 	PropZoom       = MiotProp{Siid: 6, Piid: 23} // zoom ratio *10 (not in public spec, from Mi Home plugin)
 	PropSDStatus   = MiotProp{Siid: 4, Piid: 1}
+	// image-rollover 0/90/180/270: the camera turns its own picture, so every viewer, the
+	// recordings and the RTSP stream get it upright - a camera hung upside down to tilt up to
+	// the sky (Mi Home has no such setting for the CW700S)
+	PropImageRollover = MiotProp{Siid: 2, Piid: 2}
 )
 
 func CameraDid(src string) string {

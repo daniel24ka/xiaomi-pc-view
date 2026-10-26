@@ -347,6 +347,11 @@ Closing the window hides the app to the tray`,
 	"Skróty klawiaturowe i wersja":                               "Keyboard shortcuts and version",
 	"Oddal – zoom kamery (−, kółko myszy)":                       "Zoom out – camera zoom (−, mouse wheel)",
 	"Przybliż – zoom kamery do 9× (+, kółko myszy)":              "Zoom in – camera zoom up to 9× (+, mouse wheel)",
+
+	// picture rotation (bars.go)
+	"Obróć obraz o 180° (kamera zawieszona do góry nogami)": "Turn the picture 180° (camera hung upside down)",
+	"Kamera nie podała obrotu obrazu":                       "The camera did not say how its picture is turned",
+
 	"Zoom 1× (0)": "Zoom 1× (0)",
 	"Wróć do widoku z panelami i ramką okna (Esc, prawy przycisk myszy)": "Back to the view with panels and window frame (Esc, right click)",
 	"Przesuń okno – przeciągnij":                                         "Move the window – drag",

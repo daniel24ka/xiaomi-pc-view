@@ -29,6 +29,7 @@ import (
 //	POST /api/xiaomi-cam/zoom?value=2.5              1.0-9.0 (camera zoom)
 //	POST /api/xiaomi-cam/spotlight?on=true&brightness=80
 //	POST /api/xiaomi-cam/siren?on=true
+//	POST /api/xiaomi-cam/rotation?deg=180            the camera turns its own picture (0/90/180/270)
 //	POST /api/xiaomi-cam/night-mode?mode=auto         auto/auto-color/smart-color/on/color/off
 //	POST /api/xiaomi-cam/snapshot/save               saves JPEG to the snapshots folder
 //	POST /api/xiaomi-cam/snapshot/enhanced           saves the enhanced photo (15 frames merged, PNG)
@@ -124,7 +125,8 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 			return state, nil
 		}
-		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor)
+		props, err := getProps(name, propLight, propBrightness, propSiren, propNightShot, propWDR, propLowLightColor,
+			propImageRollover)
 		if err != nil {
 			return nil, err
 		}
@@ -142,6 +144,9 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 				continue
 			case p.Same(propLowLightColor):
 				state["low_light_color"] = p.Value
+				continue
+			case p.Same(propImageRollover):
+				state["rotation"] = p.Value
 				continue
 			}
 			switch p.Piid {
@@ -232,6 +237,18 @@ func initHTTPAPI(zoomChanged func(name string, zoom float64)) {
 			}
 		}
 		return map[string]any{"ok": true}, nil
+	})
+
+	// the camera turns its own picture (?deg=0|90|180|270): a camera hung upside down
+	handle("rotation", "POST", func(r *http.Request, name string) (any, error) {
+		deg, err := strconv.Atoi(r.URL.Query().Get("deg"))
+		if err != nil || deg < 0 || deg > 270 || deg%90 != 0 {
+			return nil, fmt.Errorf("deg: 0, 90, 180 or 270")
+		}
+		if err = setProp(name, propImageRollover, deg); err != nil {
+			return nil, err
+		}
+		return map[string]any{"rotation": deg}, nil
 	})
 
 	handle("night-mode", "POST", func(r *http.Request, name string) (any, error) {

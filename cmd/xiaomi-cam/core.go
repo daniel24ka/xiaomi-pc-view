@@ -37,6 +37,7 @@ var (
 	propNightShot     = xccore.PropNightShot
 	propWDR           = xccore.PropWDR
 	propLowLightColor = xccore.PropLowLightColor
+	propImageRollover = xccore.PropImageRollover
 	propMotorLocation = xccore.PropMotorLocation
 	propPresets       = xccore.PropPresets
 	propPresetActive  = xccore.PropPresetActive
